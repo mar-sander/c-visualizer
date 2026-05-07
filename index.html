@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>C Code Visualizer</title>
+<link rel="icon" href="https://raw.githubusercontent.com/mar-sander/assets/refs/heads/main/favicon.ico">
+
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="container">
+  <header class="page-header">
+    <h1 class="page-title">c<span class="subtitle"> code visualizer</span></h1>
+    <div class="page-subtitle">Cコードの処理過程・変数変化・出力を見える化する学習ツール（Ver.0.1）</div>
+  </header>
+
+  <div class="tool-grid">
+    <section class="section">
+      <h2>コード入力</h2>
+      <textarea id="codeInput" placeholder="ここにC言語コードを入力してください">#include <stdio.h>
+
+int main(void){
+    int a = 3;
+    int b = 5;
+    int c = a + b;
+    printf("%d\n", c);
+    return 0;
+}</textarea>
+      <div class="control-row" style="margin-top:12px;">
+        <button onclick="visualizeCode()">可視化する</button>
+        <button class="reset-btn" onclick="resetCode()" title="リセット" aria-label="入力と結果をリセット"><i class="fa fa-refresh"></i></button>
+      </div>
+      <div class="sample-row">
+        <button class="sample-btn" onclick="loadSample('basic')">SAMPLE：基本</button>
+        <button class="sample-btn" onclick="loadSample('calc')">SAMPLE：四則演算</button>
+        <button class="sample-btn" onclick="loadSample('assign')">SAMPLE：再代入</button>
+        <button class="sample-btn" onclick="loadSample('unsupported')">SAMPLE：未対応</button>
+      </div>
+      <div class="legend-box">
+        <span class="highlight">Ver.0.1</span>では、int型の変数宣言・代入・整数の四則演算・printfによる表示に絞っています。これはオンラインCコンパイラではなく、処理の流れを理解するための可視化ツールです。<br>正確に読み取るため、1つの文ごとに改行して入力してください。
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>実行結果</h2>
+      <div class="execution-summary">
+        <div>
+          <div class="note">出力結果</div>
+          <div id="outputResult" class="output-box"></div>
+        </div>
+        <div>
+          <div class="note">変数の状態</div>
+          <div id="variableState" class="variable-area"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>実行の流れ</h2>
+      <div id="stepResult" class="step-list"></div>
+    </section>
+
+    <section class="section">
+      <h2>コードと説明</h2>
+      <div id="codePreview" class="code-preview"></div>
+    </section>
+
+    <section class="section">
+      <h2>ミス・ヒント</h2>
+      <div id="hintResult" class="result-block"></div>
+    </section>
+  </div>
+
+  <footer class="footer">
+    <a href="#" class="footer__logo">
+      <img src="https://raw.githubusercontent.com/mar-sander/assets/refs/heads/main/Mlogo3-wh800.png" width="64" alt="MM Logo" />
+    </a>
+    <ul class="footer__navi flex">
+      <li><a href="https://sites.google.com/g.nagano-c.ed.jp/24c" target="_blank">HOME</a></li>
+      <li><a href="https://mar-sander.github.io/count-tool/">文字数</a></li>
+      <li><a href="https://mar-sander.github.io/day-counter/">〆切±</a></li>
+    </ul>
+    <hr />
+    <p class="copyright">Copyright © M.M. All Rights Reserved.</p>
+  </footer>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
