@@ -9,6 +9,14 @@ C Code Visualizer は、C言語初学者向けに、コードの処理過程・�
 
 GitHub Pages で公開しています。
 
+公開URL: https://mar-sander.github.io/c-visualizer/
+
+## 使い方
+
+1. コード入力欄にC言語のコードを入力する
+2. 「可視化する」ボタンを押す
+3. 実行結果、変数の状態、実行の流れ、コードと説明を確認する
+
 ## 対応範囲 Ver.0.1
 
 - int型の変数宣言
