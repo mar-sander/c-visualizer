@@ -312,8 +312,18 @@ button:hover{
 }
 
 .sample-btn{
+  display:inline-flex;
+  align-items:center;
+  gap:0.45em;
+  white-space:nowrap;
   font-size:0.92rem;
   padding:8px 12px;
+}
+
+.sample-btn .fa{
+  width:1em;
+  text-align:center;
+  opacity:0.85;
 }
 
 .legend-box{
