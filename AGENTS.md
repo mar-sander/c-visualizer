@@ -1,25 +1,17 @@
-
-## AGENTS.md の役割
-
-`AGENTS.md` は、Codex向けです。  
-Codexに「このプロジェクトで守ってほしい思想・制約・優先順位」を伝えるためのメモです。
-
-こちらはかなり重要です。Codexが勝手に「本格オンラインコンパイラ」方向へ走らないよう、最初に釘を打ちます。
-
-```md
-# AGENTS.md
+# C Code Visualizer — Codex Instructions
 
 ## Project
 
 This repository contains C Code Visualizer.
 
-C Code Visualizer is an educational web tool for beginner C language learners.  
+C Code Visualizer is an educational web tool for beginner C language learners.
 It visualizes how simple C code is processed, how variable values change, and what is printed to the screen.
 
 ## Important concept
 
-This project is NOT a full online C compiler.  
-Do not try to implement a complete C compiler, runtime, server-side execution environment, WebAssembly compiler, or Node.js-based execution system.
+This project is NOT a full online C compiler.
+
+Do not implement a complete C compiler, runtime, server-side execution environment, WebAssembly compiler, or Node.js-based execution system unless explicitly requested.
 
 The goal is to help students understand the flow of code, not to reproduce all behavior of the C language.
 
@@ -29,6 +21,7 @@ The goal is to help students understand the flow of code, not to reproduce all b
 - The tool must work on GitHub Pages.
 - Do not require Node.js, npm, bundlers, servers, databases, or build tools.
 - Keep the structure simple.
+- Preserve readable formatting, indentation, and helpful comments.
 - Current main files:
   - index.html
   - style.css
@@ -39,6 +32,7 @@ The goal is to help students understand the flow of code, not to reproduce all b
 Prioritize clarity for beginner students.
 
 When making changes, prefer:
+
 - simple Japanese explanations
 - visible variable changes
 - readable UI
@@ -46,6 +40,7 @@ When making changes, prefer:
 - clear warnings for unsupported code
 
 Avoid:
+
 - overly technical wording
 - advanced C language features unless explicitly requested
 - adding many features at once
@@ -106,8 +101,27 @@ Keep the current visual direction:
 
 When modifying the project:
 
-1. Keep the current behavior unless the task asks to change it.
+1. Keep the current behavior unless the task explicitly asks to change it.
 2. Avoid large rewrites.
 3. Make small, testable changes.
 4. Preserve GitHub Pages compatibility.
-5. Explain what changed in simple terms.
+5. Explain changes in simple terms.
+6. Modify only files explicitly permitted by the task.
+7. Do not make unrelated edits.
+8. Do not delete or replace README.md or AGENTS.md unless explicitly requested.
+9. Treat one task as one focused change and one Pull Request.
+10. Do not create a Pull Request unless explicitly instructed.
+
+## Required work report
+
+Before editing, record the starting HEAD commit.
+
+After editing, report:
+
+1. the starting HEAD
+2. the changed files
+3. a concise description of each change
+4. the result of `git diff --name-only <starting-HEAD>..HEAD`
+5. confirmation that prohibited files have no differences
+6. the result of `git diff --check`
+7. whether the working tree is clean
