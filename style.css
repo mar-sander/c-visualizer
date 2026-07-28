@@ -314,7 +314,7 @@ button:hover{
 .sample-btn{
   display:inline-flex;
   align-items:center;
-  gap:0.45em;
+  gap:0.6em;
   white-space:nowrap;
   font-size:0.92rem;
   padding:8px 12px;
