@@ -256,14 +256,45 @@ function findComparison(expr){
   return { ok:true, comparison:comparisons[0] || null };
 }
 
+function stripWrappingParentheses(expr){
+  let stripped = String(expr).trim();
+
+  while(stripped.startsWith('(') && stripped.endsWith(')')){
+    let depth = 0;
+    let wrapsWholeExpression = true;
+
+    for(let index = 0; index < stripped.length; index++){
+      if(stripped[index] === '(') depth++;
+      if(stripped[index] === ')') depth--;
+
+      // 最初の開き括弧が末尾より前で閉じるなら、式全体を包んでいません。
+      if(depth === 0 && index < stripped.length - 1){
+        wrapsWholeExpression = false;
+        break;
+      }
+      if(depth < 0){
+        wrapsWholeExpression = false;
+        break;
+      }
+    }
+
+    if(!wrapsWholeExpression || depth !== 0) break;
+    stripped = stripped.slice(1, -1).trim();
+  }
+
+  return stripped;
+}
+
 function evaluateExpression(expr, variables){
-  const found = findComparison(expr);
+  // 比較式全体を包む冗長な括弧だけを外し、内側の比較を見つけます。
+  const normalizedExpr = stripWrappingParentheses(expr);
+  const found = findComparison(normalizedExpr);
   if(!found.ok) return found;
-  if(!found.comparison) return evaluateArithmeticExpression(expr, variables);
+  if(!found.comparison) return evaluateArithmeticExpression(normalizedExpr, variables);
 
   const { operator, index } = found.comparison;
-  const leftExpr = expr.slice(0, index).trim();
-  const rightExpr = expr.slice(index + operator.length).trim();
+  const leftExpr = normalizedExpr.slice(0, index).trim();
+  const rightExpr = normalizedExpr.slice(index + operator.length).trim();
   if(!leftExpr || !rightExpr){
     return { ok:false, error:'比較演算子の左右に式を書いてください。' };
   }
@@ -300,17 +331,35 @@ function evaluateExpression(expr, variables){
 
 function describeComparison(result){
   const comparison = result.comparison;
-  const relation = {
-    '<':'より小さい',
-    '<=':'以下',
-    '>':'より大きい',
-    '>=':'以上',
-    '==':'等しい',
-    '!=':'等しくない'
-  }[comparison.operator];
-  const conclusion = comparison.conditionMet
-    ? `${comparison.leftValue} は ${comparison.rightValue} ${relation}ので、条件は成立します。`
-    : `${comparison.leftValue} は ${comparison.rightValue} ${relation}という条件に当てはまらないため、条件は成立しません。`;
+  const left = comparison.leftValue;
+  const right = comparison.rightValue;
+  const conclusions = {
+    '<':{
+      true:`${left} は ${right} より小さいので、条件は成立します。`,
+      false:`${left} は ${right} より小さくないため、条件は成立しません。`
+    },
+    '<=':{
+      true:`${left} は ${right} 以下なので、条件は成立します。`,
+      false:`${left} は ${right} 以下ではないため、条件は成立しません。`
+    },
+    '>':{
+      true:`${left} は ${right} より大きいので、条件は成立します。`,
+      false:`${left} は ${right} より大きくないため、条件は成立しません。`
+    },
+    '>=':{
+      true:`${left} は ${right} 以上なので、条件は成立します。`,
+      false:`${left} は ${right} 以上ではないため、条件は成立しません。`
+    },
+    '==':{
+      true:`${left} と ${right} は等しいので、条件は成立します。`,
+      false:`${left} と ${right} は等しくないため、条件は成立しません。`
+    },
+    '!=':{
+      true:`${left} と ${right} は等しくないので、条件は成立します。`,
+      false:`${left} と ${right} は等しいため、条件は成立しません。`
+    }
+  };
+  const conclusion = conclusions[comparison.operator][comparison.conditionMet];
   return `${escapeHtml(result.readable)} を計算し、左右の値を比較しました。${conclusion}`;
 }
 
