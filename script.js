@@ -135,7 +135,7 @@ function tokenizeExpression(expr){
   return { ok:true, tokens };
 }
 
-function evaluateExpression(expr, variables){
+function evaluateArithmeticExpression(expr, variables){
   const tokenResult = tokenizeExpression(expr);
   if(!tokenResult.ok) return { ok:false, error:tokenResult.error };
 
@@ -232,12 +232,150 @@ function evaluateExpression(expr, variables){
   return { ok:true, value:result.value, readable:result.readable, usedVars };
 }
 
+function findComparison(expr){
+  const operators = ['<=', '>=', '==', '!=', '<', '>'];
+  const comparisons = [];
+  let depth = 0;
+
+  for(let index = 0; index < expr.length; index++){
+    const ch = expr[index];
+    if(ch === '(') depth++;
+    if(ch === ')') depth--;
+    if(depth !== 0) continue;
+
+    const operator = operators.find(candidate => expr.startsWith(candidate, index));
+    if(operator){
+      comparisons.push({ operator, index });
+      index += operator.length - 1;
+    }
+  }
+
+  if(comparisons.length > 1){
+    return { ok:false, error:'複数の比較演算子を含む式は読み取れません。' };
+  }
+  return { ok:true, comparison:comparisons[0] || null };
+}
+
+function stripWrappingParentheses(expr){
+  let stripped = String(expr).trim();
+
+  while(stripped.startsWith('(') && stripped.endsWith(')')){
+    let depth = 0;
+    let wrapsWholeExpression = true;
+
+    for(let index = 0; index < stripped.length; index++){
+      if(stripped[index] === '(') depth++;
+      if(stripped[index] === ')') depth--;
+
+      // 最初の開き括弧が末尾より前で閉じるなら、式全体を包んでいません。
+      if(depth === 0 && index < stripped.length - 1){
+        wrapsWholeExpression = false;
+        break;
+      }
+      if(depth < 0){
+        wrapsWholeExpression = false;
+        break;
+      }
+    }
+
+    if(!wrapsWholeExpression || depth !== 0) break;
+    stripped = stripped.slice(1, -1).trim();
+  }
+
+  return stripped;
+}
+
+function evaluateExpression(expr, variables){
+  // 比較式全体を包む冗長な括弧だけを外し、内側の比較を見つけます。
+  const normalizedExpr = stripWrappingParentheses(expr);
+  const found = findComparison(normalizedExpr);
+  if(!found.ok) return found;
+  if(!found.comparison) return evaluateArithmeticExpression(normalizedExpr, variables);
+
+  const { operator, index } = found.comparison;
+  const leftExpr = normalizedExpr.slice(0, index).trim();
+  const rightExpr = normalizedExpr.slice(index + operator.length).trim();
+  if(!leftExpr || !rightExpr){
+    return { ok:false, error:'比較演算子の左右に式を書いてください。' };
+  }
+
+  // 比較の左右は、これまでと同じ四則演算パーサーで先に計算します。
+  const left = evaluateArithmeticExpression(leftExpr, variables);
+  if(!left.ok) return left;
+  const right = evaluateArithmeticExpression(rightExpr, variables);
+  if(!right.ok) return right;
+
+  const conditions = {
+    '<': left.value < right.value,
+    '<=': left.value <= right.value,
+    '>': left.value > right.value,
+    '>=': left.value >= right.value,
+    '==': left.value === right.value,
+    '!=': left.value !== right.value
+  };
+  const conditionMet = conditions[operator];
+
+  return {
+    ok:true,
+    value:conditionMet ? 1 : 0,
+    readable:`${left.readable} ${operator} ${right.readable}`,
+    usedVars:[...left.usedVars, ...right.usedVars],
+    comparison:{
+      operator,
+      leftValue:left.value,
+      rightValue:right.value,
+      conditionMet
+    }
+  };
+}
+
+function describeComparison(result){
+  const comparison = result.comparison;
+  const left = comparison.leftValue;
+  const right = comparison.rightValue;
+  const conclusions = {
+    '<':{
+      true:`${left} は ${right} より小さいので、条件は成立します。`,
+      false:`${left} は ${right} より小さくないため、条件は成立しません。`
+    },
+    '<=':{
+      true:`${left} は ${right} 以下なので、条件は成立します。`,
+      false:`${left} は ${right} 以下ではないため、条件は成立しません。`
+    },
+    '>':{
+      true:`${left} は ${right} より大きいので、条件は成立します。`,
+      false:`${left} は ${right} より大きくないため、条件は成立しません。`
+    },
+    '>=':{
+      true:`${left} は ${right} 以上なので、条件は成立します。`,
+      false:`${left} は ${right} 以上ではないため、条件は成立しません。`
+    },
+    '==':{
+      true:`${left} と ${right} は等しいので、条件は成立します。`,
+      false:`${left} と ${right} は等しくないため、条件は成立しません。`
+    },
+    '!=':{
+      true:`${left} と ${right} は等しくないので、条件は成立します。`,
+      false:`${left} と ${right} は等しいため、条件は成立しません。`
+    }
+  };
+  const conclusion = conclusions[comparison.operator][comparison.conditionMet];
+  return `${escapeHtml(result.readable)} を計算し、左右の値を比較しました。${conclusion}`;
+}
+
 
 function isSimpleIntegerLiteral(expr){
   return /^[-+]?\d+$/.test(String(expr).trim());
 }
 
 function makeInitialValueExplanation(name, expr, result){
+  if(result.comparison){
+    const cValue = result.comparison.conditionMet ? '成立を1' : '不成立を0';
+    return {
+      analysis:`${describeComparison(result)} C言語では条件の${cValue}として扱うため、<code>${name}</code> に <code>${result.value}</code> を代入しました。`,
+      step:`${describeComparison(result)} ${name} に ${result.value} を代入しました。`
+    };
+  }
   if(isSimpleIntegerLiteral(expr)){
     return {
       analysis:`整数型の変数 <code>${name}</code> を作り、<code>${result.value}</code> を代入しました。`,
@@ -393,7 +531,12 @@ function visualizeCode(){
       if(result.ok){
         const before = variables[name];
         rememberVariable(name, result.value);
-        addAnalysis(analysis, lineNo, `変数 <code>${name}</code> に、<code>${escapeHtml(expr)}</code> の計算結果 <code>${result.value}</code> を代入しました。`);
+        if(result.comparison){
+          const cValue = result.comparison.conditionMet ? '成立を1' : '不成立を0';
+          addAnalysis(analysis, lineNo, `${describeComparison(result)} C言語では条件の${cValue}として扱うため、<code>${name}</code> に <code>${result.value}</code> を代入しました。`);
+        }else{
+          addAnalysis(analysis, lineNo, `変数 <code>${name}</code> に、<code>${escapeHtml(expr)}</code> の計算結果 <code>${result.value}</code> を代入しました。`);
+        }
         if(before === UNINITIALIZED){
           addStep(lineNo, `${name} の中身に ${result.value} を代入しました。計算：${escapeHtml(result.readable)} = ${result.value}`);
         }else{
@@ -413,6 +556,7 @@ function visualizeCode(){
       const argText = printfMatch[2] || '';
       const args = argText ? splitArgs(argText) : [];
       const values = [];
+      const results = [];
       const readableArgs = [];
       let ok = true;
       let error = '';
@@ -421,6 +565,7 @@ function visualizeCode(){
         const result = evaluateExpression(arg, variables);
         if(result.ok){
           values.push(result.value);
+          results.push(result);
           readableArgs.push(`${escapeHtml(arg)} → ${result.value}`);
         }else{
           ok = false;
@@ -436,7 +581,9 @@ function visualizeCode(){
         let explanation;
         if(args.length){
           const argDescriptions = args.map((arg, i) => describePrintfArg(arg, values[i]));
-          if(args.length === 1){
+          if(args.length === 1 && results[0].comparison){
+            explanation = `${describeComparison(results[0])} 比較結果の <code>${values[0]}</code> をprintfで画面に表示しました。`;
+          }else if(args.length === 1){
             explanation = `printfで ${argDescriptions[0]} を画面に表示しました。`;
           }else{
             explanation = `printfで ${argDescriptions.join(' と ')} を使い、画面に「${escapeHtml(visibleText)}」を表示しました。`;
