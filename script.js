@@ -6,6 +6,9 @@ const samples = {
   unsupported: `#include <stdio.h>\n\nint main(void){\n    int score = 78;\n    if(score >= 60){\n        printf("合格です\\n");\n    }\n    return 0;\n}`
 };
 
+// 数値の 0 と区別して、まだ値が入っていない状態を表します。
+const UNINITIALIZED = Symbol('uninitialized');
+
 function escapeHtml(str){
   return String(str)
     .replace(/&/g, '&amp;')
@@ -200,7 +203,10 @@ function evaluateExpression(expr, variables){
 
     if(/^[A-Za-z_]\w*$/.test(token)){
       if(!(token in variables)){
-        return { ok:false, error:`変数 ${token} はまだ値が入っていないか、宣言されていません。` };
+        return { ok:false, error:`変数 ${token} は宣言されていません。` };
+      }
+      if(variables[token] === UNINITIALIZED){
+        return { ok:false, error:`変数 ${token} は宣言されていますが、まだ値が代入されていません。` };
       }
       usedVars.push({ name:token, value:variables[token] });
       return { ok:true, value:variables[token], readable:`${token}(${variables[token]})` };
@@ -353,9 +359,9 @@ function visualizeCode(){
       const name = declMatch[1];
       const expr = declMatch[2];
       if(expr === undefined){
-        rememberVariable(name, 0);
-        addAnalysis(analysis, lineNo, `整数型の変数 <code>${name}</code> を作りました。Ver.0.1では、未初期化の値は学習用に <code>0</code> として扱います。`);
-        addStep(lineNo, `${name} という整数の箱を作り、学習用に 0 を代入しました。`);
+        rememberVariable(name, UNINITIALIZED);
+        addAnalysis(analysis, lineNo, `整数型の変数 <code>${name}</code> を作りました。まだ値は代入されていません。`);
+        addStep(lineNo, `${name} という整数の箱を作りました。中身はまだ入っていません。`);
         return;
       }
 
@@ -388,7 +394,11 @@ function visualizeCode(){
         const before = variables[name];
         rememberVariable(name, result.value);
         addAnalysis(analysis, lineNo, `変数 <code>${name}</code> に、<code>${escapeHtml(expr)}</code> の計算結果 <code>${result.value}</code> を代入しました。`);
-        addStep(lineNo, `${name} の中身を ${before} から ${result.value} に変えました。計算：${escapeHtml(result.readable)} = ${result.value}`);
+        if(before === UNINITIALIZED){
+          addStep(lineNo, `${name} の中身に ${result.value} を代入しました。計算：${escapeHtml(result.readable)} = ${result.value}`);
+        }else{
+          addStep(lineNo, `${name} の中身を ${before} から ${result.value} に変えました。計算：${escapeHtml(result.readable)} = ${result.value}`);
+        }
       }else{
         addAnalysis(analysis, lineNo, `変数 <code>${name}</code> への代入を読み取ろうとしましたが、式を計算できませんでした。`);
         addHint(hints, lineNo, '式を計算できません', escapeHtml(result.error));
@@ -496,7 +506,10 @@ function visualizeCode(){
   }).join('');
 
   const variableHtml = variableOrder.length
-    ? variableOrder.map(name => `<div class="variable-chip">${escapeHtml(name)} = ${escapeHtml(String(variables[name]))}</div>`).join('')
+    ? variableOrder.map(name => {
+      const value = variables[name] === UNINITIALIZED ? '未初期化' : String(variables[name]);
+      return `<div class="variable-chip">${escapeHtml(name)} = ${escapeHtml(value)}</div>`;
+    }).join('')
     : `<div class="note">変数の状態はまだありません。</div>`;
 
   const stepHtml = steps.length
