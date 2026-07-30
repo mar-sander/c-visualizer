@@ -3,7 +3,7 @@ const samples = {
   calcSimple: `#include <stdio.h>\n\nint main(void){\n    int price = 120;\n    int count = 3;\n    int total = price * count;\n    printf("%d円です\\n", total);\n    return 0;\n}`,
   calc: `#include <stdio.h>\n\nint main(void){\n    int price = 120;\n    int count = 4;\n    int total = price * count;\n    int change = 1000 - total;\n    printf("合計:%d円\\n", total);\n    printf("おつり:%d円\\n", change);\n    return 0;\n}`,
   assign: `#include <stdio.h>\n\nint main(void){\n    int score = 60;\n    score = score + 15;\n    printf("%d\\n", score);\n    return 0;\n}`,
-  unsupported: `#include <stdio.h>\n\nint main(void){\n    int score = 78;\n    if(score >= 60){\n        printf("合格です\\n");\n    }\n    return 0;\n}`
+  unsupported: `#include <stdio.h>\n\nint main(void){\n    int score;\n    scanf("%d", &score);\n    return 0;\n}`
 };
 
 // 数値の 0 と区別して、まだ値が入っていない状態を表します。
@@ -84,6 +84,38 @@ function countSemicolonsOutsideString(text){
 function hasMultipleStatementsOnOneLine(trimmed){
   if(/^for\s*\(/.test(trimmed)) return false;
   return countSemicolonsOutsideString(trimmed) >= 2;
+}
+
+// 文字列と行コメントを空白に置き換え、構文として読む部分だけを残します。
+function codeOutsideStringAndLineComment(text){
+  let code = '';
+  let inString = false;
+  let escape = false;
+  for(let index = 0; index < text.length; index++){
+    const ch = text[index];
+    if(escape){
+      escape = false;
+      code += ' ';
+      continue;
+    }
+    if(ch === '\\' && inString){
+      escape = true;
+      code += ' ';
+      continue;
+    }
+    if(ch === '"'){
+      inString = !inString;
+      code += ' ';
+      continue;
+    }
+    if(!inString && ch === '/' && text[index + 1] === '/') break;
+    code += inString ? ' ' : ch;
+  }
+  return code;
+}
+
+function bracesOutsideString(text){
+  return [...codeOutsideStringAndLineComment(text)].filter(ch => ch === '{' || ch === '}');
 }
 
 function makeVisibleDisplayText(text){
@@ -418,6 +450,13 @@ function visualizeCode(){
   let hasReturn = false;
   let stepNo = 1;
 
+  for(const rawLine of lines){
+    for(const ch of bracesOutsideString(rawLine)){
+      if(ch === '{') braceBalance++;
+      if(ch === '}') braceBalance--;
+    }
+  }
+
   function rememberVariable(name, value){
     if(!(name in variables)) variableOrder.push(name);
     variables[name] = value;
@@ -428,14 +467,9 @@ function visualizeCode(){
     executedLines.add(lineNo);
   }
 
-  lines.forEach((rawLine, index) => {
+  function processSimpleLine(rawLine, index, insideIf = false){
     const lineNo = index + 1;
     const trimmed = rawLine.trim();
-
-    for(const ch of trimmed){
-      if(ch === '{') braceBalance++;
-      if(ch === '}') braceBalance--;
-    }
 
     if(trimmed === ''){
       addAnalysis(analysis, lineNo, '空欄です。処理は行いません。');
@@ -444,6 +478,14 @@ function visualizeCode(){
 
     if(isCommentLine(trimmed)){
       addAnalysis(analysis, lineNo, 'コメントです。プログラムの動作には直接関係しません。');
+      return;
+    }
+
+    if(insideIf && !/^int\s+/.test(trimmed) &&
+       !/^[A-Za-z_]\w*\s*=/.test(trimmed) && !/^printf\s*\(/.test(trimmed)){
+      addAnalysis(analysis, lineNo, 'この処理はif文の中では現在未対応のため、実行しません。');
+      addHint(hints, lineNo, 'if文内では未対応', 'if文の中では、既存の変数への代入とprintfだけを実行できます。');
+      warningLines.add(lineNo);
       return;
     }
 
@@ -494,6 +536,12 @@ function visualizeCode(){
 
     const declMatch = trimmed.match(/^int\s+([A-Za-z_]\w*)\s*(?:=\s*(.+))?;$/);
     if(declMatch){
+      if(insideIf){
+        addAnalysis(analysis, lineNo, 'if文の中で新しい変数を宣言する処理は、現在未対応です。この行は実行しません。');
+        addHint(hints, lineNo, 'if文内の変数宣言は未対応', 'ブロックスコープを正確に再現できないため、変数は登録しません。');
+        warningLines.add(lineNo);
+        return;
+      }
       const name = declMatch[1];
       const expr = declMatch[2];
       if(expr === undefined){
@@ -615,7 +663,156 @@ function visualizeCode(){
       addHint(hints, lineNo, '未対応コード', 'この行は現在の可視化対象外です。まずは int、代入、四則演算、printf の範囲で試してみましょう。');
       warningLines.add(lineNo);
     }
-  });
+  }
+
+  function markSkippedIfBody(startIndex, endIndex, evaluationFailed){
+    const reason = evaluationFailed
+      ? 'if文の条件を評価できなかったため、この行は実行されませんでした。'
+      : 'if文の条件が成立しなかったため、この行は実行されませんでした。';
+    for(let bodyIndex = startIndex; bodyIndex < endIndex; bodyIndex++){
+      const trimmed = lines[bodyIndex].trim();
+      if(trimmed === '' || isCommentLine(trimmed)){
+        processSimpleLine(lines[bodyIndex], bodyIndex, true);
+        continue;
+      }
+      addSkippedLineWarnings(bodyIndex, trimmed);
+      if(/^int\s+/.test(trimmed)){
+        addAnalysis(analysis, bodyIndex + 1, `${reason} また、if文の中で新しい変数を宣言する処理は現在未対応です。`);
+        addHint(hints, bodyIndex + 1, 'if文内の変数宣言は未対応', 'ブロックスコープを正確に再現できないため、変数は登録しません。');
+        warningLines.add(bodyIndex + 1);
+      }else{
+        addAnalysis(analysis, bodyIndex + 1, reason);
+      }
+    }
+  }
+
+  function addSkippedLineWarnings(index, trimmed){
+    if(!hasMultipleStatementsOnOneLine(trimmed)) return;
+    const message = '1行に複数の文があります。文の終わりで改行してください。';
+    addAnalysis(analysis, index + 1, message);
+    addHint(hints, index + 1, '改行の確認', message);
+    warningLines.add(index + 1);
+  }
+
+  function warnUnsupportedIf(startIndex, endIndex, title, message){
+    const lineNo = startIndex + 1;
+    addAnalysis(analysis, lineNo, message);
+    addHint(hints, lineNo, title, message);
+    warningLines.add(lineNo);
+    for(let index = startIndex + 1; index <= endIndex && index < lines.length; index++){
+      const trimmed = lines[index].trim();
+      if(trimmed === '' || isCommentLine(trimmed)){
+        processSimpleLine(lines[index], index, true);
+      }else{
+        addAnalysis(analysis, index + 1, '未対応のif文に含まれるため、この行は実行されませんでした。');
+        addSkippedLineWarnings(index, trimmed);
+      }
+    }
+  }
+
+  function findIfBlock(startIndex){
+    let depth = 0;
+    let nested = false;
+    let unsupportedBlock = false;
+    let hasElse = false;
+
+    for(let index = startIndex; index < lines.length; index++){
+      const trimmed = lines[index].trim();
+      const structuralCode = codeOutsideStringAndLineComment(trimmed);
+      if(index > startIndex && /^\s*if\s*\(/.test(structuralCode)) nested = true;
+      if(/\belse\b/.test(structuralCode)) hasElse = true;
+      if(index > startIndex && /^\s*(for|while|switch)\s*\(/.test(structuralCode)) unsupportedBlock = true;
+      const structuralBraces = bracesOutsideString(trimmed);
+      if(index > startIndex && structuralBraces.includes('{')) unsupportedBlock = true;
+      for(const brace of structuralBraces){
+        depth += brace === '{' ? 1 : -1;
+      }
+
+      if(depth === 0 && index >= startIndex){
+        let next = index + 1;
+        while(next < lines.length && (lines[next].trim() === '' || isCommentLine(lines[next].trim()))) next++;
+        if(next < lines.length && /^else\b/.test(lines[next].trim())){
+          hasElse = true;
+          index = next - 1;
+          continue;
+        }
+        return { endIndex:index, nested, unsupportedBlock, hasElse, closed:lines[index].trim() === '}' };
+      }
+    }
+    return { endIndex:lines.length - 1, nested, unsupportedBlock, hasElse, closed:false };
+  }
+
+  for(let index = 0; index < lines.length; index++){
+    const trimmed = lines[index].trim();
+    if(!/^if\s*\(/.test(trimmed)){
+      processSimpleLine(lines[index], index);
+      continue;
+    }
+
+    const headerMatch = trimmed.match(/^if\s*\((.*)\)\s*\{$/);
+    if(!headerMatch){
+      let skippedIndex = index + 1;
+      while(skippedIndex < lines.length && (lines[skippedIndex].trim() === '' || isCommentLine(lines[skippedIndex].trim()))){
+        skippedIndex++;
+      }
+      const nextStructuralCode = skippedIndex < lines.length
+        ? codeOutsideStringAndLineComment(lines[skippedIndex]).trim()
+        : '';
+      if(nextStructuralCode === '{'){
+        const detachedBlock = findIfBlock(skippedIndex);
+        warnUnsupportedIf(index, detachedBlock.endIndex, '次の行に開き波かっこを書くif文は未対応', '開き波かっこを次の行に書くif文は現在未対応です。このif文の処理全体は実行しません。');
+        index = detachedBlock.endIndex;
+      }else{
+        warnUnsupportedIf(index, skippedIndex, '波かっこなしif文は未対応', '波かっこを省略したif文は現在未対応です。直後の文も実行しません。');
+        index = Math.min(skippedIndex, lines.length - 1);
+      }
+      continue;
+    }
+
+    const block = findIfBlock(index);
+    if(block.hasElse){
+      warnUnsupportedIf(index, block.endIndex, 'else付きif文は未対応', 'else付きif文は現在未対応です。if側とelse側の処理は実行しません。');
+      index = block.endIndex;
+      continue;
+    }
+    if(block.nested || block.unsupportedBlock){
+      warnUnsupportedIf(index, block.endIndex, '入れ子のブロックは未対応', 'if文のネストや、if文内の別のブロックは現在未対応です。外側のif文も実行しません。');
+      index = block.endIndex;
+      continue;
+    }
+    if(!block.closed){
+      warnUnsupportedIf(index, block.endIndex, '閉じ波かっこを確認', 'if文の終わりを示す、単独行の } が見つかりません。中の処理は実行しません。');
+      index = block.endIndex;
+      continue;
+    }
+
+    const lineNo = index + 1;
+    const condition = headerMatch[1].trim();
+    const result = evaluateExpression(condition, variables);
+    if(!result.ok){
+      addAnalysis(analysis, lineNo, `if文の条件 <code>${escapeHtml(condition)}</code> を評価できませんでした。波かっこの中の処理は実行しません。`);
+      addHint(hints, lineNo, 'if文の条件を評価できません', escapeHtml(result.error));
+      warningLines.add(lineNo);
+      addStep(lineNo, 'if文の条件を評価できなかったため、中の処理は実行しません。');
+      markSkippedIfBody(index + 1, block.endIndex, true);
+    }else{
+      const conditionMet = result.value !== 0;
+      const conditionExplanation = result.comparison
+        ? describeComparison(result)
+        : `${escapeHtml(result.readable)} を計算した結果は ${result.value} です。C言語では0以外を条件成立、0を条件不成立として扱います。`;
+      addAnalysis(analysis, lineNo, `${conditionExplanation}${conditionMet ? '波かっこの中の処理を実行します。' : '波かっこの中の処理は実行しません。'}`);
+      addStep(lineNo, `${escapeHtml(condition)}を判定しました。<br>${conditionMet ? '条件が成立したため、if文の中へ進みます。' : '条件が成立しなかったため、if文の中は実行しません。'}`);
+      if(conditionMet){
+        for(let bodyIndex = index + 1; bodyIndex < block.endIndex; bodyIndex++){
+          processSimpleLine(lines[bodyIndex], bodyIndex, true);
+        }
+      }else{
+        markSkippedIfBody(index + 1, block.endIndex, false);
+      }
+    }
+    addAnalysis(analysis, block.endIndex + 1, 'if文の処理範囲の終わりです。');
+    index = block.endIndex;
+  }
 
   if(!hasMain){
     addHint(hints, null, 'main関数が見当たりません', '学習用の基本的なCプログラムでは、<code>int main(void)</code> などの開始地点を書くことが多いです。');
