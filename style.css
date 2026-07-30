@@ -122,7 +122,10 @@ button:hover{
   border-radius:0;
 }
 
-.reset-btn i{color:#bbb;}
+.reset-btn i{
+  color:#bbb;
+  font-size: 1.4em;
+}
 
 .reset-btn:hover{
   background:transparent;
