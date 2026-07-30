@@ -190,10 +190,10 @@ button:hover{
 
 .output-box{
   margin-top:12px;
-  padding:14px;
+  padding: 10px 14px;
   background:#101010;
   border:1px solid #333;
-  min-height:58px;
+  min-height: 48px;
   white-space:pre-wrap;
   font-family:Consolas, Monaco, "Courier New", monospace;
 }
@@ -213,7 +213,8 @@ button:hover{
 
 .variable-chip{
   display:inline-block;
-  padding:6px 10px;
+  padding: 10px 14px;
+  min-height: 48px;
   background:#101820;
   border:1px solid #244457;
   color:#c7ecff;
