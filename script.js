@@ -673,7 +673,10 @@ function visualizeCode(){
       const trimmed = lines[bodyIndex].trim();
       if(trimmed === '' || isCommentLine(trimmed)){
         processSimpleLine(lines[bodyIndex], bodyIndex, true);
-      }else if(/^int\s+/.test(trimmed)){
+        continue;
+      }
+      addSkippedLineWarnings(bodyIndex, trimmed);
+      if(/^int\s+/.test(trimmed)){
         addAnalysis(analysis, bodyIndex + 1, `${reason} また、if文の中で新しい変数を宣言する処理は現在未対応です。`);
         addHint(hints, bodyIndex + 1, 'if文内の変数宣言は未対応', 'ブロックスコープを正確に再現できないため、変数は登録しません。');
         warningLines.add(bodyIndex + 1);
@@ -681,6 +684,14 @@ function visualizeCode(){
         addAnalysis(analysis, bodyIndex + 1, reason);
       }
     }
+  }
+
+  function addSkippedLineWarnings(index, trimmed){
+    if(!hasMultipleStatementsOnOneLine(trimmed)) return;
+    const message = '1行に複数の文があります。文の終わりで改行してください。';
+    addAnalysis(analysis, index + 1, message);
+    addHint(hints, index + 1, '改行の確認', message);
+    warningLines.add(index + 1);
   }
 
   function warnUnsupportedIf(startIndex, endIndex, title, message){
@@ -694,6 +705,7 @@ function visualizeCode(){
         processSimpleLine(lines[index], index, true);
       }else{
         addAnalysis(analysis, index + 1, '未対応のif文に含まれるため、この行は実行されませんでした。');
+        addSkippedLineWarnings(index, trimmed);
       }
     }
   }
@@ -743,8 +755,17 @@ function visualizeCode(){
       while(skippedIndex < lines.length && (lines[skippedIndex].trim() === '' || isCommentLine(lines[skippedIndex].trim()))){
         skippedIndex++;
       }
-      warnUnsupportedIf(index, skippedIndex, '波かっこなしif文は未対応', '波かっこを省略したif文は現在未対応です。直後の文も実行しません。');
-      index = Math.min(skippedIndex, lines.length - 1);
+      const nextStructuralCode = skippedIndex < lines.length
+        ? codeOutsideStringAndLineComment(lines[skippedIndex]).trim()
+        : '';
+      if(nextStructuralCode === '{'){
+        const detachedBlock = findIfBlock(skippedIndex);
+        warnUnsupportedIf(index, detachedBlock.endIndex, '次の行に開き波かっこを書くif文は未対応', '開き波かっこを次の行に書くif文は現在未対応です。このif文の処理全体は実行しません。');
+        index = detachedBlock.endIndex;
+      }else{
+        warnUnsupportedIf(index, skippedIndex, '波かっこなしif文は未対応', '波かっこを省略したif文は現在未対応です。直後の文も実行しません。');
+        index = Math.min(skippedIndex, lines.length - 1);
+      }
       continue;
     }
 
