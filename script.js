@@ -3,7 +3,7 @@ const samples = {
   calcSimple: `#include <stdio.h>\n\nint main(void){\n    int price = 120;\n    int count = 3;\n    int total = price * count;\n    printf("%d円です\\n", total);\n    return 0;\n}`,
   calc: `#include <stdio.h>\n\nint main(void){\n    int price = 120;\n    int count = 4;\n    int total = price * count;\n    int change = 1000 - total;\n    printf("合計:%d円\\n", total);\n    printf("おつり:%d円\\n", change);\n    return 0;\n}`,
   assign: `#include <stdio.h>\n\nint main(void){\n    int score = 60;\n    score = score + 15;\n    printf("%d\\n", score);\n    return 0;\n}`,
-  unsupported: `#include <stdio.h>\n\nint main(void){\n    int i = 0;\n    for(i = 0; i < 3; i++){\n        printf("%d\\n", i);\n    }\n    return 0;\n}`
+  unsupported: `#include <stdio.h>\n\nint main(void){\n    int score;\n    scanf("%d", &score);\n    return 0;\n}`
 };
 
 // 数値の 0 と区別して、まだ値が入っていない状態を表します。
@@ -86,29 +86,36 @@ function hasMultipleStatementsOnOneLine(trimmed){
   return countSemicolonsOutsideString(trimmed) >= 2;
 }
 
-// 文字列の中に書かれた波かっこは、プログラムの構造として数えません。
-function bracesOutsideString(text){
-  const braces = [];
+// 文字列と行コメントを空白に置き換え、構文として読む部分だけを残します。
+function codeOutsideStringAndLineComment(text){
+  let code = '';
   let inString = false;
   let escape = false;
   for(let index = 0; index < text.length; index++){
     const ch = text[index];
     if(escape){
       escape = false;
+      code += ' ';
       continue;
     }
     if(ch === '\\' && inString){
       escape = true;
+      code += ' ';
       continue;
     }
     if(ch === '"'){
       inString = !inString;
+      code += ' ';
       continue;
     }
     if(!inString && ch === '/' && text[index + 1] === '/') break;
-    if(!inString && (ch === '{' || ch === '}')) braces.push(ch);
+    code += inString ? ' ' : ch;
   }
-  return braces;
+  return code;
+}
+
+function bracesOutsideString(text){
+  return [...codeOutsideStringAndLineComment(text)].filter(ch => ch === '{' || ch === '}');
 }
 
 function makeVisibleDisplayText(text){
@@ -699,10 +706,13 @@ function visualizeCode(){
 
     for(let index = startIndex; index < lines.length; index++){
       const trimmed = lines[index].trim();
-      if(index > startIndex && /^if\s*\(/.test(trimmed)) nested = true;
-      if(/\belse\b/.test(trimmed)) hasElse = true;
-      if(index > startIndex && /^(for|while|switch)\s*\(/.test(trimmed)) unsupportedBlock = true;
-      for(const brace of bracesOutsideString(trimmed)){
+      const structuralCode = codeOutsideStringAndLineComment(trimmed);
+      if(index > startIndex && /^\s*if\s*\(/.test(structuralCode)) nested = true;
+      if(/\belse\b/.test(structuralCode)) hasElse = true;
+      if(index > startIndex && /^\s*(for|while|switch)\s*\(/.test(structuralCode)) unsupportedBlock = true;
+      const structuralBraces = bracesOutsideString(trimmed);
+      if(index > startIndex && structuralBraces.includes('{')) unsupportedBlock = true;
+      for(const brace of structuralBraces){
         depth += brace === '{' ? 1 : -1;
       }
 
