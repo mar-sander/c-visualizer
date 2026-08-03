@@ -13,7 +13,7 @@
 <div class="container">
   <header class="page-header">
     <h1 class="page-title">c<span class="subtitle"> code visualizer</span></h1>
-    <div class="page-subtitle">完全なC実行環境ではなく、処理の流れ・変数の変化・出力結果を見える化する学習支援ツールです（Ver.0.1）</div>
+    <div class="page-subtitle">完全なC実行環境ではなく、処理の流れ・変数の変化・出力結果を見える化する学習支援ツールです（Ver.0.2_0730）</div>
   </header>
 
   <div class="tool-grid">
@@ -37,10 +37,11 @@ int main(void){
         <button class="sample-btn" onclick="loadSample('calcSimple')"><i class="fa fa-code" aria-hidden="true"></i><span>かけ算</span></button>
         <button class="sample-btn" onclick="loadSample('calc')"><i class="fa fa-code" aria-hidden="true"></i><span>金額計算</span></button>
         <button class="sample-btn" onclick="loadSample('assign')"><i class="fa fa-code" aria-hidden="true"></i><span>再代入</span></button>
+        <button class="sample-btn" onclick="loadSample('ifSimple')"><i class="fa fa-code" aria-hidden="true"></i><span>if文</span></button>
         <button class="sample-btn" onclick="loadSample('unsupported')"><i class="fa fa-code" aria-hidden="true"></i><span>未対応</span></button>
       </div>
       <div class="legend-box">
-        <span class="highlight">Ver.0.1</span>では、int型の変数宣言・代入・整数の四則演算・printfによる表示に絞っています。これはオンラインCコンパイラではなく、処理の流れを理解するための可視化ツールです。<br>正確に読み取るため、1つの文ごとに改行して入力してください。
+        <span class="highlight">Ver.0.2_0730</span>では、int型の変数宣言・代入、整数の四則演算、比較式、printfによる表示、単純なif文に対応しています。<br>if文は、elseなし・入れ子なしで、開き波かっこをif行と同じ行、閉じ波かっこを単独行に書く形式に限ります。if文の中では、既存変数への代入とprintfを使用できますが、新しい変数の宣言には対応していません。<br>これはオンラインCコンパイラではなく、処理の流れを理解するための可視化ツールです。正確に読み取るため、1つの文ごとに改行して入力してください。
       </div>
     </section>
 
