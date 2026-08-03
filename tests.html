@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>C Code Visualizer 蝗槫ｸｰ繝・せ繝・/title>
+  <style>
+    :root{
+      color-scheme:dark;
+      --bg:#0f0f10;
+      --panel:#18181a;
+      --line:#303035;
+      --text:#eeeeef;
+      --muted:#a9a9b0;
+      --accent:#53c8ff;
+      --pass:#67d391;
+      --fail:#ff6b78;
+    }
+
+    *{ box-sizing:border-box; }
+
+    body{
+      margin:0;
+      background:var(--bg);
+      color:var(--text);
+      font-family:system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    main{
+      width:min(1100px, calc(100% - 32px));
+      margin:40px auto 64px;
+    }
+
+    header,
+    .summary,
+    .test-list{
+      border:1px solid var(--line);
+      border-radius:14px;
+      background:var(--panel);
+    }
+
+    header{ padding:24px; }
+    h1{ margin:0 0 8px; font-size:clamp(24px, 4vw, 36px); }
+    p{ margin:6px 0; color:var(--muted); line-height:1.7; }
+    a{ color:var(--accent); }
+
+    button{
+      margin-top:16px;
+      border:0;
+      border-radius:8px;
+      padding:10px 16px;
+      background:var(--accent);
+      color:#07131a;
+      font-weight:700;
+      cursor:pointer;
+    }
+
+    .summary{
+      display:grid;
+      grid-template-columns:repeat(3, minmax(0, 1fr));
+      gap:12px;
+      margin:16px 0;
+      padding:16px;
+    }
+
+    .summary-card{
+      padding:14px;
+      border:1px solid var(--line);
+      border-radius:10px;
+      text-align:center;
+    }
+
+    .summary-value{ display:block; font-size:28px; font-weight:800; }
+    .summary-label{ color:var(--muted); font-size:13px; }
+    .pass-text{ color:var(--pass); }
+    .fail-text{ color:var(--fail); }
+
+    .test-list{ overflow:hidden; }
+    .test-row{
+      display:grid;
+      grid-template-columns:88px minmax(180px, 0.8fr) minmax(260px, 1.7fr);
+      gap:14px;
+      align-items:start;
+      padding:14px 18px;
+      border-bottom:1px solid var(--line);
+    }
+    .test-row:last-child{ border-bottom:0; }
+
+    .badge{
+      display:inline-block;
+      border-radius:999px;
+      padding:4px 10px;
+      text-align:center;
+      font-size:12px;
+      font-weight:800;
+    }
+    .badge-pass{ background:rgba(103, 211, 145, .14); color:var(--pass); }
+    .badge-fail{ background:rgba(255, 107, 120, .14); color:var(--fail); }
+    .test-name{ font-weight:700; }
+    .test-detail{ color:var(--muted); font-family:ui-monospace, SFMono-Regular, Consolas, monospace; font-size:13px; line-height:1.6; white-space:pre-wrap; }
+
+    #testSandbox{
+      position:fixed;
+      left:-10000px;
+      top:0;
+      width:1px;
+      height:1px;
+      overflow:hidden;
+    }
+
+    @media (max-width:720px){
+      .summary{ grid-template-columns:1fr; }
+      .test-row{ grid-template-columns:1fr; gap:8px; }
+      .badge{ width:max-content; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>C Code Visualizer 蝗槫ｸｰ繝・せ繝・/h1>
+      <p>荳ｻ隕√↑蜈･蜉帑ｾ九ｒ閾ｪ蜍募ｮ溯｡後＠縲∝・蜉帙・螟画焚繝ｻ隴ｦ蜻翫・螳溯｡後せ繝・ャ繝励ｒ遒ｺ隱阪☆繧矩幕逋ｺ逕ｨ繝壹・繧ｸ縺ｧ縺吶・/p>
+      <p>縺薙・繝壹・繧ｸ縺ｯ陬ｽ蜩∫判髱｢繧貞､画峩縺帙★縲∝・髢倶ｸｭ縺ｮ <code>script.js</code> 繧偵◎縺ｮ縺ｾ縺ｾ隱ｭ縺ｿ霎ｼ繧薙〒讀懈渊縺励∪縺吶・/p>
+      <p><a href="index.html">C Code Visualizer縺ｸ謌ｻ繧・/a></p>
+      <button type="button" id="runTests">縺吶∋縺ｦ蜀榊ｮ溯｡・/button>
+    </header>
+
+    <section class="summary" aria-live="polite">
+      <div class="summary-card">
+        <span class="summary-value" id="totalCount">0</span>
+        <span class="summary-label">蜈ｨ繝・せ繝・/span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-value pass-text" id="passCount">0</span>
+        <span class="summary-label">謌仙粥</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-value fail-text" id="failCount">0</span>
+        <span class="summary-label">螟ｱ謨・/span>
+      </div>
+    </section>
+
+    <section class="test-list" id="testResults" aria-label="繝・せ繝育ｵ先棡"></section>
+  </main>
+
+  <div id="testSandbox" aria-hidden="true">
+    <textarea id="codeInput"></textarea>
+    <div id="outputResult"></div>
+    <div id="variableState"></div>
+    <div id="stepResult"></div>
+    <div id="codePreview"></div>
+    <div id="hintResult"></div>
+  </div>
+
+  <script src="script.js"></script>
+  <script>
+    const testCases = [
+      {
+        name:'蝓ｺ譛ｬ縺ｮ螳｣險繝ｻ蜉邂励・printf',
+        code:`#include <stdio.h>\n\nint main(void){\n    int a = 3;\n    int b = 5;\n    int c = a + b;\n    printf("%d\\n", c);\n    return 0;\n}`,
+        expect:{ output:'8', variables:['a = 3', 'b = 5', 'c = 8'], warningMax:0 }
+      },
+      {
+        name:'蜀堺ｻ｣蜈･',
+        code:`#include <stdio.h>\n\nint main(void){\n    int score = 60;\n    score = score + 15;\n    printf("%d\\n", score);\n    return 0;\n}`,
+        expect:{ output:'75', variables:['score = 75'], warningMax:0 }
+      },
+      {
+        name:'蝗帛援貍皮ｮ励→豈碑ｼ・ｵ先棡',
+        code:`#include <stdio.h>\n\nint main(void){\n    int a;\n    a = 5;\n    int total = (a + 3) * 2;\n    int result = total >= 16;\n    printf("%d %d\\n", total, result);\n    return 0;\n}`,
+        expect:{ output:'16 1', variables:['a = 5', 'total = 16', 'result = 1'], warningMax:0 }
+      },
+      {
+        name:'if譚｡莉ｶ謌千ｫ九・printf螳溯｡・,
+        code:`#include <stdio.h>\n\nint main(void){\n    int score = 78;\n    if(score >= 60){\n        printf("蜷域ｼ縺ｧ縺兔\n");\n    }\n    return 0;\n}`,
+        expect:{ output:'蜷域ｼ縺ｧ縺・, variables:['score = 78'], warningMax:0, stepsInclude:['譚｡莉ｶ縺梧・遶九＠縺溘◆繧・] }
+      },
+      {
+        name:'if譚｡莉ｶ荳肴・遶九・譛ｬ譁・せ繧ｭ繝・・',
+        code:`#include <stdio.h>\n\nint main(void){\n    int score = 45;\n    if(score >= 60){\n        printf("蜷域ｼ縺ｧ縺兔\n");\n    }\n    printf("蛻､螳夂ｵゆｺ・\n");\n    return 0;\n}`,
+        expect:{ output:'蛻､螳夂ｵゆｺ・, outputExcludes:['蜷域ｼ縺ｧ縺・], variables:['score = 45'], warningMax:0, executedExcludes:['printf("蜷域ｼ縺ｧ縺・] }
+      },
+      {
+        name:'if蜀・・莉｣蜈･繝ｻ譚｡莉ｶ謌千ｫ・,
+        code:`#include <stdio.h>\n\nint main(void){\n    int result = 0;\n    int score = 78;\n    if(score >= 60){\n        result = 1;\n    }\n    printf("%d\\n", result);\n    return 0;\n}`,
+        expect:{ output:'1', variables:['result = 1', 'score = 78'], warningMax:0, executedIncludes:['result = 1;'] }
+      },
+      {
+        name:'if蜀・・莉｣蜈･繝ｻ譚｡莉ｶ荳肴・遶・,
+        code:`#include <stdio.h>\n\nint main(void){\n    int result = 0;\n    int score = 45;\n    if(score >= 60){\n        result = 1;\n    }\n    printf("%d\\n", result);\n    return 0;\n}`,
+        expect:{ output:'0', variables:['result = 0', 'score = 45'], warningMax:0, executedExcludes:['result = 1;'] }
+      },
+      {
+        name:'譛ｪ蛻晄悄蛹門､画焚繧呈擅莉ｶ縺ｫ菴ｿ逕ｨ',
+        code:`#include <stdio.h>\n\nint main(void){\n    int score;\n    if(score >= 60){\n        printf("蜷域ｼ縺ｧ縺兔\n");\n    }\n    printf("蛻､螳夂ｵゆｺ・\n");\n    return 0;\n}`,
+        expect:{ output:'蛻､螳夂ｵゆｺ・, variables:['score = 譛ｪ蛻晄悄蛹・], warningMin:1, hintsInclude:['縺ｾ縺蛟､縺御ｻ｣蜈･縺輔ｌ縺ｦ縺・∪縺帙ｓ'], executedExcludes:['printf("蜷域ｼ縺ｧ縺・] }
+      },
+      {
+        name:'譛ｪ螳｣險螟画焚繧呈擅莉ｶ縺ｫ菴ｿ逕ｨ',
+        code:`#include <stdio.h>\n\nint main(void){\n    if(score >= 60){\n        printf("蜷域ｼ縺ｧ縺兔\n");\n    }\n    printf("蛻､螳夂ｵゆｺ・\n");\n    return 0;\n}`,
+        expect:{ output:'蛻､螳夂ｵゆｺ・, warningMin:1, hintsInclude:['螳｣險縺輔ｌ縺ｦ縺・∪縺帙ｓ'], executedExcludes:['printf("蜷域ｼ縺ｧ縺・] }
+      },
+      {
+        name:'隍・焚縺ｮ迢ｬ遶九＠縺殃f',
+        code:`#include <stdio.h>\n\nint main(void){\n    int score = 78;\n    if(score >= 60){\n        printf("蜷域ｼ\\n");\n    }\n    if(score >= 80){\n        printf("蜆ｪ遘\\n");\n    }\n    return 0;\n}`,
+        expect:{ output:'蜷域ｼ', outputExcludes:['蜆ｪ遘'], variables:['score = 78'], warningMax:0 }
+      },
+      {
+        name:'if蜀・・螟画焚螳｣險縺ｯ譛ｪ蟇ｾ蠢・,
+        code:`#include <stdio.h>\n\nint main(void){\n    int score = 78;\n    if(score >= 60){\n        int bonus = 5;\n    }\n    printf("邨ゆｺ・\n");\n    return 0;\n}`,
+        expect:{ output:'邨ゆｺ・, variables:['score = 78'], variablesExclude:['bonus ='], warningMin:1, hintsInclude:['if譁・・縺ｮ螟画焚螳｣險縺ｯ譛ｪ蟇ｾ蠢・] }
+      },
+      {
+        name:'蜈･繧悟ｭ進f繧貞ｮ牙・縺ｫ蛛懈ｭ｢',
+        code:`#include <stdio.h>\n\nint main(void){\n    int a = 1;\n    int b = 1;\n    if(a > 0){\n        if(b > 0){\n            printf("WRONG\\n");\n        }\n    }\n    printf("邨ゆｺ・\n");\n    return 0;\n}`,
+        expect:{ output:'邨ゆｺ・, outputExcludes:['WRONG'], warningMin:1, hintsInclude:['蜈･繧悟ｭ・], executedExcludes:['printf("WRONG'] }
+      },
+      {
+        name:'else莉倥″if繧貞ｮ牙・縺ｫ蛛懈ｭ｢',
+        code:`#include <stdio.h>\n\nint main(void){\n    int score = 45;\n    if(score >= 60){\n        printf("蜷域ｼ\\n");\n    }else{\n        printf("荳榊粋譬ｼ\\n");\n    }\n    printf("蛻､螳夂ｵゆｺ・\n");\n    return 0;\n}`,
+        expect:{ output:'蛻､螳夂ｵゆｺ・, outputExcludes:['蜷域ｼ', '荳榊粋譬ｼ'], warningMin:1, hintsInclude:['else莉倥″if譁・・譛ｪ蟇ｾ蠢・] }
+      },
+      {
+        name:'豕｢縺九▲縺薙↑縺擁f繧貞ｮ牙・縺ｫ蛛懈ｭ｢',
+        code:`#include <stdio.h>\n\nint main(void){\n    if(1)\n        printf("WRONG\\n");\n    printf("邨ゆｺ・\n");\n    return 0;\n}`,
+        expect:{ output:'邨ゆｺ・, outputExcludes:['WRONG'], warningMin:1, hintsInclude:['豕｢縺九▲縺薙↑縺擁f譁・・譛ｪ蟇ｾ蠢・], executedExcludes:['printf("WRONG'] }
+      },
+      {
+        name:'谺｡陦梧ｳ｢縺九▲縺妬f繧貞ｮ牙・縺ｫ蛛懈ｭ｢',
+        code:`#include <stdio.h>\n\nint main(void){\n    int result = 0;\n    if(1)\n    {\n        result = 5;\n        printf("WRONG\\n");\n    }\n    printf("%d\\n", result);\n    return 0;\n}`,
+        expect:{ output:'0', outputExcludes:['WRONG'], variables:['result = 0'], warningMin:1, hintsInclude:['谺｡縺ｮ陦後↓髢九″豕｢縺九▲縺・], executedExcludes:['result = 5;', 'printf("WRONG'] }
+      },
+      {
+        name:'繧ｹ繧ｭ繝・・陦後〒繧り､・焚譁・ｒ隴ｦ蜻・,
+        code:`#include <stdio.h>\n\nint main(void){\n    int result = 0;\n    if(0){\n        result = 1; result = 2;\n    }\n    printf("%d\\n", result);\n    return 0;\n}`,
+        expect:{ output:'0', variables:['result = 0'], warningMin:1, hintsInclude:['1陦後↓隍・焚縺ｮ譁・′縺ゅｊ縺ｾ縺・], executedExcludes:['result = 1; result = 2;'] }
+      },
+      {
+        name:'譁・ｭ怜・蜀・・else縺ｨ豕｢縺九▲縺薙ｒ辟｡隕・,
+        code:`#include <stdio.h>\n\nint main(void){\n    if(1){\n        printf("else { }\\n");\n    }\n    return 0;\n}`,
+        expect:{ output:'else { }', warningMax:0 }
+      },
+      {
+        name:'騾｣邯壹☆繧区ｳ｢縺九▲縺薙↑縺擁f繧貞ｮ牙・縺ｫ蛛懈ｭ｢',
+        code:`#include <stdio.h>\n\nint main(void){\n    if(0)\n    if(0)\n    printf("WRONG\\n");\n    printf("邨ゆｺ・\n");\n    return 0;\n}`,
+        expect:{ output:'邨ゆｺ・, outputExcludes:['WRONG'], warningMin:1, executedExcludes:['printf("WRONG'] }
+      },
+      {
+        name:'蜷御ｸ陦梧悽譁・・蜀・・if繧貞ｮ牙・縺ｫ蛛懈ｭ｢',
+        code:`#include <stdio.h>\n\nint main(void){\n    if(0)\n    if(1) printf("INNER\\n");\n    printf("AFTER\\n");\n    return 0;\n}`,
+        expect:{ output:'AFTER', outputExcludes:['INNER'], warningMin:1, executedExcludes:['printf("INNER'] }
+      },
+      {
+        name:'蜀・・if・菊lse蜈ｨ菴薙ｒ螳牙・縺ｫ蛛懈ｭ｢',
+        code:`#include <stdio.h>\n\nint main(void){\n    if(0)\n    if(1) printf("INNER-TRUE\\n");\n    else printf("INNER-ELSE\\n");\n    printf("邨ゆｺ・\n");\n    return 0;\n}`,
+        expect:{ output:'邨ゆｺ・, outputExcludes:['INNER-TRUE', 'INNER-ELSE'], warningMin:1 }
+      },
+      {
+        name:'scanf譛ｪ蟇ｾ蠢懊し繝ｳ繝励Ν',
+        code:`#include <stdio.h>\n\nint main(void){\n    int score;\n    scanf("%d", &score);\n    return 0;\n}`,
+        expect:{ output:'蜃ｺ蜉帙・縺ｾ縺縺ゅｊ縺ｾ縺帙ｓ縲・, variables:['score = 譛ｪ蛻晄悄蛹・], warningMin:1, hintsInclude:['Ver.0.2_0730縺ｧ縺ｯ譛ｪ蟇ｾ蠢・] }
+      }
+    ];
+
+    function normalizeText(value){
+      return String(value || '').replace(/\r\n/g, '\n').trim();
+    }
+
+    function snapshotResult(){
+      return {
+        output:normalizeText(document.getElementById('outputResult').textContent),
+        variables:[...document.querySelectorAll('#variableState .variable-chip')].map(element => normalizeText(element.textContent)),
+        hints:normalizeText(document.getElementById('hintResult').textContent),
+        warningCount:document.querySelectorAll('#hintResult .warning-line').length,
+        steps:normalizeText(document.getElementById('stepResult').textContent),
+        executedLines:[...document.querySelectorAll('#codePreview .code-card.executed-line .code-line-text')].map(element => normalizeText(element.textContent))
+      };
+    }
+
+    function checkCase(testCase){
+      document.getElementById('codeInput').value = testCase.code;
+      visualizeCode();
+      const actual = snapshotResult();
+      const expected = testCase.expect;
+      const failures = [];
+
+      if(expected.output !== undefined && actual.output !== expected.output){
+        failures.push(`蜃ｺ蜉・ 譛溷ｾ・・{expected.output}縲・ 螳滄圀縲・{actual.output}縲港);
+      }
+
+      for(const text of expected.outputExcludes || []){
+        if(actual.output.includes(text)) failures.push(`蜃ｺ蜉帙↓縲・{text}縲阪ｒ蜷ｫ繧√↑縺Я);
+      }
+
+      for(const text of expected.variables || []){
+        if(!actual.variables.includes(text)) failures.push(`螟画焚縺ｫ縲・{text}縲阪′縺ｪ縺Я);
+      }
+
+      for(const text of expected.variablesExclude || []){
+        if(actual.variables.some(variable => variable.includes(text))) failures.push(`螟画焚縺ｫ縲・{text}縲阪ｒ蜷ｫ繧√↑縺Я);
+      }
+
+      if(expected.warningMin !== undefined && actual.warningCount < expected.warningMin){
+        failures.push(`隴ｦ蜻頑焚: ${expected.warningMin}莉ｶ莉･荳翫ｒ譛溷ｾ・/ 螳滄圀${actual.warningCount}莉ｶ`);
+      }
+
+      if(expected.warningMax !== undefined && actual.warningCount > expected.warningMax){
+        failures.push(`隴ｦ蜻頑焚: ${expected.warningMax}莉ｶ莉･荳九ｒ譛溷ｾ・/ 螳滄圀${actual.warningCount}莉ｶ`);
+      }
+
+      for(const text of expected.hintsInclude || []){
+        if(!actual.hints.includes(text)) failures.push(`繝偵Φ繝医↓縲・{text}縲阪′縺ｪ縺Я);
+      }
+
+      for(const text of expected.stepsInclude || []){
+        if(!actual.steps.includes(text)) failures.push(`STEP縺ｫ縲・{text}縲阪′縺ｪ縺Я);
+      }
+
+      for(const text of expected.executedIncludes || []){
+        if(!actual.executedLines.some(line => line.includes(text))) failures.push(`螳溯｡瑚｡後↓縲・{text}縲阪′縺ｪ縺Я);
+      }
+
+      for(const text of expected.executedExcludes || []){
+        if(actual.executedLines.some(line => line.includes(text))) failures.push(`縲・{text}縲阪ｒ螳溯｡後＠縺ｦ縺ｯ縺・￠縺ｪ縺Я);
+      }
+
+      return { passed:failures.length === 0, failures, actual };
+    }
+
+    function escapeTestHtml(value){
+      return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function runAllTests(){
+      const results = testCases.map(testCase => ({ testCase, result:checkCase(testCase) }));
+      const passed = results.filter(item => item.result.passed).length;
+      const failed = results.length - passed;
+
+      document.getElementById('totalCount').textContent = results.length;
+      document.getElementById('passCount').textContent = passed;
+      document.getElementById('failCount').textContent = failed;
+      document.title = failed === 0
+        ? `笨・${passed}/${results.length} C Code Visualizer 蝗槫ｸｰ繝・せ繝・
+        : `笨・${failed}莉ｶ螟ｱ謨・C Code Visualizer 蝗槫ｸｰ繝・せ繝・;
+
+      document.getElementById('testResults').innerHTML = results.map(({ testCase, result }) => {
+        const detail = result.passed
+          ? `蜃ｺ蜉・ ${result.actual.output}\n隴ｦ蜻・ ${result.actual.warningCount}莉ｶ`
+          : result.failures.join('\n');
+        return `
+          <article class="test-row">
+            <span class="badge ${result.passed ? 'badge-pass' : 'badge-fail'}">${result.passed ? 'PASS' : 'FAIL'}</span>
+            <div class="test-name">${escapeTestHtml(testCase.name)}</div>
+            <div class="test-detail">${escapeTestHtml(detail)}</div>
+          </article>
+        `;
+      }).join('');
+    }
+
+    document.getElementById('runTests').addEventListener('click', runAllTests);
+    runAllTests();
+  </script>
+</body>
+</html>
+
