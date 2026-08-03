@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>C Code Visualizer 蝗槫ｸｰ繝・せ繝・/title>
+  <title>C Code Visualizer 回帰テスト</title>
   <style>
     :root{
       color-scheme:dark;
@@ -118,29 +118,29 @@
 <body>
   <main>
     <header>
-      <h1>C Code Visualizer 蝗槫ｸｰ繝・せ繝・/h1>
-      <p>荳ｻ隕√↑蜈･蜉帑ｾ九ｒ閾ｪ蜍募ｮ溯｡後＠縲∝・蜉帙・螟画焚繝ｻ隴ｦ蜻翫・螳溯｡後せ繝・ャ繝励ｒ遒ｺ隱阪☆繧矩幕逋ｺ逕ｨ繝壹・繧ｸ縺ｧ縺吶・/p>
-      <p>縺薙・繝壹・繧ｸ縺ｯ陬ｽ蜩∫判髱｢繧貞､画峩縺帙★縲∝・髢倶ｸｭ縺ｮ <code>script.js</code> 繧偵◎縺ｮ縺ｾ縺ｾ隱ｭ縺ｿ霎ｼ繧薙〒讀懈渊縺励∪縺吶・/p>
-      <p><a href="index.html">C Code Visualizer縺ｸ謌ｻ繧・/a></p>
-      <button type="button" id="runTests">縺吶∋縺ｦ蜀榊ｮ溯｡・/button>
+      <h1>C Code Visualizer 回帰テスト</h1>
+      <p>主要な入力例を自動実行し、出力・変数・警告・実行ステップを確認する開発用ページです。</p>
+      <p>このページは製品画面を変更せず、公開中の <code>script.js</code> をそのまま読み込んで検査します。</p>
+      <p><a href="index.html">C Code Visualizerへ戻る</a></p>
+      <button type="button" id="runTests">すべて再実行</button>
     </header>
 
     <section class="summary" aria-live="polite">
       <div class="summary-card">
         <span class="summary-value" id="totalCount">0</span>
-        <span class="summary-label">蜈ｨ繝・せ繝・/span>
+        <span class="summary-label">全テスト</span>
       </div>
       <div class="summary-card">
         <span class="summary-value pass-text" id="passCount">0</span>
-        <span class="summary-label">謌仙粥</span>
+        <span class="summary-label">成功</span>
       </div>
       <div class="summary-card">
         <span class="summary-value fail-text" id="failCount">0</span>
-        <span class="summary-label">螟ｱ謨・/span>
+        <span class="summary-label">失敗</span>
       </div>
     </section>
 
-    <section class="test-list" id="testResults" aria-label="繝・せ繝育ｵ先棡"></section>
+    <section class="test-list" id="testResults" aria-label="テスト結果"></section>
   </main>
 
   <div id="testSandbox" aria-hidden="true">
@@ -156,109 +156,109 @@
   <script>
     const testCases = [
       {
-        name:'蝓ｺ譛ｬ縺ｮ螳｣險繝ｻ蜉邂励・printf',
+        name:'基本の宣言・加算・printf',
         code:`#include <stdio.h>\n\nint main(void){\n    int a = 3;\n    int b = 5;\n    int c = a + b;\n    printf("%d\\n", c);\n    return 0;\n}`,
         expect:{ output:'8', variables:['a = 3', 'b = 5', 'c = 8'], warningMax:0 }
       },
       {
-        name:'蜀堺ｻ｣蜈･',
+        name:'再代入',
         code:`#include <stdio.h>\n\nint main(void){\n    int score = 60;\n    score = score + 15;\n    printf("%d\\n", score);\n    return 0;\n}`,
         expect:{ output:'75', variables:['score = 75'], warningMax:0 }
       },
       {
-        name:'蝗帛援貍皮ｮ励→豈碑ｼ・ｵ先棡',
+        name:'四則演算と比較結果',
         code:`#include <stdio.h>\n\nint main(void){\n    int a;\n    a = 5;\n    int total = (a + 3) * 2;\n    int result = total >= 16;\n    printf("%d %d\\n", total, result);\n    return 0;\n}`,
         expect:{ output:'16 1', variables:['a = 5', 'total = 16', 'result = 1'], warningMax:0 }
       },
       {
-        name:'if譚｡莉ｶ謌千ｫ九・printf螳溯｡・,
-        code:`#include <stdio.h>\n\nint main(void){\n    int score = 78;\n    if(score >= 60){\n        printf("蜷域ｼ縺ｧ縺兔\n");\n    }\n    return 0;\n}`,
-        expect:{ output:'蜷域ｼ縺ｧ縺・, variables:['score = 78'], warningMax:0, stepsInclude:['譚｡莉ｶ縺梧・遶九＠縺溘◆繧・] }
+        name:'if条件成立・printf実行',
+        code:`#include <stdio.h>\n\nint main(void){\n    int score = 78;\n    if(score >= 60){\n        printf("合格です\\n");\n    }\n    return 0;\n}`,
+        expect:{ output:'合格です', variables:['score = 78'], warningMax:0, stepsInclude:['条件が成立したため'] }
       },
       {
-        name:'if譚｡莉ｶ荳肴・遶九・譛ｬ譁・せ繧ｭ繝・・',
-        code:`#include <stdio.h>\n\nint main(void){\n    int score = 45;\n    if(score >= 60){\n        printf("蜷域ｼ縺ｧ縺兔\n");\n    }\n    printf("蛻､螳夂ｵゆｺ・\n");\n    return 0;\n}`,
-        expect:{ output:'蛻､螳夂ｵゆｺ・, outputExcludes:['蜷域ｼ縺ｧ縺・], variables:['score = 45'], warningMax:0, executedExcludes:['printf("蜷域ｼ縺ｧ縺・] }
+        name:'if条件不成立・本文スキップ',
+        code:`#include <stdio.h>\n\nint main(void){\n    int score = 45;\n    if(score >= 60){\n        printf("合格です\\n");\n    }\n    printf("判定終了\\n");\n    return 0;\n}`,
+        expect:{ output:'判定終了', outputExcludes:['合格です'], variables:['score = 45'], warningMax:0, executedExcludes:['printf("合格です'] }
       },
       {
-        name:'if蜀・・莉｣蜈･繝ｻ譚｡莉ｶ謌千ｫ・,
+        name:'if内の代入・条件成立',
         code:`#include <stdio.h>\n\nint main(void){\n    int result = 0;\n    int score = 78;\n    if(score >= 60){\n        result = 1;\n    }\n    printf("%d\\n", result);\n    return 0;\n}`,
         expect:{ output:'1', variables:['result = 1', 'score = 78'], warningMax:0, executedIncludes:['result = 1;'] }
       },
       {
-        name:'if蜀・・莉｣蜈･繝ｻ譚｡莉ｶ荳肴・遶・,
+        name:'if内の代入・条件不成立',
         code:`#include <stdio.h>\n\nint main(void){\n    int result = 0;\n    int score = 45;\n    if(score >= 60){\n        result = 1;\n    }\n    printf("%d\\n", result);\n    return 0;\n}`,
         expect:{ output:'0', variables:['result = 0', 'score = 45'], warningMax:0, executedExcludes:['result = 1;'] }
       },
       {
-        name:'譛ｪ蛻晄悄蛹門､画焚繧呈擅莉ｶ縺ｫ菴ｿ逕ｨ',
-        code:`#include <stdio.h>\n\nint main(void){\n    int score;\n    if(score >= 60){\n        printf("蜷域ｼ縺ｧ縺兔\n");\n    }\n    printf("蛻､螳夂ｵゆｺ・\n");\n    return 0;\n}`,
-        expect:{ output:'蛻､螳夂ｵゆｺ・, variables:['score = 譛ｪ蛻晄悄蛹・], warningMin:1, hintsInclude:['縺ｾ縺蛟､縺御ｻ｣蜈･縺輔ｌ縺ｦ縺・∪縺帙ｓ'], executedExcludes:['printf("蜷域ｼ縺ｧ縺・] }
+        name:'未初期化変数を条件に使用',
+        code:`#include <stdio.h>\n\nint main(void){\n    int score;\n    if(score >= 60){\n        printf("合格です\\n");\n    }\n    printf("判定終了\\n");\n    return 0;\n}`,
+        expect:{ output:'判定終了', variables:['score = 未初期化'], warningMin:1, hintsInclude:['まだ値が代入されていません'], executedExcludes:['printf("合格です'] }
       },
       {
-        name:'譛ｪ螳｣險螟画焚繧呈擅莉ｶ縺ｫ菴ｿ逕ｨ',
-        code:`#include <stdio.h>\n\nint main(void){\n    if(score >= 60){\n        printf("蜷域ｼ縺ｧ縺兔\n");\n    }\n    printf("蛻､螳夂ｵゆｺ・\n");\n    return 0;\n}`,
-        expect:{ output:'蛻､螳夂ｵゆｺ・, warningMin:1, hintsInclude:['螳｣險縺輔ｌ縺ｦ縺・∪縺帙ｓ'], executedExcludes:['printf("蜷域ｼ縺ｧ縺・] }
+        name:'未宣言変数を条件に使用',
+        code:`#include <stdio.h>\n\nint main(void){\n    if(score >= 60){\n        printf("合格です\\n");\n    }\n    printf("判定終了\\n");\n    return 0;\n}`,
+        expect:{ output:'判定終了', warningMin:1, hintsInclude:['宣言されていません'], executedExcludes:['printf("合格です'] }
       },
       {
-        name:'隍・焚縺ｮ迢ｬ遶九＠縺殃f',
-        code:`#include <stdio.h>\n\nint main(void){\n    int score = 78;\n    if(score >= 60){\n        printf("蜷域ｼ\\n");\n    }\n    if(score >= 80){\n        printf("蜆ｪ遘\\n");\n    }\n    return 0;\n}`,
-        expect:{ output:'蜷域ｼ', outputExcludes:['蜆ｪ遘'], variables:['score = 78'], warningMax:0 }
+        name:'複数の独立したif',
+        code:`#include <stdio.h>\n\nint main(void){\n    int score = 78;\n    if(score >= 60){\n        printf("合格\\n");\n    }\n    if(score >= 80){\n        printf("優秀\\n");\n    }\n    return 0;\n}`,
+        expect:{ output:'合格', outputExcludes:['優秀'], variables:['score = 78'], warningMax:0 }
       },
       {
-        name:'if蜀・・螟画焚螳｣險縺ｯ譛ｪ蟇ｾ蠢・,
-        code:`#include <stdio.h>\n\nint main(void){\n    int score = 78;\n    if(score >= 60){\n        int bonus = 5;\n    }\n    printf("邨ゆｺ・\n");\n    return 0;\n}`,
-        expect:{ output:'邨ゆｺ・, variables:['score = 78'], variablesExclude:['bonus ='], warningMin:1, hintsInclude:['if譁・・縺ｮ螟画焚螳｣險縺ｯ譛ｪ蟇ｾ蠢・] }
+        name:'if内の変数宣言は未対応',
+        code:`#include <stdio.h>\n\nint main(void){\n    int score = 78;\n    if(score >= 60){\n        int bonus = 5;\n    }\n    printf("終了\\n");\n    return 0;\n}`,
+        expect:{ output:'終了', variables:['score = 78'], variablesExclude:['bonus ='], warningMin:1, hintsInclude:['if文内の変数宣言は未対応'] }
       },
       {
-        name:'蜈･繧悟ｭ進f繧貞ｮ牙・縺ｫ蛛懈ｭ｢',
-        code:`#include <stdio.h>\n\nint main(void){\n    int a = 1;\n    int b = 1;\n    if(a > 0){\n        if(b > 0){\n            printf("WRONG\\n");\n        }\n    }\n    printf("邨ゆｺ・\n");\n    return 0;\n}`,
-        expect:{ output:'邨ゆｺ・, outputExcludes:['WRONG'], warningMin:1, hintsInclude:['蜈･繧悟ｭ・], executedExcludes:['printf("WRONG'] }
+        name:'入れ子ifを安全に停止',
+        code:`#include <stdio.h>\n\nint main(void){\n    int a = 1;\n    int b = 1;\n    if(a > 0){\n        if(b > 0){\n            printf("WRONG\\n");\n        }\n    }\n    printf("終了\\n");\n    return 0;\n}`,
+        expect:{ output:'終了', outputExcludes:['WRONG'], warningMin:1, hintsInclude:['入れ子'], executedExcludes:['printf("WRONG'] }
       },
       {
-        name:'else莉倥″if繧貞ｮ牙・縺ｫ蛛懈ｭ｢',
-        code:`#include <stdio.h>\n\nint main(void){\n    int score = 45;\n    if(score >= 60){\n        printf("蜷域ｼ\\n");\n    }else{\n        printf("荳榊粋譬ｼ\\n");\n    }\n    printf("蛻､螳夂ｵゆｺ・\n");\n    return 0;\n}`,
-        expect:{ output:'蛻､螳夂ｵゆｺ・, outputExcludes:['蜷域ｼ', '荳榊粋譬ｼ'], warningMin:1, hintsInclude:['else莉倥″if譁・・譛ｪ蟇ｾ蠢・] }
+        name:'else付きifを安全に停止',
+        code:`#include <stdio.h>\n\nint main(void){\n    int score = 45;\n    if(score >= 60){\n        printf("合格\\n");\n    }else{\n        printf("不合格\\n");\n    }\n    printf("判定終了\\n");\n    return 0;\n}`,
+        expect:{ output:'判定終了', outputExcludes:['合格', '不合格'], warningMin:1, hintsInclude:['else付きif文は未対応'] }
       },
       {
-        name:'豕｢縺九▲縺薙↑縺擁f繧貞ｮ牙・縺ｫ蛛懈ｭ｢',
-        code:`#include <stdio.h>\n\nint main(void){\n    if(1)\n        printf("WRONG\\n");\n    printf("邨ゆｺ・\n");\n    return 0;\n}`,
-        expect:{ output:'邨ゆｺ・, outputExcludes:['WRONG'], warningMin:1, hintsInclude:['豕｢縺九▲縺薙↑縺擁f譁・・譛ｪ蟇ｾ蠢・], executedExcludes:['printf("WRONG'] }
+        name:'波かっこなしifを安全に停止',
+        code:`#include <stdio.h>\n\nint main(void){\n    if(1)\n        printf("WRONG\\n");\n    printf("終了\\n");\n    return 0;\n}`,
+        expect:{ output:'終了', outputExcludes:['WRONG'], warningMin:1, hintsInclude:['波かっこなしif文は未対応'], executedExcludes:['printf("WRONG'] }
       },
       {
-        name:'谺｡陦梧ｳ｢縺九▲縺妬f繧貞ｮ牙・縺ｫ蛛懈ｭ｢',
+        name:'次行波かっこifを安全に停止',
         code:`#include <stdio.h>\n\nint main(void){\n    int result = 0;\n    if(1)\n    {\n        result = 5;\n        printf("WRONG\\n");\n    }\n    printf("%d\\n", result);\n    return 0;\n}`,
-        expect:{ output:'0', outputExcludes:['WRONG'], variables:['result = 0'], warningMin:1, hintsInclude:['谺｡縺ｮ陦後↓髢九″豕｢縺九▲縺・], executedExcludes:['result = 5;', 'printf("WRONG'] }
+        expect:{ output:'0', outputExcludes:['WRONG'], variables:['result = 0'], warningMin:1, hintsInclude:['次の行に開き波かっこ'], executedExcludes:['result = 5;', 'printf("WRONG'] }
       },
       {
-        name:'繧ｹ繧ｭ繝・・陦後〒繧り､・焚譁・ｒ隴ｦ蜻・,
+        name:'スキップ行でも複数文を警告',
         code:`#include <stdio.h>\n\nint main(void){\n    int result = 0;\n    if(0){\n        result = 1; result = 2;\n    }\n    printf("%d\\n", result);\n    return 0;\n}`,
-        expect:{ output:'0', variables:['result = 0'], warningMin:1, hintsInclude:['1陦後↓隍・焚縺ｮ譁・′縺ゅｊ縺ｾ縺・], executedExcludes:['result = 1; result = 2;'] }
+        expect:{ output:'0', variables:['result = 0'], warningMin:1, hintsInclude:['1行に複数の文があります'], executedExcludes:['result = 1; result = 2;'] }
       },
       {
-        name:'譁・ｭ怜・蜀・・else縺ｨ豕｢縺九▲縺薙ｒ辟｡隕・,
+        name:'文字列内のelseと波かっこを無視',
         code:`#include <stdio.h>\n\nint main(void){\n    if(1){\n        printf("else { }\\n");\n    }\n    return 0;\n}`,
         expect:{ output:'else { }', warningMax:0 }
       },
       {
-        name:'騾｣邯壹☆繧区ｳ｢縺九▲縺薙↑縺擁f繧貞ｮ牙・縺ｫ蛛懈ｭ｢',
-        code:`#include <stdio.h>\n\nint main(void){\n    if(0)\n    if(0)\n    printf("WRONG\\n");\n    printf("邨ゆｺ・\n");\n    return 0;\n}`,
-        expect:{ output:'邨ゆｺ・, outputExcludes:['WRONG'], warningMin:1, executedExcludes:['printf("WRONG'] }
+        name:'連続する波かっこなしifを安全に停止',
+        code:`#include <stdio.h>\n\nint main(void){\n    if(0)\n    if(0)\n    printf("WRONG\\n");\n    printf("終了\\n");\n    return 0;\n}`,
+        expect:{ output:'終了', outputExcludes:['WRONG'], warningMin:1, executedExcludes:['printf("WRONG'] }
       },
       {
-        name:'蜷御ｸ陦梧悽譁・・蜀・・if繧貞ｮ牙・縺ｫ蛛懈ｭ｢',
+        name:'同一行本文の内側ifを安全に停止',
         code:`#include <stdio.h>\n\nint main(void){\n    if(0)\n    if(1) printf("INNER\\n");\n    printf("AFTER\\n");\n    return 0;\n}`,
         expect:{ output:'AFTER', outputExcludes:['INNER'], warningMin:1, executedExcludes:['printf("INNER'] }
       },
       {
-        name:'蜀・・if・菊lse蜈ｨ菴薙ｒ螳牙・縺ｫ蛛懈ｭ｢',
-        code:`#include <stdio.h>\n\nint main(void){\n    if(0)\n    if(1) printf("INNER-TRUE\\n");\n    else printf("INNER-ELSE\\n");\n    printf("邨ゆｺ・\n");\n    return 0;\n}`,
-        expect:{ output:'邨ゆｺ・, outputExcludes:['INNER-TRUE', 'INNER-ELSE'], warningMin:1 }
+        name:'内側if＋else全体を安全に停止',
+        code:`#include <stdio.h>\n\nint main(void){\n    if(0)\n    if(1) printf("INNER-TRUE\\n");\n    else printf("INNER-ELSE\\n");\n    printf("終了\\n");\n    return 0;\n}`,
+        expect:{ output:'終了', outputExcludes:['INNER-TRUE', 'INNER-ELSE'], warningMin:1 }
       },
       {
-        name:'scanf譛ｪ蟇ｾ蠢懊し繝ｳ繝励Ν',
+        name:'scanf未対応サンプル',
         code:`#include <stdio.h>\n\nint main(void){\n    int score;\n    scanf("%d", &score);\n    return 0;\n}`,
-        expect:{ output:'蜃ｺ蜉帙・縺ｾ縺縺ゅｊ縺ｾ縺帙ｓ縲・, variables:['score = 譛ｪ蛻晄悄蛹・], warningMin:1, hintsInclude:['Ver.0.2_0730縺ｧ縺ｯ譛ｪ蟇ｾ蠢・] }
+        expect:{ output:'出力はまだありません。', variables:['score = 未初期化'], warningMin:1, hintsInclude:['Ver.0.2_0730では未対応'] }
       }
     ];
 
@@ -285,43 +285,43 @@
       const failures = [];
 
       if(expected.output !== undefined && actual.output !== expected.output){
-        failures.push(`蜃ｺ蜉・ 譛溷ｾ・・{expected.output}縲・ 螳滄圀縲・{actual.output}縲港);
+        failures.push(`出力: 期待「${expected.output}」/ 実際「${actual.output}」`);
       }
 
       for(const text of expected.outputExcludes || []){
-        if(actual.output.includes(text)) failures.push(`蜃ｺ蜉帙↓縲・{text}縲阪ｒ蜷ｫ繧√↑縺Я);
+        if(actual.output.includes(text)) failures.push(`出力に「${text}」を含めない`);
       }
 
       for(const text of expected.variables || []){
-        if(!actual.variables.includes(text)) failures.push(`螟画焚縺ｫ縲・{text}縲阪′縺ｪ縺Я);
+        if(!actual.variables.includes(text)) failures.push(`変数に「${text}」がない`);
       }
 
       for(const text of expected.variablesExclude || []){
-        if(actual.variables.some(variable => variable.includes(text))) failures.push(`螟画焚縺ｫ縲・{text}縲阪ｒ蜷ｫ繧√↑縺Я);
+        if(actual.variables.some(variable => variable.includes(text))) failures.push(`変数に「${text}」を含めない`);
       }
 
       if(expected.warningMin !== undefined && actual.warningCount < expected.warningMin){
-        failures.push(`隴ｦ蜻頑焚: ${expected.warningMin}莉ｶ莉･荳翫ｒ譛溷ｾ・/ 螳滄圀${actual.warningCount}莉ｶ`);
+        failures.push(`警告数: ${expected.warningMin}件以上を期待 / 実際${actual.warningCount}件`);
       }
 
       if(expected.warningMax !== undefined && actual.warningCount > expected.warningMax){
-        failures.push(`隴ｦ蜻頑焚: ${expected.warningMax}莉ｶ莉･荳九ｒ譛溷ｾ・/ 螳滄圀${actual.warningCount}莉ｶ`);
+        failures.push(`警告数: ${expected.warningMax}件以下を期待 / 実際${actual.warningCount}件`);
       }
 
       for(const text of expected.hintsInclude || []){
-        if(!actual.hints.includes(text)) failures.push(`繝偵Φ繝医↓縲・{text}縲阪′縺ｪ縺Я);
+        if(!actual.hints.includes(text)) failures.push(`ヒントに「${text}」がない`);
       }
 
       for(const text of expected.stepsInclude || []){
-        if(!actual.steps.includes(text)) failures.push(`STEP縺ｫ縲・{text}縲阪′縺ｪ縺Я);
+        if(!actual.steps.includes(text)) failures.push(`STEPに「${text}」がない`);
       }
 
       for(const text of expected.executedIncludes || []){
-        if(!actual.executedLines.some(line => line.includes(text))) failures.push(`螳溯｡瑚｡後↓縲・{text}縲阪′縺ｪ縺Я);
+        if(!actual.executedLines.some(line => line.includes(text))) failures.push(`実行行に「${text}」がない`);
       }
 
       for(const text of expected.executedExcludes || []){
-        if(actual.executedLines.some(line => line.includes(text))) failures.push(`縲・{text}縲阪ｒ螳溯｡後＠縺ｦ縺ｯ縺・￠縺ｪ縺Я);
+        if(actual.executedLines.some(line => line.includes(text))) failures.push(`「${text}」を実行してはいけない`);
       }
 
       return { passed:failures.length === 0, failures, actual };
@@ -345,12 +345,12 @@
       document.getElementById('passCount').textContent = passed;
       document.getElementById('failCount').textContent = failed;
       document.title = failed === 0
-        ? `笨・${passed}/${results.length} C Code Visualizer 蝗槫ｸｰ繝・せ繝・
-        : `笨・${failed}莉ｶ螟ｱ謨・C Code Visualizer 蝗槫ｸｰ繝・せ繝・;
+        ? `✓ ${passed}/${results.length} C Code Visualizer 回帰テスト`
+        : `✗ ${failed}件失敗 C Code Visualizer 回帰テスト`;
 
       document.getElementById('testResults').innerHTML = results.map(({ testCase, result }) => {
         const detail = result.passed
-          ? `蜃ｺ蜉・ ${result.actual.output}\n隴ｦ蜻・ ${result.actual.warningCount}莉ｶ`
+          ? `出力: ${result.actual.output}\n警告: ${result.actual.warningCount}件`
           : result.failures.join('\n');
         return `
           <article class="test-row">
