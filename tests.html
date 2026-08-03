@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>C Code Visualizer 回帰テスト</title>
+  <style>
+    :root{
+      color-scheme:dark;
+      --bg:#0f0f10;
+      --panel:#18181a;
+      --line:#303035;
+      --text:#eeeeef;
+      --muted:#a9a9b0;
+      --accent:#53c8ff;
+      --pass:#67d391;
+      --fail:#ff6b78;
+    }
+
+    *{ box-sizing:border-box; }
+
+    body{
+      margin:0;
+      background:var(--bg);
+      color:var(--text);
+      font-family:system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    main{
+      width:min(1100px, calc(100% - 32px));
+      margin:40px auto 64px;
+    }
+
+    header,
+    .summary,
+    .test-list{
+      border:1px solid var(--line);
+      border-radius:14px;
+      background:var(--panel);
+    }
+
+    header{ padding:24px; }
+    h1{ margin:0 0 8px; font-size:clamp(24px, 4vw, 36px); }
+    p{ margin:6px 0; color:var(--muted); line-height:1.7; }
+    a{ color:var(--accent); }
+
+    button{
+      margin-top:16px;
+      border:0;
+      border-radius:8px;
+      padding:10px 16px;
+      background:var(--accent);
+      color:#07131a;
+      font-weight:700;
+      cursor:pointer;
+    }
+
+    .summary{
+      display:grid;
+      grid-template-columns:repeat(3, minmax(0, 1fr));
+      gap:12px;
+      margin:16px 0;
+      padding:16px;
+    }
+
+    .summary-card{
+      padding:14px;
+      border:1px solid var(--line);
+      border-radius:10px;
+      text-align:center;
+    }
+
+    .summary-value{ display:block; font-size:28px; font-weight:800; }
+    .summary-label{ color:var(--muted); font-size:13px; }
+    .pass-text{ color:var(--pass); }
+    .fail-text{ color:var(--fail); }
+
+    .test-list{ overflow:hidden; }
+    .test-row{
+      display:grid;
+      grid-template-columns:88px minmax(180px, 0.8fr) minmax(260px, 1.7fr);
+      gap:14px;
+      align-items:start;
+      padding:14px 18px;
+      border-bottom:1px solid var(--line);
+    }
+    .test-row:last-child{ border-bottom:0; }
+
+    .badge{
+      display:inline-block;
+      border-radius:999px;
+      padding:4px 10px;
+      text-align:center;
+      font-size:12px;
+      font-weight:800;
+    }
+    .badge-pass{ background:rgba(103, 211, 145, .14); color:var(--pass); }
+    .badge-fail{ background:rgba(255, 107, 120, .14); color:var(--fail); }
+    .test-name{ font-weight:700; }
+    .test-detail{ color:var(--muted); font-family:ui-monospace, SFMono-Regular, Consolas, monospace; font-size:13px; line-height:1.6; white-space:pre-wrap; }
+
+    #testSandbox{
+      position:fixed;
+      left:-10000px;
+      top:0;
+      width:1px;
+      height:1px;
+      overflow:hidden;
+    }
+
+    @media (max-width:720px){
+      .summary{ grid-template-columns:1fr; }
+      .test-row{ grid-template-columns:1fr; gap:8px; }
+      .badge{ width:max-content; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>C Code Visualizer 回帰テスト</h1>
+      <p>主要な入力例を自動実行し、出力・変数・警告・実行ステップを確認する開発用ページです。</p>
+      <p>このページは製品画面を変更せず、公開中の <code>script.js</code> をそのまま読み込んで検査します。</p>
+      <p><a href="index.html">C Code Visualizerへ戻る</a></p>
+      <button type="button" id="runTests">すべて再実行</button>
+    </header>
+
+    <section class="summary" aria-live="polite">
+      <div class="summary-card">
+        <span class="summary-value" id="totalCount">0</span>
+        <span class="summary-label">全テスト</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-value pass-text" id="passCount">0</span>
+        <span class="summary-label">成功</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-value fail-text" id="failCount">0</span>
+        <span class="summary-label">失敗</span>
+      </div>
+    </section>
+
+    <section class="test-list" id="testResults" aria-label="テスト結果"></section>
+  </main>
+
+  <div id="testSandbox" aria-hidden="true">
+    <textarea id="codeInput"></textarea>
+    <div id="outputResult"></div>
+    <div id="variableState"></div>
+    <div id="stepResult"></div>
+    <div id="codePreview"></div>
+    <div id="hintResult"></div>
+  </div>
+
+  <script src="script.js"></script>
+  <script>
+    const testCases = [
+      {
+        name:'基本の宣言・加算・printf',
+        code:`#include <stdio.h>\n\nint main(void){\n    int a = 3;\n    int b = 5;\n    int c = a + b;\n    printf("%d\\n", c);\n    return 0;\n}`,
+        expect:{ output:'8', variables:['a = 3', 'b = 5', 'c = 8'], warningMax:0 }
+      },
+      {
+        name:'再代入',
+        code:`#include <stdio.h>\n\nint main(void){\n    int score = 60;\n    score = score + 15;\n    printf("%d\\n", score);\n    return 0;\n}`,
+        expect:{ output:'75', variables:['score = 75'], warningMax:0 }
+      },
+      {
+        name:'四則演算と比較結果',
+        code:`#include <stdio.h>\n\nint main(void){\n    int a;\n    a = 5;\n    int total = (a + 3) * 2;\n    int result = total >= 16;\n    printf("%d %d\\n", total, result);\n    return 0;\n}`,
+        expect:{ output:'16 1', variables:['a = 5', 'total = 16', 'result = 1'], warningMax:0 }
+      },
+      {
+        name:'if条件成立・printf実行',
+        code:`#include <stdio.h>\n\nint main(void){\n    int score = 78;\n    if(score >= 60){\n        printf("合格です\\n");\n    }\n    return 0;\n}`,
+        expect:{ output:'合格です', variables:['score = 78'], warningMax:0, stepsInclude:['条件が成立したため'] }
+      },
+      {
+        name:'if条件不成立・本文スキップ',
+        code:`#include <stdio.h>\n\nint main(void){\n    int score = 45;\n    if(score >= 60){\n        printf("合格です\\n");\n    }\n    printf("判定終了\\n");\n    return 0;\n}`,
+        expect:{ output:'判定終了', outputExcludes:['合格です'], variables:['score = 45'], warningMax:0, executedExcludes:['printf("合格です'] }
+      },
+      {
+        name:'if内の代入・条件成立',
+        code:`#include <stdio.h>\n\nint main(void){\n    int result = 0;\n    int score = 78;\n    if(score >= 60){\n        result = 1;\n    }\n    printf("%d\\n", result);\n    return 0;\n}`,
+        expect:{ output:'1', variables:['result = 1', 'score = 78'], warningMax:0, executedIncludes:['result = 1;'] }
+      },
+      {
+        name:'if内の代入・条件不成立',
+        code:`#include <stdio.h>\n\nint main(void){\n    int result = 0;\n    int score = 45;\n    if(score >= 60){\n        result = 1;\n    }\n    printf("%d\\n", result);\n    return 0;\n}`,
+        expect:{ output:'0', variables:['result = 0', 'score = 45'], warningMax:0, executedExcludes:['result = 1;'] }
+      },
+      {
+        name:'未初期化変数を条件に使用',
+        code:`#include <stdio.h>\n\nint main(void){\n    int score;\n    if(score >= 60){\n        printf("合格です\\n");\n    }\n    printf("判定終了\\n");\n    return 0;\n}`,
+        expect:{ output:'判定終了', variables:['score = 未初期化'], warningMin:1, hintsInclude:['まだ値が代入されていません'], executedExcludes:['printf("合格です'] }
+      },
+      {
+        name:'未宣言変数を条件に使用',
+        code:`#include <stdio.h>\n\nint main(void){\n    if(score >= 60){\n        printf("合格です\\n");\n    }\n    printf("判定終了\\n");\n    return 0;\n}`,
+        expect:{ output:'判定終了', warningMin:1, hintsInclude:['宣言されていません'], executedExcludes:['printf("合格です'] }
+      },
+      {
+        name:'複数の独立したif',
+        code:`#include <stdio.h>\n\nint main(void){\n    int score = 78;\n    if(score >= 60){\n        printf("合格\\n");\n    }\n    if(score >= 80){\n        printf("優秀\\n");\n    }\n    return 0;\n}`,
+        expect:{ output:'合格', outputExcludes:['優秀'], variables:['score = 78'], warningMax:0 }
+      },
+      {
+        name:'if内の変数宣言は未対応',
+        code:`#include <stdio.h>\n\nint main(void){\n    int score = 78;\n    if(score >= 60){\n        int bonus = 5;\n    }\n    printf("終了\\n");\n    return 0;\n}`,
+        expect:{ output:'終了', variables:['score = 78'], variablesExclude:['bonus ='], warningMin:1, hintsInclude:['if文内の変数宣言は未対応'] }
+      },
+      {
+        name:'入れ子ifを安全に停止',
+        code:`#include <stdio.h>\n\nint main(void){\n    int a = 1;\n    int b = 1;\n    if(a > 0){\n        if(b > 0){\n            printf("WRONG\\n");\n        }\n    }\n    printf("終了\\n");\n    return 0;\n}`,
+        expect:{ output:'終了', outputExcludes:['WRONG'], warningMin:1, hintsInclude:['入れ子'], executedExcludes:['printf("WRONG'] }
+      },
+      {
+        name:'else付きifを安全に停止',
+        code:`#include <stdio.h>\n\nint main(void){\n    int score = 45;\n    if(score >= 60){\n        printf("合格\\n");\n    }else{\n        printf("不合格\\n");\n    }\n    printf("判定終了\\n");\n    return 0;\n}`,
+        expect:{ output:'判定終了', outputExcludes:['合格', '不合格'], warningMin:1, hintsInclude:['else付きif文は未対応'] }
+      },
+      {
+        name:'波かっこなしifを安全に停止',
+        code:`#include <stdio.h>\n\nint main(void){\n    if(1)\n        printf("WRONG\\n");\n    printf("終了\\n");\n    return 0;\n}`,
+        expect:{ output:'終了', outputExcludes:['WRONG'], warningMin:1, hintsInclude:['波かっこなしif文は未対応'], executedExcludes:['printf("WRONG'] }
+      },
+      {
+        name:'次行波かっこifを安全に停止',
+        code:`#include <stdio.h>\n\nint main(void){\n    int result = 0;\n    if(1)\n    {\n        result = 5;\n        printf("WRONG\\n");\n    }\n    printf("%d\\n", result);\n    return 0;\n}`,
+        expect:{ output:'0', outputExcludes:['WRONG'], variables:['result = 0'], warningMin:1, hintsInclude:['次の行に開き波かっこ'], executedExcludes:['result = 5;', 'printf("WRONG'] }
+      },
+      {
+        name:'スキップ行でも複数文を警告',
+        code:`#include <stdio.h>\n\nint main(void){\n    int result = 0;\n    if(0){\n        result = 1; result = 2;\n    }\n    printf("%d\\n", result);\n    return 0;\n}`,
+        expect:{ output:'0', variables:['result = 0'], warningMin:1, hintsInclude:['1行に複数の文があります'], executedExcludes:['result = 1; result = 2;'] }
+      },
+      {
+        name:'文字列内のelseと波かっこを無視',
+        code:`#include <stdio.h>\n\nint main(void){\n    if(1){\n        printf("else { }\\n");\n    }\n    return 0;\n}`,
+        expect:{ output:'else { }', warningMax:0 }
+      },
+      {
+        name:'連続する波かっこなしifを安全に停止',
+        code:`#include <stdio.h>\n\nint main(void){\n    if(0)\n    if(0)\n    printf("WRONG\\n");\n    printf("終了\\n");\n    return 0;\n}`,
+        expect:{ output:'終了', outputExcludes:['WRONG'], warningMin:1, executedExcludes:['printf("WRONG'] }
+      },
+      {
+        name:'同一行本文の内側ifを安全に停止',
+        code:`#include <stdio.h>\n\nint main(void){\n    if(0)\n    if(1) printf("INNER\\n");\n    printf("AFTER\\n");\n    return 0;\n}`,
+        expect:{ output:'AFTER', outputExcludes:['INNER'], warningMin:1, executedExcludes:['printf("INNER'] }
+      },
+      {
+        name:'内側if＋else全体を安全に停止',
+        code:`#include <stdio.h>\n\nint main(void){\n    if(0)\n    if(1) printf("INNER-TRUE\\n");\n    else printf("INNER-ELSE\\n");\n    printf("終了\\n");\n    return 0;\n}`,
+        expect:{ output:'終了', outputExcludes:['INNER-TRUE', 'INNER-ELSE'], warningMin:1 }
+      },
+      {
+        name:'単独行elseの本文も安全に停止',
+        code:`#include <stdio.h>\n\nint main(void){\n    if(0)\n    if(1)\n    printf("INNER-TRUE\\n");\n    else\n    printf("INNER-ELSE\\n");\n    printf("終了\\n");\n    return 0;\n}`,
+        expect:{ output:'終了', outputExcludes:['INNER-TRUE', 'INNER-ELSE'], warningMin:1 }
+      },
+      {
+        name:'scanf未対応サンプル',
+        code:`#include <stdio.h>\n\nint main(void){\n    int score;\n    scanf("%d", &score);\n    return 0;\n}`,
+        expect:{ output:'出力はまだありません。', variables:['score = 未初期化'], warningMin:1, hintsInclude:['Ver.0.2_0730では未対応'] }
+      }
+    ];
+
+    function normalizeText(value){
+      return String(value || '').replace(/\r\n/g, '\n').trim();
+    }
+
+    function snapshotResult(){
+      return {
+        output:normalizeText(document.getElementById('outputResult').textContent),
+        variables:[...document.querySelectorAll('#variableState .variable-chip')].map(element => normalizeText(element.textContent)),
+        hints:normalizeText(document.getElementById('hintResult').textContent),
+        warningCount:document.querySelectorAll('#hintResult .warning-line').length,
+        steps:normalizeText(document.getElementById('stepResult').textContent),
+        executedLines:[...document.querySelectorAll('#codePreview .code-card.executed-line .code-line-text')].map(element => normalizeText(element.textContent))
+      };
+    }
+
+    function checkCase(testCase){
+      document.getElementById('codeInput').value = testCase.code;
+      visualizeCode();
+      const actual = snapshotResult();
+      const expected = testCase.expect;
+      const failures = [];
+
+      if(expected.output !== undefined && actual.output !== expected.output){
+        failures.push(`出力: 期待「${expected.output}」/ 実際「${actual.output}」`);
+      }
+
+      for(const text of expected.outputExcludes || []){
+        if(actual.output.includes(text)) failures.push(`出力に「${text}」を含めない`);
+      }
+
+      for(const text of expected.variables || []){
+        if(!actual.variables.includes(text)) failures.push(`変数に「${text}」がない`);
+      }
+
+      for(const text of expected.variablesExclude || []){
+        if(actual.variables.some(variable => variable.includes(text))) failures.push(`変数に「${text}」を含めない`);
+      }
+
+      if(expected.warningMin !== undefined && actual.warningCount < expected.warningMin){
+        failures.push(`警告数: ${expected.warningMin}件以上を期待 / 実際${actual.warningCount}件`);
+      }
+
+      if(expected.warningMax !== undefined && actual.warningCount > expected.warningMax){
+        failures.push(`警告数: ${expected.warningMax}件以下を期待 / 実際${actual.warningCount}件`);
+      }
+
+      for(const text of expected.hintsInclude || []){
+        if(!actual.hints.includes(text)) failures.push(`ヒントに「${text}」がない`);
+      }
+
+      for(const text of expected.stepsInclude || []){
+        if(!actual.steps.includes(text)) failures.push(`STEPに「${text}」がない`);
+      }
+
+      for(const text of expected.executedIncludes || []){
+        if(!actual.executedLines.some(line => line.includes(text))) failures.push(`実行行に「${text}」がない`);
+      }
+
+      for(const text of expected.executedExcludes || []){
+        if(actual.executedLines.some(line => line.includes(text))) failures.push(`「${text}」を実行してはいけない`);
+      }
+
+      return { passed:failures.length === 0, failures, actual };
+    }
+
+    function escapeTestHtml(value){
+      return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function runAllTests(){
+      const results = testCases.map(testCase => ({ testCase, result:checkCase(testCase) }));
+      const passed = results.filter(item => item.result.passed).length;
+      const failed = results.length - passed;
+
+      document.getElementById('totalCount').textContent = results.length;
+      document.getElementById('passCount').textContent = passed;
+      document.getElementById('failCount').textContent = failed;
+      document.title = failed === 0
+        ? `✓ ${passed}/${results.length} C Code Visualizer 回帰テスト`
+        : `✗ ${failed}件失敗 C Code Visualizer 回帰テスト`;
+
+      document.getElementById('testResults').innerHTML = results.map(({ testCase, result }) => {
+        const detail = result.passed
+          ? `出力: ${result.actual.output}\n警告: ${result.actual.warningCount}件`
+          : result.failures.join('\n');
+        return `
+          <article class="test-row">
+            <span class="badge ${result.passed ? 'badge-pass' : 'badge-fail'}">${result.passed ? 'PASS' : 'FAIL'}</span>
+            <div class="test-name">${escapeTestHtml(testCase.name)}</div>
+            <div class="test-detail">${escapeTestHtml(detail)}</div>
+          </article>
+        `;
+      }).join('');
+    }
+
+    document.getElementById('runTests').addEventListener('click', runAllTests);
+    runAllTests();
+  </script>
+</body>
+</html>
+
