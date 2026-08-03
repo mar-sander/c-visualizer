@@ -118,6 +118,23 @@ function bracesOutsideString(text){
   return [...codeOutsideStringAndLineComment(text)].filter(ch => ch === '{' || ch === '}');
 }
 
+// if条件の丸かっこの対応を数え、閉じ丸かっこの後ろにある本文を返します。
+function inlineIfBodyCode(structuralCode){
+  const ifMatch = structuralCode.match(/^\s*(?:else\s+)?if\s*\(/);
+  if(!ifMatch) return null;
+
+  const openIndex = structuralCode.indexOf('(', ifMatch.index);
+  let depth = 0;
+  for(let index = openIndex; index < structuralCode.length; index++){
+    if(structuralCode[index] === '(') depth++;
+    if(structuralCode[index] === ')'){
+      depth--;
+      if(depth === 0) return structuralCode.slice(index + 1).trim();
+    }
+  }
+  return null;
+}
+
 function makeVisibleDisplayText(text){
   return text.replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim();
 }
@@ -758,21 +775,25 @@ function visualizeCode(){
     if(statementIndex >= lines.length) return lines.length - 1;
 
     const structuralCode = codeOutsideStringAndLineComment(lines[statementIndex]).trim();
-    if(structuralCode === '{' || /^if\s*\(.*\)\s*\{$/.test(structuralCode)){
+    const inlineBody = inlineIfBodyCode(structuralCode);
+    if(structuralCode === '{' || inlineBody === '{'){
       return findIfBlock(statementIndex).endIndex;
     }
 
     if(/^if\s*\(/.test(structuralCode)){
-      let controlledIndex = statementIndex + 1;
-      while(controlledIndex < lines.length &&
-            (lines[controlledIndex].trim() === '' || isCommentLine(lines[controlledIndex].trim()))){
-        controlledIndex++;
+      let trueEndIndex = statementIndex;
+      if(inlineBody === ''){
+        let controlledIndex = statementIndex + 1;
+        while(controlledIndex < lines.length &&
+              (lines[controlledIndex].trim() === '' || isCommentLine(lines[controlledIndex].trim()))){
+          controlledIndex++;
+        }
+        const controlledCode = controlledIndex < lines.length
+          ? codeOutsideStringAndLineComment(lines[controlledIndex]).trim()
+          : '';
+        if(controlledCode === '{') return findIfBlock(controlledIndex).endIndex;
+        trueEndIndex = findControlledStatementEnd(statementIndex + 1);
       }
-      const controlledCode = controlledIndex < lines.length
-        ? codeOutsideStringAndLineComment(lines[controlledIndex]).trim()
-        : '';
-      if(controlledCode === '{') return findIfBlock(controlledIndex).endIndex;
-      const trueEndIndex = findControlledStatementEnd(statementIndex + 1);
       let elseIndex = trueEndIndex + 1;
       while(elseIndex < lines.length &&
             (lines[elseIndex].trim() === '' || isCommentLine(lines[elseIndex].trim()))){
@@ -795,19 +816,22 @@ function visualizeCode(){
   // else if の行をif文の開始行として扱い、後続のelseも含めて探します。
   function findControlledIfEnd(ifIndex){
     const ifCode = codeOutsideStringAndLineComment(lines[ifIndex]).trim().replace(/^else\s+/, '');
-    if(/^if\s*\(.*\)\s*\{$/.test(ifCode)) return findIfBlock(ifIndex).endIndex;
+    const inlineBody = inlineIfBodyCode(ifCode);
+    if(inlineBody === '{') return findIfBlock(ifIndex).endIndex;
 
-    let controlledIndex = ifIndex + 1;
-    while(controlledIndex < lines.length &&
-          (lines[controlledIndex].trim() === '' || isCommentLine(lines[controlledIndex].trim()))){
-      controlledIndex++;
+    let trueEndIndex = ifIndex;
+    if(inlineBody === ''){
+      let controlledIndex = ifIndex + 1;
+      while(controlledIndex < lines.length &&
+            (lines[controlledIndex].trim() === '' || isCommentLine(lines[controlledIndex].trim()))){
+        controlledIndex++;
+      }
+      if(controlledIndex < lines.length &&
+         codeOutsideStringAndLineComment(lines[controlledIndex]).trim() === '{'){
+        return findIfBlock(controlledIndex).endIndex;
+      }
+      trueEndIndex = findControlledStatementEnd(ifIndex + 1);
     }
-    if(controlledIndex < lines.length &&
-       codeOutsideStringAndLineComment(lines[controlledIndex]).trim() === '{'){
-      return findIfBlock(controlledIndex).endIndex;
-    }
-
-    const trueEndIndex = findControlledStatementEnd(ifIndex + 1);
     let elseIndex = trueEndIndex + 1;
     while(elseIndex < lines.length &&
           (lines[elseIndex].trim() === '' || isCommentLine(lines[elseIndex].trim()))){
