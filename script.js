@@ -772,10 +772,54 @@ function visualizeCode(){
         ? codeOutsideStringAndLineComment(lines[controlledIndex]).trim()
         : '';
       if(controlledCode === '{') return findIfBlock(controlledIndex).endIndex;
-      return findControlledStatementEnd(statementIndex + 1);
+      const trueEndIndex = findControlledStatementEnd(statementIndex + 1);
+      let elseIndex = trueEndIndex + 1;
+      while(elseIndex < lines.length &&
+            (lines[elseIndex].trim() === '' || isCommentLine(lines[elseIndex].trim()))){
+        elseIndex++;
+      }
+      if(elseIndex >= lines.length) return trueEndIndex;
+
+      const elseCode = codeOutsideStringAndLineComment(lines[elseIndex]).trim();
+      if(!/^else\b/.test(elseCode)) return trueEndIndex;
+      if(/^else\s+if\s*\(/.test(elseCode)){
+        return findControlledIfEnd(elseIndex);
+      }
+      if(/^else\s*\{/.test(elseCode)) return findIfBlock(elseIndex).endIndex;
+      return findControlledStatementEnd(elseIndex + 1);
     }
 
     return statementIndex;
+  }
+
+  // else if の行をif文の開始行として扱い、後続のelseも含めて探します。
+  function findControlledIfEnd(ifIndex){
+    const ifCode = codeOutsideStringAndLineComment(lines[ifIndex]).trim().replace(/^else\s+/, '');
+    if(/^if\s*\(.*\)\s*\{$/.test(ifCode)) return findIfBlock(ifIndex).endIndex;
+
+    let controlledIndex = ifIndex + 1;
+    while(controlledIndex < lines.length &&
+          (lines[controlledIndex].trim() === '' || isCommentLine(lines[controlledIndex].trim()))){
+      controlledIndex++;
+    }
+    if(controlledIndex < lines.length &&
+       codeOutsideStringAndLineComment(lines[controlledIndex]).trim() === '{'){
+      return findIfBlock(controlledIndex).endIndex;
+    }
+
+    const trueEndIndex = findControlledStatementEnd(ifIndex + 1);
+    let elseIndex = trueEndIndex + 1;
+    while(elseIndex < lines.length &&
+          (lines[elseIndex].trim() === '' || isCommentLine(lines[elseIndex].trim()))){
+      elseIndex++;
+    }
+    if(elseIndex >= lines.length) return trueEndIndex;
+
+    const elseCode = codeOutsideStringAndLineComment(lines[elseIndex]).trim();
+    if(!/^else\b/.test(elseCode)) return trueEndIndex;
+    if(/^else\s+if\s*\(/.test(elseCode)) return findControlledIfEnd(elseIndex);
+    if(/^else\s*\{/.test(elseCode)) return findIfBlock(elseIndex).endIndex;
+    return findControlledStatementEnd(elseIndex + 1);
   }
 
   for(let index = 0; index < lines.length; index++){
