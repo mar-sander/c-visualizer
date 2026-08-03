@@ -256,6 +256,11 @@
         expect:{ output:'終了', outputExcludes:['INNER-TRUE', 'INNER-ELSE'], warningMin:1 }
       },
       {
+        name:'単独行elseの本文も安全に停止',
+        code:`#include <stdio.h>\n\nint main(void){\n    if(0)\n    if(1)\n    printf("INNER-TRUE\\n");\n    else\n    printf("INNER-ELSE\\n");\n    printf("終了\\n");\n    return 0;\n}`,
+        expect:{ output:'終了', outputExcludes:['INNER-TRUE', 'INNER-ELSE'], warningMin:1 }
+      },
+      {
         name:'scanf未対応サンプル',
         code:`#include <stdio.h>\n\nint main(void){\n    int score;\n    scanf("%d", &score);\n    return 0;\n}`,
         expect:{ output:'出力はまだありません。', variables:['score = 未初期化'], warningMin:1, hintsInclude:['Ver.0.2_0730では未対応'] }
