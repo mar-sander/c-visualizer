@@ -736,10 +736,46 @@ function visualizeCode(){
           index = next - 1;
           continue;
         }
+        if(/^\s*else\b/.test(structuralCode) && next < lines.length &&
+           codeOutsideStringAndLineComment(lines[next]).trim() === '{'){
+          index = next - 1;
+          continue;
+        }
         return { endIndex:index, nested, unsupportedBlock, hasElse, closed:lines[index].trim() === '}' };
       }
     }
     return { endIndex:lines.length - 1, nested, unsupportedBlock, hasElse, closed:false };
+  }
+
+  // 波かっこなしif文が制御する「1文」の終わりを探します。
+  // 制御対象も波かっこなしif文なら、その内側の制御対象までたどります。
+  function findControlledStatementEnd(startIndex){
+    let statementIndex = startIndex;
+    while(statementIndex < lines.length &&
+          (lines[statementIndex].trim() === '' || isCommentLine(lines[statementIndex].trim()))){
+      statementIndex++;
+    }
+    if(statementIndex >= lines.length) return lines.length - 1;
+
+    const structuralCode = codeOutsideStringAndLineComment(lines[statementIndex]).trim();
+    if(structuralCode === '{' || /^if\s*\(.*\)\s*\{$/.test(structuralCode)){
+      return findIfBlock(statementIndex).endIndex;
+    }
+
+    if(/^if\s*\(/.test(structuralCode)){
+      let controlledIndex = statementIndex + 1;
+      while(controlledIndex < lines.length &&
+            (lines[controlledIndex].trim() === '' || isCommentLine(lines[controlledIndex].trim()))){
+        controlledIndex++;
+      }
+      const controlledCode = controlledIndex < lines.length
+        ? codeOutsideStringAndLineComment(lines[controlledIndex]).trim()
+        : '';
+      if(controlledCode === '{') return findIfBlock(controlledIndex).endIndex;
+      return findControlledStatementEnd(statementIndex + 1);
+    }
+
+    return statementIndex;
   }
 
   for(let index = 0; index < lines.length; index++){
@@ -763,8 +799,9 @@ function visualizeCode(){
         warnUnsupportedIf(index, detachedBlock.endIndex, '次の行に開き波かっこを書くif文は未対応', '開き波かっこを次の行に書くif文は現在未対応です。このif文の処理全体は実行しません。');
         index = detachedBlock.endIndex;
       }else{
-        warnUnsupportedIf(index, skippedIndex, '波かっこなしif文は未対応', '波かっこを省略したif文は現在未対応です。直後の文も実行しません。');
-        index = Math.min(skippedIndex, lines.length - 1);
+        const controlledEndIndex = findControlledStatementEnd(index + 1);
+        warnUnsupportedIf(index, controlledEndIndex, '波かっこなしif文は未対応', '波かっこを省略したif文は現在未対応です。直後の文も実行しません。');
+        index = Math.min(controlledEndIndex, lines.length - 1);
       }
       continue;
     }
