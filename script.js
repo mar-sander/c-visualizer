@@ -118,6 +118,23 @@ function bracesOutsideString(text){
   return [...codeOutsideStringAndLineComment(text)].filter(ch => ch === '{' || ch === '}');
 }
 
+// if条件の丸かっこの対応を数え、閉じ丸かっこの後ろにある本文を返します。
+function inlineIfBodyCode(structuralCode){
+  const ifMatch = structuralCode.match(/^\s*(?:else\s+)?if\s*\(/);
+  if(!ifMatch) return null;
+
+  const openIndex = structuralCode.indexOf('(', ifMatch.index);
+  let depth = 0;
+  for(let index = openIndex; index < structuralCode.length; index++){
+    if(structuralCode[index] === '(') depth++;
+    if(structuralCode[index] === ')'){
+      depth--;
+      if(depth === 0) return structuralCode.slice(index + 1).trim();
+    }
+  }
+  return null;
+}
+
 function makeVisibleDisplayText(text){
   return text.replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim();
 }
@@ -736,10 +753,97 @@ function visualizeCode(){
           index = next - 1;
           continue;
         }
+        if(/^\s*else\b/.test(structuralCode) && next < lines.length &&
+           codeOutsideStringAndLineComment(lines[next]).trim() === '{'){
+          index = next - 1;
+          continue;
+        }
         return { endIndex:index, nested, unsupportedBlock, hasElse, closed:lines[index].trim() === '}' };
       }
     }
     return { endIndex:lines.length - 1, nested, unsupportedBlock, hasElse, closed:false };
+  }
+
+  // 波かっこなしif文が制御する「1文」の終わりを探します。
+  // 制御対象も波かっこなしif文なら、その内側の制御対象までたどります。
+  function findControlledStatementEnd(startIndex){
+    let statementIndex = startIndex;
+    while(statementIndex < lines.length &&
+          (lines[statementIndex].trim() === '' || isCommentLine(lines[statementIndex].trim()))){
+      statementIndex++;
+    }
+    if(statementIndex >= lines.length) return lines.length - 1;
+
+    const structuralCode = codeOutsideStringAndLineComment(lines[statementIndex]).trim();
+    const inlineBody = inlineIfBodyCode(structuralCode);
+    if(structuralCode === '{' || inlineBody === '{'){
+      return findIfBlock(statementIndex).endIndex;
+    }
+
+    if(/^if\s*\(/.test(structuralCode)){
+      let trueEndIndex = statementIndex;
+      if(inlineBody === ''){
+        let controlledIndex = statementIndex + 1;
+        while(controlledIndex < lines.length &&
+              (lines[controlledIndex].trim() === '' || isCommentLine(lines[controlledIndex].trim()))){
+          controlledIndex++;
+        }
+        const controlledCode = controlledIndex < lines.length
+          ? codeOutsideStringAndLineComment(lines[controlledIndex]).trim()
+          : '';
+        if(controlledCode === '{') return findIfBlock(controlledIndex).endIndex;
+        trueEndIndex = findControlledStatementEnd(statementIndex + 1);
+      }
+      let elseIndex = trueEndIndex + 1;
+      while(elseIndex < lines.length &&
+            (lines[elseIndex].trim() === '' || isCommentLine(lines[elseIndex].trim()))){
+        elseIndex++;
+      }
+      if(elseIndex >= lines.length) return trueEndIndex;
+
+      const elseCode = codeOutsideStringAndLineComment(lines[elseIndex]).trim();
+      if(!/^else\b/.test(elseCode)) return trueEndIndex;
+      if(/^else\s+if\s*\(/.test(elseCode)){
+        return findControlledIfEnd(elseIndex);
+      }
+      if(/^else\s*\{/.test(elseCode)) return findIfBlock(elseIndex).endIndex;
+      return findControlledStatementEnd(elseIndex + 1);
+    }
+
+    return statementIndex;
+  }
+
+  // else if の行をif文の開始行として扱い、後続のelseも含めて探します。
+  function findControlledIfEnd(ifIndex){
+    const ifCode = codeOutsideStringAndLineComment(lines[ifIndex]).trim().replace(/^else\s+/, '');
+    const inlineBody = inlineIfBodyCode(ifCode);
+    if(inlineBody === '{') return findIfBlock(ifIndex).endIndex;
+
+    let trueEndIndex = ifIndex;
+    if(inlineBody === ''){
+      let controlledIndex = ifIndex + 1;
+      while(controlledIndex < lines.length &&
+            (lines[controlledIndex].trim() === '' || isCommentLine(lines[controlledIndex].trim()))){
+        controlledIndex++;
+      }
+      if(controlledIndex < lines.length &&
+         codeOutsideStringAndLineComment(lines[controlledIndex]).trim() === '{'){
+        return findIfBlock(controlledIndex).endIndex;
+      }
+      trueEndIndex = findControlledStatementEnd(ifIndex + 1);
+    }
+    let elseIndex = trueEndIndex + 1;
+    while(elseIndex < lines.length &&
+          (lines[elseIndex].trim() === '' || isCommentLine(lines[elseIndex].trim()))){
+      elseIndex++;
+    }
+    if(elseIndex >= lines.length) return trueEndIndex;
+
+    const elseCode = codeOutsideStringAndLineComment(lines[elseIndex]).trim();
+    if(!/^else\b/.test(elseCode)) return trueEndIndex;
+    if(/^else\s+if\s*\(/.test(elseCode)) return findControlledIfEnd(elseIndex);
+    if(/^else\s*\{/.test(elseCode)) return findIfBlock(elseIndex).endIndex;
+    return findControlledStatementEnd(elseIndex + 1);
   }
 
   for(let index = 0; index < lines.length; index++){
@@ -763,8 +867,9 @@ function visualizeCode(){
         warnUnsupportedIf(index, detachedBlock.endIndex, '次の行に開き波かっこを書くif文は未対応', '開き波かっこを次の行に書くif文は現在未対応です。このif文の処理全体は実行しません。');
         index = detachedBlock.endIndex;
       }else{
-        warnUnsupportedIf(index, skippedIndex, '波かっこなしif文は未対応', '波かっこを省略したif文は現在未対応です。直後の文も実行しません。');
-        index = Math.min(skippedIndex, lines.length - 1);
+        const controlledEndIndex = findControlledStatementEnd(index + 1);
+        warnUnsupportedIf(index, controlledEndIndex, '波かっこなしif文は未対応', '波かっこを省略したif文は現在未対応です。直後の文も実行しません。');
+        index = Math.min(controlledEndIndex, lines.length - 1);
       }
       continue;
     }
