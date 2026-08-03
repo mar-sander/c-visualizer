@@ -808,6 +808,7 @@ function visualizeCode(){
         return findControlledIfEnd(elseIndex);
       }
       if(/^else\s*\{/.test(elseCode)) return findIfBlock(elseIndex).endIndex;
+      if(elseCode.replace(/^else\\b/, '').trim() !== '') return elseIndex;
       return findControlledStatementEnd(elseIndex + 1);
     }
 
@@ -844,6 +845,7 @@ function visualizeCode(){
     if(!/^else\b/.test(elseCode)) return trueEndIndex;
     if(/^else\s+if\s*\(/.test(elseCode)) return findControlledIfEnd(elseIndex);
     if(/^else\s*\{/.test(elseCode)) return findIfBlock(elseIndex).endIndex;
+    if(elseCode.replace(/^else\\b/, '').trim() !== '') return elseIndex;
     return findControlledStatementEnd(elseIndex + 1);
   }
 
