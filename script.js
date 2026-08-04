@@ -612,6 +612,14 @@ function visualizeCode(){
     }
 
     const structuralCode = codeOutsideStringAndLineComment(trimmed);
+    if(hasMultipleStatementsOnOneLine(trimmed)){
+      const message = '1行に複数の文があります。文の終わりで改行してください。';
+      addAnalysis(analysis, lineNo, message);
+      addHint(hints, lineNo, '改行の確認', message);
+      warningLines.add(lineNo);
+      return;
+    }
+
     if(/\+\+|--/.test(structuralCode)){
       const message = '++ と -- は現在未対応です。この行は実行しません。値を1増減するときは、value = value + 1; のように書いてください。';
       addAnalysis(analysis, lineNo, message);
@@ -661,14 +669,6 @@ function visualizeCode(){
     if(/^if\s*\(/.test(trimmed) || /^for\s*\(/.test(trimmed) || /^while\s*\(/.test(trimmed) || /^scanf\s*\(/.test(trimmed)){
       addAnalysis(analysis, lineNo, 'Ver.0.2_0730では未対応の構文です。今後の拡張対象として扱います。');
       addHint(hints, lineNo, 'Ver.0.2_0730では未対応', '現在は int、代入、整数の四則演算、比較式、printf、単純なif文の処理過程可視化に対応しています。この行は正確には実行シミュレートしていません。');
-      warningLines.add(lineNo);
-      return;
-    }
-
-    if(hasMultipleStatementsOnOneLine(trimmed)){
-      const message = '1行に複数の文があります。文の終わりで改行してください。';
-      addAnalysis(analysis, lineNo, message);
-      addHint(hints, lineNo, '改行の確認', message);
       warningLines.add(lineNo);
       return;
     }
