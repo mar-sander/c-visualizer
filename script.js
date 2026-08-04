@@ -19,17 +19,200 @@ function escapeHtml(str){
     .replace(/'/g, '&#39;');
 }
 
+// 色だけでコードの役割を見分けやすくするための、軽量なC言語用ハイライトです。
+// 解析機能とは独立しており、入力された文字列そのものは変更しません。
+const C_SYNTAX_KEYWORDS = new Set([
+  'break', 'case', 'const', 'continue', 'default', 'do', 'else', 'enum',
+  'extern', 'for', 'goto', 'if', 'register', 'return', 'sizeof', 'static',
+  'struct', 'switch', 'typedef', 'union', 'volatile', 'while'
+]);
+
+const C_SYNTAX_TYPES = new Set([
+  'char', 'double', 'float', 'int', 'long', 'short', 'signed', 'unsigned', 'void'
+]);
+
+function syntaxSpan(className, text){
+  return `<span class="${className}">${escapeHtml(text)}</span>`;
+}
+
+function isPreprocessorStart(code, index){
+  const lineStart = code.lastIndexOf('\n', index - 1) + 1;
+  return /^\s*$/.test(code.slice(lineStart, index));
+}
+
+function isIncludeHeaderStart(code, index){
+  const lineStart = code.lastIndexOf('\n', index - 1) + 1;
+  return /^\s*#\s*include\s*$/.test(code.slice(lineStart, index));
+}
+
+function highlightCCode(code){
+  const source = String(code);
+  let html = '';
+  let index = 0;
+  let inBlockComment = false;
+
+  while(index < source.length){
+    if(inBlockComment){
+      const commentEnd = source.indexOf('*/', index);
+      const end = commentEnd === -1 ? source.length : commentEnd + 2;
+      html += syntaxSpan('syntax-comment', source.slice(index, end));
+      index = end;
+      inBlockComment = commentEnd === -1;
+      continue;
+    }
+
+    if(source.startsWith('//', index)){
+      const lineEnd = source.indexOf('\n', index);
+      const end = lineEnd === -1 ? source.length : lineEnd;
+      html += syntaxSpan('syntax-comment', source.slice(index, end));
+      index = end;
+      continue;
+    }
+
+    if(source.startsWith('/*', index)){
+      const commentEnd = source.indexOf('*/', index + 2);
+      const end = commentEnd === -1 ? source.length : commentEnd + 2;
+      html += syntaxSpan('syntax-comment', source.slice(index, end));
+      index = end;
+      inBlockComment = commentEnd === -1;
+      continue;
+    }
+
+    const character = source[index];
+
+    if(character === '"' || character === "'"){
+      const quote = character;
+      let end = index + 1;
+      let escaped = false;
+
+      while(end < source.length){
+        const current = source[end];
+        end++;
+
+        if(escaped){
+          escaped = false;
+          continue;
+        }
+        if(current === '\\'){
+          escaped = true;
+          continue;
+        }
+        if(current === quote) break;
+      }
+
+      html += syntaxSpan('syntax-string', source.slice(index, end));
+      index = end;
+      continue;
+    }
+
+    if(character === '#' && isPreprocessorStart(source, index)){
+      const directiveMatch = source.slice(index).match(/^#\s*[A-Za-z_][A-Za-z0-9_]*/);
+      const directive = directiveMatch ? directiveMatch[0] : '#';
+      html += syntaxSpan('syntax-preprocessor', directive);
+      index += directive.length;
+      continue;
+    }
+
+    if(character === '<' && isIncludeHeaderStart(source, index)){
+      const headerEnd = source.indexOf('>', index + 1);
+      if(headerEnd !== -1){
+        html += syntaxSpan('syntax-header', source.slice(index, headerEnd + 1));
+        index = headerEnd + 1;
+        continue;
+      }
+    }
+
+    const identifierMatch = source.slice(index).match(/^[A-Za-z_][A-Za-z0-9_]*/);
+    if(identifierMatch){
+      const identifier = identifierMatch[0];
+      let className = '';
+
+      if(C_SYNTAX_TYPES.has(identifier)){
+        className = 'syntax-type';
+      }else if(C_SYNTAX_KEYWORDS.has(identifier)){
+        className = 'syntax-keyword';
+      }else{
+        const afterIdentifier = source.slice(index + identifier.length);
+        if(/^\s*\(/.test(afterIdentifier)) className = 'syntax-function';
+      }
+
+      html += className ? syntaxSpan(className, identifier) : escapeHtml(identifier);
+      index += identifier.length;
+      continue;
+    }
+
+    const numberMatch = source.slice(index).match(/^(?:0[xX][0-9a-fA-F]+|0[bB][01]+|\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)(?:[uUlLfF]+)?/);
+    if(numberMatch){
+      html += syntaxSpan('syntax-number', numberMatch[0]);
+      index += numberMatch[0].length;
+      continue;
+    }
+
+    if(/[+\-*\/%=<>!&|^~?:]/.test(character)){
+      html += syntaxSpan('syntax-operator', character);
+      index++;
+      continue;
+    }
+
+    html += escapeHtml(character);
+    index++;
+  }
+
+  return html;
+}
+
+function syncCodeEditorScroll(){
+  const input = document.getElementById('codeInput');
+  const highlight = document.getElementById('codeHighlight');
+  const lineNumbers = document.getElementById('codeLineNumbers');
+  if(!input || !highlight || !lineNumbers) return;
+
+  highlight.style.transform = `translate(${-input.scrollLeft}px, ${-input.scrollTop}px)`;
+  lineNumbers.style.transform = `translateY(${-input.scrollTop}px)`;
+}
+
+function updateCodeEditor(){
+  const input = document.getElementById('codeInput');
+  const highlight = document.getElementById('codeHighlight');
+  const lineNumbers = document.getElementById('codeLineNumbers');
+  if(!input || !highlight || !lineNumbers) return;
+
+  const code = input.value.replace(/\r\n/g, '\n');
+  const lineCount = code.split('\n').length;
+  highlight.innerHTML = highlightCCode(code);
+  lineNumbers.textContent = Array.from({ length:lineCount }, (_, index) => index + 1).join('\n');
+  syncCodeEditorScroll();
+}
+
+function initializeCodeEditor(){
+  const input = document.getElementById('codeInput');
+  const highlight = document.getElementById('codeHighlight');
+  const lineNumbers = document.getElementById('codeLineNumbers');
+  if(!input || !highlight || !lineNumbers) return;
+
+  input.addEventListener('input', updateCodeEditor);
+  input.addEventListener('scroll', syncCodeEditorScroll);
+  updateCodeEditor();
+}
+
 function resetCode(){
-  document.getElementById('codeInput').value = '';
+  const codeInput = document.getElementById('codeInput');
+  codeInput.value = '';
+  codeInput.scrollTop = 0;
+  codeInput.scrollLeft = 0;
   document.getElementById('outputResult').textContent = '';
   document.getElementById('variableState').innerHTML = '';
   document.getElementById('stepResult').innerHTML = '';
   document.getElementById('codePreview').innerHTML = '';
   document.getElementById('hintResult').innerHTML = '';
+  updateCodeEditor();
 }
 
 function loadSample(type){
-  document.getElementById('codeInput').value = samples[type] || '';
+  const codeInput = document.getElementById('codeInput');
+  codeInput.value = samples[type] || '';
+  codeInput.scrollTop = 0;
+  codeInput.scrollLeft = 0;
   visualizeCode();
 }
 
@@ -564,6 +747,7 @@ function formatPrintfString(format, values){
 }
 
 function visualizeCode(){
+  updateCodeEditor();
   const code = document.getElementById('codeInput').value.replace(/\r\n/g, '\n');
   const lines = code.split('\n');
   const executableLines = codeWithoutComments(code).split('\n');
@@ -1328,4 +1512,5 @@ function visualizeCode(){
     : `<div class="hint"><b>大きなミスは見つかっていません。</b><br>次は、各STEPを自分の言葉で説明できるか試してみましょう。</div>`;
 }
 
+initializeCodeEditor();
 visualizeCode();
