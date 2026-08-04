@@ -451,6 +451,11 @@
         expect:{ output:'1', variables:['value = 1'], warningMin:1, hintsInclude:['++・--は未対応'], executedExcludes:['value++;'] }
       },
       {
+        name:'未対応演算子を含む複数文でも改行を警告',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 1;\n    value++; printf("WRONG-MULTI\\n");\n    printf("%d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'1', outputExcludes:['WRONG-MULTI'], variables:['value = 1'], warningMin:1, hintsInclude:['改行の確認'], executedExcludes:['value++; printf("WRONG-MULTI'] }
+      },
+      {
         name:'後置デクリメントを実行しない',
         code:`#include <stdio.h>\n\nint main(void){\n    int value = 1;\n    value--;\n    printf("%d\\n", value);\n    return 0;\n}`,
         expect:{ output:'1', variables:['value = 1'], warningMin:1, hintsInclude:['++・--は未対応'], executedExcludes:['value--;'] }
