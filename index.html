@@ -19,7 +19,13 @@
   <div class="tool-grid">
     <section class="section">
       <h2>コード入力</h2>
-      <textarea id="codeInput" placeholder="ここにC言語コードを入力してください">#include <stdio.h>
+      <div class="code-editor" id="codeEditor">
+        <div class="code-editor-gutter" aria-hidden="true">
+          <pre id="codeLineNumbers" class="code-line-numbers">1</pre>
+        </div>
+        <div class="code-editor-surface">
+          <pre id="codeHighlight" class="code-highlight" aria-hidden="true"></pre>
+          <textarea id="codeInput" placeholder="ここにC言語コードを入力してください" aria-label="C言語コード入力" autocomplete="off" autocapitalize="off" spellcheck="false" wrap="off">#include <stdio.h>
 
 int main(void){
     int a = 3;
@@ -28,6 +34,8 @@ int main(void){
     printf("%d\n", c);
     return 0;
 }</textarea>
+        </div>
+      </div>
       <div class="control-row" style="margin-top:12px;">
         <button onclick="visualizeCode()">可視化する</button>
         <button class="reset-btn" onclick="resetCode()" title="リセット" aria-label="入力と結果をリセット"><i class="fa fa-refresh"></i></button>

@@ -99,6 +99,128 @@ textarea{
   white-space:pre;
 }
 
+/* コード入力欄：入力文字の上に色分け表示を重ね、左側に行番号を表示します。 */
+.code-editor{
+  display:grid;
+  grid-template-columns:48px minmax(0, 1fr);
+  position:relative;
+  width:100%;
+  height:320px;
+  min-height:220px;
+  max-height:70vh;
+  overflow:hidden;
+  resize:vertical;
+  background:#101010;
+  border:1px solid #3a3a3a;
+  border-radius:10px;
+}
+
+.code-editor:focus-within{
+  border-color:#4fc3f7;
+  box-shadow:0 0 0 3px rgba(79,195,247,0.15);
+}
+
+.code-editor-gutter{
+  position:relative;
+  overflow:hidden;
+  background:#0c0f12;
+  border-right:1px solid #29323a;
+  user-select:none;
+}
+
+.code-editor-surface{
+  position:relative;
+  min-width:0;
+  height:100%;
+  overflow:hidden;
+}
+
+.code-line-numbers,
+.code-highlight,
+#codeInput{
+  margin:0;
+  font-family:"Fira Code", Consolas, Monaco, "Courier New", monospace;
+  font-size:1rem;
+  font-variant-ligatures:none;
+  line-height:1.65;
+  tab-size:4;
+}
+
+.code-line-numbers{
+  position:absolute;
+  top:0;
+  right:0;
+  width:100%;
+  padding:10px 10px 10px 4px;
+  color:#66717c;
+  text-align:right;
+  white-space:pre;
+  pointer-events:none;
+  will-change:transform;
+}
+
+.code-highlight{
+  position:absolute;
+  top:0;
+  left:0;
+  width:max-content;
+  min-width:100%;
+  min-height:100%;
+  padding:10px 12px;
+  color:#e8edf2;
+  background:transparent;
+  white-space:pre;
+  pointer-events:none;
+  will-change:transform;
+}
+
+#codeInput{
+  position:absolute;
+  inset:0;
+  z-index:1;
+  width:100%;
+  height:100%;
+  min-height:0;
+  padding:10px 12px;
+  overflow:auto;
+  resize:none;
+  color:transparent;
+  caret-color:#f5f7fa;
+  background:transparent;
+  border:0;
+  border-radius:0;
+  outline:none;
+  white-space:pre;
+  -webkit-text-fill-color:transparent;
+}
+
+#codeInput:focus{
+  border:0;
+  box-shadow:none;
+}
+
+#codeInput::selection{
+  color:transparent;
+  background:rgba(79,195,247,0.28);
+  -webkit-text-fill-color:transparent;
+}
+
+#codeInput::placeholder{
+  color:#73808a;
+  opacity:1;
+  -webkit-text-fill-color:#73808a;
+}
+
+.syntax-comment{color:#77838d;font-style:italic;}
+.syntax-preprocessor{color:#d8a85b;}
+.syntax-header{color:#7fd7bd;}
+.syntax-keyword{color:#ff8f70;}
+.syntax-type{color:#62c6ff;}
+.syntax-function{color:#ffd166;}
+.syntax-string{color:#a9d478;}
+.syntax-number{color:#c5a3ff;}
+.syntax-operator{color:#89ddff;}
+
 button{
   cursor:pointer;
   border:none;
@@ -365,6 +487,12 @@ hr{height:1px;border:0;border-top:1px solid #bdbdbd7d;}
   .control-row{align-items:stretch;}
   .control-row button:not(.reset-btn){flex:1 1 auto;}
   textarea{min-height:260px;}
+  .code-editor{
+    grid-template-columns:42px minmax(0, 1fr);
+    height:260px;
+    min-height:200px;
+  }
+  .code-line-numbers{padding-right:8px;}
   .code-line{gap:8px;}
   .code-line-number{flex:0 0 22px;}
   .line-analysis{padding:10px 12px 12px;}
