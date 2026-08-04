@@ -359,6 +359,36 @@
         name:'未対応制御構文の見出しでも複数文を警告',
         code:`#include <stdio.h>\n\nint main(void){\n    while(0); printf("WRONG-CONTROL-HEADER\\n");\n    printf("AFTER-CONTROL-HEADER\\n");\n    return 0;\n}`,
         expect:{ output:'AFTER-CONTROL-HEADER', outputExcludes:['WRONG-CONTROL-HEADER'], warningMin:2, hintsInclude:['while文は未対応', '1行に複数の文があります'], executedExcludes:['printf("WRONG-CONTROL-HEADER'] }
+      },
+      {
+        name:'単独行elseの波かっこなし本文を実行しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    if(value == 0){\n        value = 1;\n    }\n    else\n        value = 9;\n    printf("%d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'0', variables:['value = 0'], warningMin:1, hintsInclude:['else付きif文は未対応'], executedExcludes:['value = 1;', 'value = 9;'] }
+      },
+      {
+        name:'閉じ波かっこ行のelse本文を実行しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    if(value == 0){\n        value = 1;\n    } else\n        value = 9;\n    printf("%d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'0', variables:['value = 0'], warningMin:1, hintsInclude:['else付きif文は未対応'], executedExcludes:['value = 1;', 'value = 9;'] }
+      },
+      {
+        name:'elseの次行波かっこブロックを実行しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    if(value == 0){\n        value = 1;\n    }\n    else\n    {\n        value = 9;\n        printf("WRONG-ELSE-BLOCK\\n");\n    }\n    printf("%d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'0', outputExcludes:['WRONG-ELSE-BLOCK'], variables:['value = 0'], warningMin:1, hintsInclude:['else付きif文は未対応'], executedExcludes:['value = 1;', 'value = 9;', 'printf("WRONG-ELSE-BLOCK'] }
+      },
+      {
+        name:'elseが制御するifとelseをまとめて実行しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    if(1){\n        printf("WRONG-OUTER\\n");\n    }\n    else\n        if(1)\n            printf("WRONG-INNER-TRUE\\n");\n        else\n            printf("WRONG-INNER-ELSE\\n");\n    printf("AFTER-NESTED-ELSE\\n");\n    return 0;\n}`,
+        expect:{ output:'AFTER-NESTED-ELSE', outputExcludes:['WRONG-OUTER', 'WRONG-INNER-TRUE', 'WRONG-INNER-ELSE'], warningMin:1, hintsInclude:['else付きif文は未対応'], executedExcludes:['printf("WRONG-OUTER', 'printf("WRONG-INNER-TRUE', 'printf("WRONG-INNER-ELSE'] }
+      },
+      {
+        name:'elseが制御するwhile全体を実行しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    if(value == 0){\n        value = 1;\n    }\n    else\n        while(value < 3){\n            value = 9;\n            printf("WRONG-ELSE-WHILE\\n");\n        }\n    printf("%d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'0', outputExcludes:['WRONG-ELSE-WHILE'], variables:['value = 0'], warningMin:1, hintsInclude:['else付きif文は未対応'], executedExcludes:['value = 1;', 'value = 9;', 'printf("WRONG-ELSE-WHILE'] }
+      },
+      {
+        name:'同一行else whileの本文を実行しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    if(value == 0){\n        value = 1;\n    } else while(value < 3)\n        value = 9;\n    printf("%d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'0', variables:['value = 0'], warningMin:1, hintsInclude:['else付きif文は未対応'], executedExcludes:['value = 1;', 'value = 9;'] }
       }
     ];
 

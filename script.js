@@ -803,17 +803,26 @@ function visualizeCode(){
       }
 
       if(depth === 0 && index >= startIndex){
+        if(/\belse\b/.test(structuralCode)){
+          return {
+            endIndex:findElseControlledStatementEnd(index),
+            nested,
+            unsupportedBlock,
+            hasElse:true,
+            closed:true
+          };
+        }
+
         let next = index + 1;
         while(next < lines.length && (lines[next].trim() === '' || isCommentLine(lines[next].trim()))) next++;
-        if(next < lines.length && /^else\b/.test(lines[next].trim())){
-          hasElse = true;
-          index = next - 1;
-          continue;
-        }
-        if(/^\s*else\b/.test(structuralCode) && next < lines.length &&
-           codeOutsideStringAndLineComment(lines[next]).trim() === '{'){
-          index = next - 1;
-          continue;
+        if(next < lines.length && /^else\b/.test(codeOutsideStringAndLineComment(lines[next]).trim())){
+          return {
+            endIndex:findElseControlledStatementEnd(next),
+            nested,
+            unsupportedBlock,
+            hasElse:true,
+            closed:true
+          };
         }
         return { endIndex:index, nested, unsupportedBlock, hasElse, closed:lines[index].trim() === '}' };
       }
@@ -872,8 +881,9 @@ function visualizeCode(){
   }
 
   // else if の行をif文の開始行として扱い、後続のelseも含めて探します。
-  function findControlledIfEnd(ifIndex){
-    const ifCode = codeOutsideStringAndLineComment(lines[ifIndex]).trim().replace(/^else\s+/, '');
+  function findControlledIfEnd(ifIndex, structuralCodeOverride = null){
+    const structuralCode = structuralCodeOverride ?? codeOutsideStringAndLineComment(lines[ifIndex]).trim();
+    const ifCode = structuralCode.replace(/^else\s+/, '');
     const inlineBody = inlineIfBodyCode(ifCode);
     if(inlineBody === '{') return findIfBlock(ifIndex).endIndex;
 
@@ -903,6 +913,33 @@ function visualizeCode(){
     if(/^else\s*\{/.test(elseCode)) return findIfBlock(elseIndex).endIndex;
     if(elseCode.replace(/^else\b/, '').trim() !== '') return elseIndex;
     return findControlledStatementEnd(elseIndex + 1);
+  }
+
+  // 未対応のelseが制御する1文またはブロックの終わりを探します。
+  function findElseControlledStatementEnd(elseIndex){
+    const structuralCode = codeOutsideStringAndLineComment(lines[elseIndex]).trim();
+    const elsePosition = structuralCode.search(/\belse\b/);
+    if(elsePosition < 0) return elseIndex;
+
+    const elseCode = structuralCode.slice(elsePosition).trim();
+    if(/^else\s+if\s*\(/.test(elseCode)){
+      return findControlledIfEnd(elseIndex, elseCode);
+    }
+
+    const inlineBody = elseCode.replace(/^else\b/, '').trim();
+    if(inlineBody.startsWith('{')){
+      return findBracedUnsupportedBlock(elseIndex).endIndex;
+    }
+    if(inlineBody !== ''){
+      if(unsupportedControlInfo(inlineBody)){
+        return findUnsupportedControlRange(elseIndex, inlineBody).endIndex;
+      }
+      return elseIndex;
+    }
+
+    const bodyStartIndex = nextSignificantLine(elseIndex + 1);
+    if(bodyStartIndex >= executionEndIndex) return elseIndex;
+    return findUnsupportedControlledStatementEnd(bodyStartIndex);
   }
 
   function nextSignificantLine(startIndex){
@@ -954,8 +991,8 @@ function visualizeCode(){
     return startIndex;
   }
 
-  function findUnsupportedControlRange(startIndex){
-    const structuralCode = codeOutsideStringAndLineComment(lines[startIndex]).trim();
+  function findUnsupportedControlRange(startIndex, structuralCodeOverride = null){
+    const structuralCode = structuralCodeOverride ?? codeOutsideStringAndLineComment(lines[startIndex]).trim();
     const control = unsupportedControlInfo(structuralCode);
     if(!control) return { endIndex:startIndex, closed:true };
 
