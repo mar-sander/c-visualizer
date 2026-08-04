@@ -46,7 +46,7 @@ Avoid:
 - adding many features at once
 - changing the core design without reason
 
-## Supported scope for Ver.0.2_0730
+## Supported scope for Ver.0.3_0805
 
 Currently supported:
 
@@ -60,51 +60,59 @@ Currently supported:
 - C-style truth values: `0` is false, nonzero is true
 - simple printf output
 - simple if statements
+- simple if-else statements
 - multiple independent simple if statements
+- multiple independent simple if-else statements
 - assignments to existing variables inside if
-- printf inside if
+- assignments to existing variables inside else
+- printf inside if and else
 - safe skipping of false or unevaluable if bodies
+- safe branch selection: true executes only if, false executes only else
 - clear warnings for unsupported if structures
 - sequential execution
 - line-by-line explanations
 - variable state display
 - output display
 
-## Simple if statement specification
+## Simple if-else statement specification
 
 Supported form:
 
 ```c
 if(condition){
     statement;
+}else{
+    statement;
 }
 ```
 
 Rules:
 
-- no else
+- else is optional
+- support both `}else{` and a separate `else{` line after the if closing brace
 - no else if
 - no nested if
-- opening brace must be on the same line as if
-- closing brace must be alone on its line
+- opening brace must be on the same line as if or else
+- the if closing brace may share a line with `else{` or be alone
+- the final closing brace must be alone on its line
 - braces are required
-- only assignment to an existing variable and printf are executed inside if
-- declarations inside if are unsupported
+- only assignment to an existing variable and printf are executed inside either branch
+- declarations inside if or else are unsupported
 - unsupported if structures must fail safely
 - statements inside unsupported if structures must never be accidentally executed
 - braces and else text inside strings or line comments must not affect structure detection
 - one statement per line remains required
 
-## Unsupported scope for Ver.0.2_0730
+## Unsupported scope for Ver.0.3_0805
 
 Do not implement these unless explicitly requested:
 
-- else
 - else if
 - nested if
-- declarations inside if
+- declarations inside if or else
 - braceless if
 - split-line opening brace style
+- split-line opening brace style for else
 - for
 - while
 - arrays
@@ -118,7 +126,7 @@ Do not implement these unless explicitly requested:
 
 ## Input rule
 
-In Ver.0.2_0730, assume one C statement per line.
+In Ver.0.3_0805, assume one C statement per line.
 
 If multiple statements are written on one line, show a warning instead of trying to parse them automatically.
 

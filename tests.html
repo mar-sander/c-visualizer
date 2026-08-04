@@ -168,6 +168,11 @@
         }
       },
       {
+        name:'if〜elseサンプル',
+        code:samples.ifElse,
+        expect:{ output:'もう一度挑戦', variables:['score = 45'], warningMax:0, executedIncludes:['printf("もう一度挑戦'], executedExcludes:['printf("合格です'] }
+      },
+      {
         name:'再代入',
         code:`#include <stdio.h>\n\nint main(void){\n    int score = 60;\n    score = score + 15;\n    printf("%d\\n", score);\n    return 0;\n}`,
         expect:{ output:'75', variables:['score = 75'], warningMax:0 }
@@ -215,7 +220,7 @@
       {
         name:'if内の変数宣言は未対応',
         code:`#include <stdio.h>\n\nint main(void){\n    int score = 78;\n    if(score >= 60){\n        int bonus = 5;\n    }\n    printf("終了\\n");\n    return 0;\n}`,
-        expect:{ output:'終了', variables:['score = 78'], variablesExclude:['bonus ='], warningMin:1, hintsInclude:['if文内の変数宣言は未対応'] }
+        expect:{ output:'終了', variables:['score = 78'], variablesExclude:['bonus ='], warningMin:1, hintsInclude:['分岐内の変数宣言は未対応'] }
       },
       {
         name:'入れ子ifを安全に停止',
@@ -223,9 +228,44 @@
         expect:{ output:'終了', outputExcludes:['WRONG'], warningMin:1, hintsInclude:['入れ子'], executedExcludes:['printf("WRONG'] }
       },
       {
-        name:'else付きifを安全に停止',
+        name:'if〜else条件不成立・else側を実行',
         code:`#include <stdio.h>\n\nint main(void){\n    int score = 45;\n    if(score >= 60){\n        printf("合格\\n");\n    }else{\n        printf("不合格\\n");\n    }\n    printf("判定終了\\n");\n    return 0;\n}`,
-        expect:{ output:'判定終了', outputExcludes:['合格', '不合格'], warningMin:1, hintsInclude:['else付きif文は未対応'] }
+        expect:{ output:'不合格\n判定終了', warningMax:0, stepsInclude:['else文の中へ進みます'], executedIncludes:['printf("不合格'], executedExcludes:['printf("合格'] }
+      },
+      {
+        name:'if〜else条件成立・if側だけを実行',
+        code:`#include <stdio.h>\n\nint main(void){\n    int score = 78;\n    if(score >= 60){\n        printf("合格\\n");\n    } else {\n        printf("不合格\\n");\n    }\n    return 0;\n}`,
+        expect:{ output:'合格', outputExcludes:['不合格'], warningMax:0, stepsInclude:['else文の中は実行しません'], executedIncludes:['printf("合格'], executedExcludes:['printf("不合格'] }
+      },
+      {
+        name:'別行else形式・else側の代入',
+        code:`#include <stdio.h>\n\nint main(void){\n    int score = 45;\n    int result = 0;\n    if(score >= 60){\n        result = 1;\n    }\n    else{\n        result = -1;\n    }\n    printf("%d\\n", result);\n    return 0;\n}`,
+        expect:{ output:'-1', variables:['score = 45', 'result = -1'], warningMax:0, executedIncludes:['result = -1;'], executedExcludes:['result = 1;'] }
+      },
+      {
+        name:'複数の独立したif〜else',
+        code:`#include <stdio.h>\n\nint main(void){\n    int first = 0;\n    int second = 0;\n    if(1){\n        first = 1;\n    }else{\n        first = 9;\n    }\n    if(0){\n        second = 9;\n    }else{\n        second = 2;\n    }\n    printf("%d %d\\n", first, second);\n    return 0;\n}`,
+        expect:{ output:'1 2', variables:['first = 1', 'second = 2'], warningMax:0 }
+      },
+      {
+        name:'if〜elseの条件を評価できないとき両側を実行しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    int result = 0;\n    if(score >= 60){\n        result = 1;\n        printf("WRONG-IF\\n");\n    }else{\n        result = 2;\n        printf("WRONG-ELSE\\n");\n    }\n    printf("%d\\n", result);\n    return 0;\n}`,
+        expect:{ output:'0', outputExcludes:['WRONG-IF', 'WRONG-ELSE'], variables:['result = 0'], warningMin:1, hintsInclude:['宣言されていません'], executedExcludes:['result = 1;', 'result = 2;', 'printf("WRONG'] }
+      },
+      {
+        name:'else側の変数宣言は未対応',
+        code:`#include <stdio.h>\n\nint main(void){\n    int score = 45;\n    if(score >= 60){\n        printf("合格\\n");\n    }else{\n        int bonus = 5;\n        printf("再挑戦\\n");\n    }\n    return 0;\n}`,
+        expect:{ output:'再挑戦', outputExcludes:['合格'], variables:['score = 45'], variablesExclude:['bonus ='], warningMin:1, hintsInclude:['分岐内の変数宣言は未対応'], executedExcludes:['int bonus = 5;'] }
+      },
+      {
+        name:'else ifは引き続き安全に停止',
+        code:`#include <stdio.h>\n\nint main(void){\n    int score = 75;\n    if(score >= 80){\n        printf("WRONG-A\\n");\n    }else if(score >= 60){\n        printf("WRONG-B\\n");\n    }else{\n        printf("WRONG-C\\n");\n    }\n    printf("判定終了\\n");\n    return 0;\n}`,
+        expect:{ output:'判定終了', outputExcludes:['WRONG-A', 'WRONG-B', 'WRONG-C'], warningMin:1, hintsInclude:['このelse付きif文は未対応'], executedExcludes:['printf("WRONG'] }
+      },
+      {
+        name:'else側の入れ子ifは安全に停止',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    if(0){\n        value = 1;\n    }else{\n        if(1){\n            value = 9;\n        }\n    }\n    printf("%d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'0', variables:['value = 0'], warningMin:1, hintsInclude:['このelse付きif文は未対応'], executedExcludes:['value = 1;', 'value = 9;'] }
       },
       {
         name:'波かっこなしifを安全に停止',
@@ -270,7 +310,7 @@
       {
         name:'scanf未対応サンプル',
         code:`#include <stdio.h>\n\nint main(void){\n    int score;\n    scanf("%d", &score);\n    return 0;\n}`,
-        expect:{ output:'出力はまだありません。', variables:['score = 未初期化'], warningMin:1, hintsInclude:['Ver.0.2_0730では未対応'] }
+        expect:{ output:'出力はまだありません。', variables:['score = 未初期化'], warningMin:1, hintsInclude:['Ver.0.3_0805では未対応'] }
       },
       {
         name:'return後のprintfを実行しない',
@@ -370,32 +410,32 @@
       {
         name:'単独行elseの波かっこなし本文を実行しない',
         code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    if(value == 0){\n        value = 1;\n    }\n    else\n        value = 9;\n    printf("%d\\n", value);\n    return 0;\n}`,
-        expect:{ output:'0', variables:['value = 0'], warningMin:1, hintsInclude:['else付きif文は未対応'], executedExcludes:['value = 1;', 'value = 9;'] }
+        expect:{ output:'0', variables:['value = 0'], warningMin:1, hintsInclude:['このelse付きif文は未対応'], executedExcludes:['value = 1;', 'value = 9;'] }
       },
       {
         name:'閉じ波かっこ行のelse本文を実行しない',
         code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    if(value == 0){\n        value = 1;\n    } else\n        value = 9;\n    printf("%d\\n", value);\n    return 0;\n}`,
-        expect:{ output:'0', variables:['value = 0'], warningMin:1, hintsInclude:['else付きif文は未対応'], executedExcludes:['value = 1;', 'value = 9;'] }
+        expect:{ output:'0', variables:['value = 0'], warningMin:1, hintsInclude:['このelse付きif文は未対応'], executedExcludes:['value = 1;', 'value = 9;'] }
       },
       {
         name:'elseの次行波かっこブロックを実行しない',
         code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    if(value == 0){\n        value = 1;\n    }\n    else\n    {\n        value = 9;\n        printf("WRONG-ELSE-BLOCK\\n");\n    }\n    printf("%d\\n", value);\n    return 0;\n}`,
-        expect:{ output:'0', outputExcludes:['WRONG-ELSE-BLOCK'], variables:['value = 0'], warningMin:1, hintsInclude:['else付きif文は未対応'], executedExcludes:['value = 1;', 'value = 9;', 'printf("WRONG-ELSE-BLOCK'] }
+        expect:{ output:'0', outputExcludes:['WRONG-ELSE-BLOCK'], variables:['value = 0'], warningMin:1, hintsInclude:['このelse付きif文は未対応'], executedExcludes:['value = 1;', 'value = 9;', 'printf("WRONG-ELSE-BLOCK'] }
       },
       {
         name:'elseが制御するifとelseをまとめて実行しない',
         code:`#include <stdio.h>\n\nint main(void){\n    if(1){\n        printf("WRONG-OUTER\\n");\n    }\n    else\n        if(1)\n            printf("WRONG-INNER-TRUE\\n");\n        else\n            printf("WRONG-INNER-ELSE\\n");\n    printf("AFTER-NESTED-ELSE\\n");\n    return 0;\n}`,
-        expect:{ output:'AFTER-NESTED-ELSE', outputExcludes:['WRONG-OUTER', 'WRONG-INNER-TRUE', 'WRONG-INNER-ELSE'], warningMin:1, hintsInclude:['else付きif文は未対応'], executedExcludes:['printf("WRONG-OUTER', 'printf("WRONG-INNER-TRUE', 'printf("WRONG-INNER-ELSE'] }
+        expect:{ output:'AFTER-NESTED-ELSE', outputExcludes:['WRONG-OUTER', 'WRONG-INNER-TRUE', 'WRONG-INNER-ELSE'], warningMin:1, hintsInclude:['このelse付きif文は未対応'], executedExcludes:['printf("WRONG-OUTER', 'printf("WRONG-INNER-TRUE', 'printf("WRONG-INNER-ELSE'] }
       },
       {
         name:'elseが制御するwhile全体を実行しない',
         code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    if(value == 0){\n        value = 1;\n    }\n    else\n        while(value < 3){\n            value = 9;\n            printf("WRONG-ELSE-WHILE\\n");\n        }\n    printf("%d\\n", value);\n    return 0;\n}`,
-        expect:{ output:'0', outputExcludes:['WRONG-ELSE-WHILE'], variables:['value = 0'], warningMin:1, hintsInclude:['else付きif文は未対応'], executedExcludes:['value = 1;', 'value = 9;', 'printf("WRONG-ELSE-WHILE'] }
+        expect:{ output:'0', outputExcludes:['WRONG-ELSE-WHILE'], variables:['value = 0'], warningMin:1, hintsInclude:['このelse付きif文は未対応'], executedExcludes:['value = 1;', 'value = 9;', 'printf("WRONG-ELSE-WHILE'] }
       },
       {
         name:'同一行else whileの本文を実行しない',
         code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    if(value == 0){\n        value = 1;\n    } else while(value < 3)\n        value = 9;\n    printf("%d\\n", value);\n    return 0;\n}`,
-        expect:{ output:'0', variables:['value = 0'], warningMin:1, hintsInclude:['else付きif文は未対応'], executedExcludes:['value = 1;', 'value = 9;'] }
+        expect:{ output:'0', variables:['value = 0'], warningMin:1, hintsInclude:['このelse付きif文は未対応'], executedExcludes:['value = 1;', 'value = 9;'] }
       },
       {
         name:'対応文の末尾にある行コメントを除外',
@@ -440,7 +480,7 @@
       {
         name:'elseと本文の間のブロックコメントを除外',
         code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    if(1){\n        value = 1;\n    }\n    else\n        /* この行は制御対象ではない */\n        value = 9;\n    printf("%d\\n", value);\n    return 0;\n}`,
-        expect:{ output:'0', variables:['value = 0'], warningMin:1, hintsInclude:['else付きif文は未対応'], executedExcludes:['value = 1;', 'value = 9;'] }
+        expect:{ output:'0', variables:['value = 0'], warningMin:1, hintsInclude:['このelse付きif文は未対応'], executedExcludes:['value = 1;', 'value = 9;'] }
       },
       {
         name:'if終了波かっこ末尾のコメントを除外',
