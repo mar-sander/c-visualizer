@@ -304,6 +304,61 @@
         name:'閉じられていないmainを実行しない',
         code:`#include <stdio.h>\n\nint main(void){\n    int value = 1;\n    printf("WRONG\\n");\n    return 0;`,
         expect:{ output:'出力はまだありません。', outputExcludes:['WRONG'], variablesExclude:['value ='], warningMin:1, hintsInclude:['main関数の終わりを確認'], executedExcludes:['int value = 1;', 'printf("WRONG', 'return 0;'] }
+      },
+      {
+        name:'for文の本文を実行しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    for(int i = 0; i < 3; i++){\n        value = 9;\n        printf("WRONG-FOR\\n");\n    }\n    printf("%d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'0', outputExcludes:['WRONG-FOR'], variables:['value = 0'], variablesExclude:['i ='], warningMin:1, hintsInclude:['for文は未対応'], executedExcludes:['value = 9;', 'printf("WRONG-FOR'] }
+      },
+      {
+        name:'while文の本文を実行しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    while(value < 3){\n        value = 9;\n        printf("WRONG-WHILE\\n");\n    }\n    printf("%d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'0', outputExcludes:['WRONG-WHILE'], variables:['value = 0'], warningMin:1, hintsInclude:['while文は未対応'], executedExcludes:['value = 9;', 'printf("WRONG-WHILE'] }
+      },
+      {
+        name:'switch文の本文を実行しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 1;\n    switch(value){\n        case 1:\n            value = 9;\n            printf("WRONG-SWITCH\\n");\n            break;\n        default:\n            value = 8;\n    }\n    printf("%d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'1', outputExcludes:['WRONG-SWITCH'], variables:['value = 1'], warningMin:1, hintsInclude:['switch文は未対応'], executedExcludes:['value = 9;', 'value = 8;', 'printf("WRONG-SWITCH'] }
+      },
+      {
+        name:'do while文の本文を実行しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    do{\n        value = 9;\n        printf("WRONG-DO\\n");\n    }while(value < 3);\n    printf("%d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'0', outputExcludes:['WRONG-DO'], variables:['value = 0'], warningMin:1, hintsInclude:['do while文は未対応'], executedExcludes:['value = 9;', 'printf("WRONG-DO'] }
+      },
+      {
+        name:'do while文の単独終端を本文とともに飛ばす',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    do {\n        value = 9;\n    }\n    while(value < 3);\n    printf("AFTER-DO %d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'AFTER-DO 0', variables:['value = 0'], warningMin:1, hintsInclude:['do while文は未対応'], executedExcludes:['value = 9;', 'while(value < 3);'] }
+      },
+      {
+        name:'次行波かっこのfor文を実行しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    for(int i = 0; i < 3; i++)\n    {\n        value = 9;\n        printf("WRONG-NEXT-BRACE\\n");\n    }\n    printf("%d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'0', outputExcludes:['WRONG-NEXT-BRACE'], variables:['value = 0'], variablesExclude:['i ='], warningMin:1, hintsInclude:['for文は未対応'], executedExcludes:['value = 9;', 'printf("WRONG-NEXT-BRACE'] }
+      },
+      {
+        name:'波かっこなしwhile文の制御対象だけを飛ばす',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    while(value < 3)\n        value = 9;\n    printf("AFTER-WHILE %d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'AFTER-WHILE 0', variables:['value = 0'], warningMin:1, hintsInclude:['while文は未対応'], executedExcludes:['value = 9;'] }
+      },
+      {
+        name:'空文whileの次行は制御対象にしない',
+        code:`#include <stdio.h>\n\nint main(void){\n    while(0);\n    printf("AFTER-EMPTY-WHILE\\n");\n    return 0;\n}`,
+        expect:{ output:'AFTER-EMPTY-WHILE', warningMin:1, hintsInclude:['while文は未対応'], executedIncludes:['printf("AFTER-EMPTY-WHILE'] }
+      },
+      {
+        name:'未対応for文内の入れ子ブロックも実行しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    for(int i = 0; i < 1; i++){\n        if(1){\n            printf("WRONG-NESTED\\n");\n        }\n    }\n    printf("AFTER-NESTED\\n");\n    return 0;\n}`,
+        expect:{ output:'AFTER-NESTED', outputExcludes:['WRONG-NESTED'], variablesExclude:['i ='], warningMin:1, hintsInclude:['for文は未対応'], executedExcludes:['printf("WRONG-NESTED'] }
+      },
+      {
+        name:'対応if内のdo while文を安全に停止',
+        code:`#include <stdio.h>\n\nint main(void){\n    if(1){\n        do\n            printf("WRONG-IF-DO\\n");\n        while(0);\n    }\n    printf("AFTER-IF-DO\\n");\n    return 0;\n}`,
+        expect:{ output:'AFTER-IF-DO', outputExcludes:['WRONG-IF-DO'], warningMin:1, hintsInclude:['入れ子のブロックは未対応'], executedExcludes:['printf("WRONG-IF-DO'] }
+      },
+      {
+        name:'未対応制御構文の見出しでも複数文を警告',
+        code:`#include <stdio.h>\n\nint main(void){\n    while(0); printf("WRONG-CONTROL-HEADER\\n");\n    printf("AFTER-CONTROL-HEADER\\n");\n    return 0;\n}`,
+        expect:{ output:'AFTER-CONTROL-HEADER', outputExcludes:['WRONG-CONTROL-HEADER'], warningMin:2, hintsInclude:['while文は未対応', '1行に複数の文があります'], executedExcludes:['printf("WRONG-CONTROL-HEADER'] }
       }
     ];
 

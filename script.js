@@ -162,6 +162,23 @@ function inlineIfBodyCode(structuralCode){
   return null;
 }
 
+// 未対応の制御構文について、閉じ丸かっこの後ろにある本文を返します。
+function inlineUnsupportedControlBodyCode(structuralCode){
+  const controlMatch = structuralCode.match(/^\s*(for|while|switch)\s*\(/);
+  if(!controlMatch) return null;
+
+  const openIndex = structuralCode.indexOf('(', controlMatch.index);
+  let depth = 0;
+  for(let index = openIndex; index < structuralCode.length; index++){
+    if(structuralCode[index] === '(') depth++;
+    if(structuralCode[index] === ')'){
+      depth--;
+      if(depth === 0) return structuralCode.slice(index + 1).trim();
+    }
+  }
+  return null;
+}
+
 function makeVisibleDisplayText(text){
   return text.replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim();
 }
@@ -778,7 +795,7 @@ function visualizeCode(){
       const structuralCode = codeOutsideStringAndLineComment(trimmed);
       if(index > startIndex && /^\s*if\s*\(/.test(structuralCode)) nested = true;
       if(/\belse\b/.test(structuralCode)) hasElse = true;
-      if(index > startIndex && /^\s*(for|while|switch)\s*\(/.test(structuralCode)) unsupportedBlock = true;
+      if(index > startIndex && (/^\s*(for|while|switch)\s*\(/.test(structuralCode) || /^\s*do\b/.test(structuralCode))) unsupportedBlock = true;
       const structuralBraces = bracesOutsideString(trimmed);
       if(index > startIndex && structuralBraces.includes('{')) unsupportedBlock = true;
       for(const brace of structuralBraces){
@@ -888,6 +905,135 @@ function visualizeCode(){
     return findControlledStatementEnd(elseIndex + 1);
   }
 
+  function nextSignificantLine(startIndex){
+    let index = startIndex;
+    while(index < executionEndIndex &&
+          (lines[index].trim() === '' || isCommentLine(lines[index].trim()))){
+      index++;
+    }
+    return index;
+  }
+
+  // 未対応構文の波かっこを数え、本文の終わりを安全側で特定します。
+  function findBracedUnsupportedBlock(startIndex){
+    let depth = 0;
+    let opened = false;
+
+    for(let index = startIndex; index < executionEndIndex; index++){
+      for(const brace of bracesOutsideString(lines[index])){
+        if(brace === '{'){
+          depth++;
+          opened = true;
+        }else if(opened){
+          depth--;
+        }
+      }
+      if(opened && depth === 0) return { endIndex:index, closed:true };
+    }
+
+    return { endIndex:Math.max(startIndex, executionEndIndex - 1), closed:false };
+  }
+
+  function unsupportedControlInfo(structuralCode){
+    if(/^for\s*\(/.test(structuralCode)) return { keyword:'for', label:'for文' };
+    if(/^while\s*\(/.test(structuralCode)) return { keyword:'while', label:'while文' };
+    if(/^switch\s*\(/.test(structuralCode)) return { keyword:'switch', label:'switch文' };
+    if(/^do\b/.test(structuralCode)) return { keyword:'do', label:'do while文' };
+    return null;
+  }
+
+  function findUnsupportedControlledStatementEnd(startIndex){
+    if(startIndex >= executionEndIndex) return executionEndIndex - 1;
+
+    const structuralCode = codeOutsideStringAndLineComment(lines[startIndex]).trim();
+    if(unsupportedControlInfo(structuralCode)){
+      return findUnsupportedControlRange(startIndex).endIndex;
+    }
+    if(/^if\s*\(/.test(structuralCode)) return findControlledStatementEnd(startIndex);
+    if(structuralCode.startsWith('{')) return findBracedUnsupportedBlock(startIndex).endIndex;
+    return startIndex;
+  }
+
+  function findUnsupportedControlRange(startIndex){
+    const structuralCode = codeOutsideStringAndLineComment(lines[startIndex]).trim();
+    const control = unsupportedControlInfo(structuralCode);
+    if(!control) return { endIndex:startIndex, closed:true };
+
+    if(control.keyword === 'do'){
+      const inlineBody = structuralCode.replace(/^do\b/, '').trim();
+      let bodyEndIndex = startIndex;
+      let closed = true;
+
+      if(inlineBody.startsWith('{')){
+        const block = findBracedUnsupportedBlock(startIndex);
+        bodyEndIndex = block.endIndex;
+        closed = block.closed;
+      }else if(inlineBody === ''){
+        const bodyStartIndex = nextSignificantLine(startIndex + 1);
+        if(bodyStartIndex < executionEndIndex){
+          if(codeOutsideStringAndLineComment(lines[bodyStartIndex]).trim().startsWith('{')){
+            const block = findBracedUnsupportedBlock(bodyStartIndex);
+            bodyEndIndex = block.endIndex;
+            closed = block.closed;
+          }else{
+            bodyEndIndex = findUnsupportedControlledStatementEnd(bodyStartIndex);
+          }
+        }
+      }
+
+      const terminatorIndex = nextSignificantLine(bodyEndIndex + 1);
+      if(terminatorIndex < executionEndIndex){
+        const terminatorCode = codeOutsideStringAndLineComment(lines[terminatorIndex]).trim();
+        if(/^while\s*\(/.test(terminatorCode) && inlineUnsupportedControlBodyCode(terminatorCode) === ';'){
+          bodyEndIndex = terminatorIndex;
+        }
+      }
+
+      return { endIndex:bodyEndIndex, closed };
+    }
+
+    if(bracesOutsideString(lines[startIndex]).includes('{')){
+      return findBracedUnsupportedBlock(startIndex);
+    }
+
+    const inlineBody = inlineUnsupportedControlBodyCode(structuralCode);
+    if(inlineBody && inlineBody !== ';'){
+      if(inlineBody.startsWith('{')) return findBracedUnsupportedBlock(startIndex);
+      return { endIndex:startIndex, closed:true };
+    }
+    if(inlineBody === ';') return { endIndex:startIndex, closed:true };
+
+    const bodyStartIndex = nextSignificantLine(startIndex + 1);
+    if(bodyStartIndex >= executionEndIndex) return { endIndex:startIndex, closed:false };
+
+    const bodyCode = codeOutsideStringAndLineComment(lines[bodyStartIndex]).trim();
+    if(bodyCode.startsWith('{')) return findBracedUnsupportedBlock(bodyStartIndex);
+    return { endIndex:findUnsupportedControlledStatementEnd(bodyStartIndex), closed:true };
+  }
+
+  function warnUnsupportedControl(startIndex, range, control){
+    const lineNo = startIndex + 1;
+    const message = `${control.label}は現在未対応です。制御対象の処理全体は実行しません。`;
+    addAnalysis(analysis, lineNo, message);
+    addHint(hints, lineNo, `${control.label}は未対応`, message);
+    warningLines.add(lineNo);
+    addSkippedLineWarnings(startIndex, lines[startIndex].trim());
+
+    for(let index = startIndex + 1; index <= range.endIndex && index < executionEndIndex; index++){
+      const trimmed = lines[index].trim();
+      if(trimmed === '' || isCommentLine(trimmed)){
+        processSimpleLine(lines[index], index, true);
+      }else{
+        addAnalysis(analysis, index + 1, `未対応の${control.label}に含まれるため、この行は実行されませんでした。`);
+        addSkippedLineWarnings(index, trimmed);
+      }
+    }
+
+    if(!range.closed){
+      addHint(hints, lineNo, '制御構文の終わりを確認', `${control.label}の処理範囲を最後まで確認できないため、以降の実行を安全側で停止しました。`);
+    }
+  }
+
   // main関数の外側は説明だけを付け、実行処理には渡しません。
   for(let index = 0; index < lines.length; index++){
     if(mainRange?.closed && index > mainRange.startIndex && index < mainRange.endIndex) continue;
@@ -917,6 +1063,15 @@ function visualizeCode(){
 
   for(let index = executionStartIndex; index < executionEndIndex; index++){
     const trimmed = lines[index].trim();
+    const structuralCode = codeOutsideStringAndLineComment(lines[index]).trim();
+    const unsupportedControl = unsupportedControlInfo(structuralCode);
+    if(unsupportedControl){
+      const range = findUnsupportedControlRange(index);
+      warnUnsupportedControl(index, range, unsupportedControl);
+      index = range.endIndex;
+      continue;
+    }
+
     if(!/^if\s*\(/.test(trimmed)){
       const result = processSimpleLine(lines[index], index);
       if(result === 'program-ended'){
