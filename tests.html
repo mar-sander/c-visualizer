@@ -264,6 +264,46 @@
         name:'scanf未対応サンプル',
         code:`#include <stdio.h>\n\nint main(void){\n    int score;\n    scanf("%d", &score);\n    return 0;\n}`,
         expect:{ output:'出力はまだありません。', variables:['score = 未初期化'], warningMin:1, hintsInclude:['Ver.0.2_0730では未対応'] }
+      },
+      {
+        name:'return後のprintfを実行しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    printf("開始\\n");\n    return 0;\n    printf("WRONG\\n");\n}`,
+        expect:{ output:'開始', outputExcludes:['WRONG'], warningMax:0, executedExcludes:['printf("WRONG'] }
+      },
+      {
+        name:'return後の代入を実行しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 1;\n    return 0;\n    value = 9;\n}`,
+        expect:{ output:'出力はまだありません。', variables:['value = 1'], warningMax:0, executedExcludes:['value = 9;'] }
+      },
+      {
+        name:'mainより前の文を実行しない',
+        code:`#include <stdio.h>\n\nint outside = 99;\nprintf("OUTSIDE-BEFORE\\n");\n\nint main(void){\n    int inside = 1;\n    printf("MAIN\\n");\n    return 0;\n}`,
+        expect:{ output:'MAIN', outputExcludes:['OUTSIDE-BEFORE'], variables:['inside = 1'], variablesExclude:['outside ='], warningMax:0, executedExcludes:['int outside = 99;', 'printf("OUTSIDE-BEFORE'] }
+      },
+      {
+        name:'mainより後の文を実行しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    int inside = 1;\n    printf("MAIN\\n");\n    return 0;\n}\n\nint outside = 99;\nprintf("OUTSIDE-AFTER\\n");`,
+        expect:{ output:'MAIN', outputExcludes:['OUTSIDE-AFTER'], variables:['inside = 1'], variablesExclude:['outside ='], warningMax:0, executedExcludes:['int outside = 99;', 'printf("OUTSIDE-AFTER'] }
+      },
+      {
+        name:'mainより前のユーザー定義関数を実行しない',
+        code:`#include <stdio.h>\n\nint helper(void){\n    int helperValue = 7;\n    printf("HELPER-BEFORE\\n");\n    return 0;\n}\n\nint main(void){\n    printf("MAIN\\n");\n    return 0;\n}`,
+        expect:{ output:'MAIN', outputExcludes:['HELPER-BEFORE'], variablesExclude:['helperValue ='], warningMax:0, executedExcludes:['printf("HELPER-BEFORE'] }
+      },
+      {
+        name:'mainより後のユーザー定義関数を実行しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    printf("MAIN\\n");\n    return 0;\n}\n\nint helper(void){\n    int helperValue = 7;\n    printf("HELPER-AFTER\\n");\n    return 0;\n}`,
+        expect:{ output:'MAIN', outputExcludes:['HELPER-AFTER'], variablesExclude:['helperValue ='], warningMax:0, executedExcludes:['printf("HELPER-AFTER'] }
+      },
+      {
+        name:'文字列・行コメント内の波かっこをmain判定から除外',
+        code:`#include <stdio.h>\n\nint main(void){ // } はコメント\n    printf("brace { } and else\\n");\n    // } もコメント\n    int value = 1;\n    return 0;\n}`,
+        expect:{ output:'brace { } and else', variables:['value = 1'], warningMax:0 }
+      },
+      {
+        name:'閉じられていないmainを実行しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 1;\n    printf("WRONG\\n");\n    return 0;`,
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG'], variablesExclude:['value ='], warningMin:1, hintsInclude:['main関数の終わりを確認'], executedExcludes:['int value = 1;', 'printf("WRONG', 'return 0;'] }
       }
     ];
 

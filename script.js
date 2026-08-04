@@ -119,6 +119,32 @@ function bracesOutsideString(text){
   return [...codeOutsideStringAndLineComment(text)].filter(ch => ch === '{' || ch === '}');
 }
 
+// 対応形式のmain関数を探し、波かっこの深さから処理範囲を特定します。
+function findMainExecutionRange(lines){
+  for(let startIndex = 0; startIndex < lines.length; startIndex++){
+    const structuralCode = codeOutsideStringAndLineComment(lines[startIndex]).trim();
+    if(!/^int\s+main\s*\([^)]*\)\s*\{\s*$/.test(structuralCode)) continue;
+
+    let depth = 0;
+    let opened = false;
+    for(let endIndex = startIndex; endIndex < lines.length; endIndex++){
+      for(const brace of bracesOutsideString(lines[endIndex])){
+        if(brace === '{'){
+          depth++;
+          opened = true;
+        }else{
+          depth--;
+        }
+      }
+      if(opened && depth === 0){
+        return { startIndex, endIndex, closed:true };
+      }
+    }
+    return { startIndex, endIndex:lines.length - 1, closed:false };
+  }
+  return null;
+}
+
 // if条件の丸かっこの対応を数え、閉じ丸かっこの後ろにある本文を返します。
 function inlineIfBodyCode(structuralCode){
   const ifMatch = structuralCode.match(/^\s*(?:else\s+)?if\s*\(/);
@@ -455,6 +481,7 @@ function formatPrintfString(format, values){
 function visualizeCode(){
   const code = document.getElementById('codeInput').value.replace(/\r\n/g, '\n');
   const lines = code.split('\n');
+  const mainRange = findMainExecutionRange(lines);
   const analysis = {};
   const hints = [];
   const executedLines = new Set();
@@ -464,7 +491,7 @@ function visualizeCode(){
   const steps = [];
   let output = '';
   let braceBalance = 0;
-  let hasMain = false;
+  let hasMain = mainRange !== null;
   let hasReturn = false;
   let stepNo = 1;
 
@@ -534,7 +561,7 @@ function visualizeCode(){
       hasReturn = true;
       addAnalysis(analysis, lineNo, 'プログラムを正常に終了するための文です。');
       addStep(lineNo, 'プログラムを終了します。');
-      return;
+      return 'program-ended';
     }
 
     if(/^if\s*\(/.test(trimmed) || /^for\s*\(/.test(trimmed) || /^while\s*\(/.test(trimmed) || /^scanf\s*\(/.test(trimmed)){
@@ -681,6 +708,18 @@ function visualizeCode(){
       addHint(hints, lineNo, '未対応コード', 'この行は現在の可視化対象外です。まずは int、代入、整数の四則演算、比較式、printf、単純なif文の範囲で試してみましょう。');
       warningLines.add(lineNo);
     }
+  }
+
+  function describeNonExecutableLine(rawLine, index, reason){
+    const trimmed = rawLine.trim();
+    const lineNo = index + 1;
+
+    if(trimmed === '' || isCommentLine(trimmed) || /^#include\s*</.test(trimmed)){
+      processSimpleLine(rawLine, index);
+      return;
+    }
+
+    addAnalysis(analysis, lineNo, reason);
   }
 
   function markSkippedIfBody(startIndex, endIndex, evaluationFailed){
@@ -849,10 +888,41 @@ function visualizeCode(){
     return findControlledStatementEnd(elseIndex + 1);
   }
 
+  // main関数の外側は説明だけを付け、実行処理には渡しません。
   for(let index = 0; index < lines.length; index++){
+    if(mainRange?.closed && index > mainRange.startIndex && index < mainRange.endIndex) continue;
+
+    if(mainRange && index === mainRange.startIndex){
+      processSimpleLine(lines[index], index);
+      if(!mainRange.closed){
+        addAnalysis(analysis, index + 1, 'main関数の終わりを確認できないため、中のコードは実行しません。');
+      }
+      continue;
+    }
+
+    if(mainRange?.closed && index === mainRange.endIndex){
+      addAnalysis(analysis, index + 1, 'main関数の処理範囲の終わりです。');
+      continue;
+    }
+
+    const reason = mainRange?.closed
+      ? 'main関数の外側なので、この行は実行対象にしません。'
+      : 'main関数の処理範囲を確認できないため、この行は実行しません。';
+    describeNonExecutableLine(lines[index], index, reason);
+  }
+
+  let programEndIndex = null;
+  const executionStartIndex = mainRange?.closed ? mainRange.startIndex + 1 : 0;
+  const executionEndIndex = mainRange?.closed ? mainRange.endIndex : 0;
+
+  for(let index = executionStartIndex; index < executionEndIndex; index++){
     const trimmed = lines[index].trim();
     if(!/^if\s*\(/.test(trimmed)){
-      processSimpleLine(lines[index], index);
+      const result = processSimpleLine(lines[index], index);
+      if(result === 'program-ended'){
+        programEndIndex = index;
+        break;
+      }
       continue;
     }
 
@@ -922,12 +992,22 @@ function visualizeCode(){
     index = block.endIndex;
   }
 
+  if(programEndIndex !== null){
+    for(let index = programEndIndex + 1; index < executionEndIndex; index++){
+      addAnalysis(analysis, index + 1, 'プログラムが終了した後なので、この行は実行されませんでした。');
+    }
+  }
+
   if(!hasMain){
     addHint(hints, null, 'main関数が見当たりません', '学習用の基本的なCプログラムでは、<code>int main(void)</code> などの開始地点を書くことが多いです。');
   }
 
   if(!hasReturn){
     addHint(hints, null, 'return 0; が見当たりません', '学習用の基本形として、最後に <code>return 0;</code> を書く形も確認しておきましょう。');
+  }
+
+  if(mainRange && !mainRange.closed){
+    addHint(hints, mainRange.startIndex + 1, 'main関数の終わりを確認', 'main関数を閉じる波かっこが見つからないため、コードの実行を停止しました。');
   }
 
   if(braceBalance !== 0){
