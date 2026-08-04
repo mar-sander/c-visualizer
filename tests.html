@@ -354,6 +354,11 @@
         name:'対応if内のdo while文を安全に停止',
         code:`#include <stdio.h>\n\nint main(void){\n    if(1){\n        do\n            printf("WRONG-IF-DO\\n");\n        while(0);\n    }\n    printf("AFTER-IF-DO\\n");\n    return 0;\n}`,
         expect:{ output:'AFTER-IF-DO', outputExcludes:['WRONG-IF-DO'], warningMin:1, hintsInclude:['入れ子のブロックは未対応'], executedExcludes:['printf("WRONG-IF-DO'] }
+      },
+      {
+        name:'未対応制御構文の見出しでも複数文を警告',
+        code:`#include <stdio.h>\n\nint main(void){\n    while(0); printf("WRONG-CONTROL-HEADER\\n");\n    printf("AFTER-CONTROL-HEADER\\n");\n    return 0;\n}`,
+        expect:{ output:'AFTER-CONTROL-HEADER', outputExcludes:['WRONG-CONTROL-HEADER'], warningMin:2, hintsInclude:['while文は未対応', '1行に複数の文があります'], executedExcludes:['printf("WRONG-CONTROL-HEADER'] }
       }
     ];
 
