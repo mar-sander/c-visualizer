@@ -1017,6 +1017,7 @@ function visualizeCode(){
     addAnalysis(analysis, lineNo, message);
     addHint(hints, lineNo, `${control.label}は未対応`, message);
     warningLines.add(lineNo);
+    addSkippedLineWarnings(startIndex, lines[startIndex].trim());
 
     for(let index = startIndex + 1; index <= range.endIndex && index < executionEndIndex; index++){
       const trimmed = lines[index].trim();
