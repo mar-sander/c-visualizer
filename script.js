@@ -293,6 +293,10 @@ function tokenizeExpression(expr){
 }
 
 function evaluateArithmeticExpression(expr, variables){
+  if(/\+\+|--/.test(expr)){
+    return { ok:false, error:'++ と -- は現在未対応です。値を1増減する処理は、代入と四則演算に書き換えてください。' };
+  }
+
   const tokenResult = tokenizeExpression(expr);
   if(!tokenResult.ok) return { ok:false, error:tokenResult.error };
 
@@ -607,6 +611,15 @@ function visualizeCode(){
       return;
     }
 
+    const structuralCode = codeOutsideStringAndLineComment(trimmed);
+    if(/\+\+|--/.test(structuralCode)){
+      const message = '++ と -- は現在未対応です。この行は実行しません。値を1増減するときは、value = value + 1; のように書いてください。';
+      addAnalysis(analysis, lineNo, message);
+      addHint(hints, lineNo, '++・--は未対応', message);
+      warningLines.add(lineNo);
+      return;
+    }
+
     if(insideIf && !/^int\s+/.test(trimmed) &&
        !/^[A-Za-z_]\w*\s*=/.test(trimmed) && !/^printf\s*\(/.test(trimmed)){
       addAnalysis(analysis, lineNo, 'この処理はif文の中では現在未対応のため、実行しません。');
@@ -727,6 +740,14 @@ function visualizeCode(){
     const printfMatch = trimmed.match(/^printf\s*\(\s*"((?:\\.|[^"\\])*)"\s*(?:,\s*(.*))?\)\s*;$/);
     if(printfMatch){
       const format = printfMatch[1];
+      if(format.includes('%%')){
+        const message = 'printfの %% は現在未対応です。この行は、実際のC言語と異なる表示を避けるため実行しません。';
+        addAnalysis(analysis, lineNo, message);
+        addHint(hints, lineNo, 'printfの%%は未対応', message);
+        warningLines.add(lineNo);
+        return;
+      }
+
       const argText = printfMatch[2] || '';
       const args = argText ? splitArgs(argText) : [];
       const values = [];
