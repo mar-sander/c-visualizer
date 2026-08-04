@@ -439,6 +439,56 @@
         name:'閉じられていないブロックコメントでは実行しない',
         code:`#include <stdio.h>\n\nint main(void){\n    int value = 1;\n    /* コメントが閉じていない\n    }\n    printf("WRONG-UNCLOSED-COMMENT\\n");\n    return 0;`,
         expect:{ output:'出力はまだありません。', outputExcludes:['WRONG-UNCLOSED-COMMENT'], variablesExclude:['value ='], warningMin:1, hintsInclude:['main関数の終わりを確認'], executedExcludes:['int value = 1;', 'printf("WRONG-UNCLOSED-COMMENT', 'return 0;'] }
+      },
+      {
+        name:'後置インクリメントを実行しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 1;\n    value++;\n    printf("%d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'1', variables:['value = 1'], warningMin:1, hintsInclude:['++・--は未対応'], executedExcludes:['value++;'] }
+      },
+      {
+        name:'後置デクリメントを実行しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 1;\n    value--;\n    printf("%d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'1', variables:['value = 1'], warningMin:1, hintsInclude:['++・--は未対応'], executedExcludes:['value--;'] }
+      },
+      {
+        name:'前置インクリメントを初期値として解釈しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 1;\n    int result = ++value;\n    printf("%d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'1', variables:['value = 1'], variablesExclude:['result ='], warningMin:1, hintsInclude:['++・--は未対応'], executedExcludes:['int result = ++value;'] }
+      },
+      {
+        name:'連続したマイナスを減算として解釈しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 1;\n    value = 1--2;\n    printf("%d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'1', variables:['value = 1'], warningMin:1, hintsInclude:['++・--は未対応'], executedExcludes:['value = 1--2;'] }
+      },
+      {
+        name:'if条件のインクリメントを評価しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 1;\n    if(++value){\n        value = 9;\n        printf("WRONG-IF-INCREMENT\\n");\n    }\n    printf("%d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'1', outputExcludes:['WRONG-IF-INCREMENT'], variables:['value = 1'], warningMin:1, hintsInclude:['++ と -- は現在未対応'], executedExcludes:['value = 9;', 'printf("WRONG-IF-INCREMENT'] }
+      },
+      {
+        name:'printf引数のインクリメントを評価しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 1;\n    printf("%d\\n", ++value);\n    printf("AFTER %d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'AFTER 1', variables:['value = 1'], warningMin:1, hintsInclude:['++・--は未対応'], executedExcludes:['printf("%d', '++value'] }
+      },
+      {
+        name:'文字列内のインクリメント記号は保持',
+        code:`#include <stdio.h>\n\nint main(void){\n    printf("++ and --\\n");\n    return 0;\n}`,
+        expect:{ output:'++ and --', warningMax:0 }
+      },
+      {
+        name:'printfの二重パーセントを実行しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    printf("100%%\\n");\n    printf("AFTER-PERCENT\\n");\n    return 0;\n}`,
+        expect:{ output:'AFTER-PERCENT', outputExcludes:['100%%'], warningMin:1, hintsInclude:['printfの%%は未対応'], executedExcludes:['printf("100%%'] }
+      },
+      {
+        name:'剰余演算とpercent dは維持',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 5 % 2;\n    printf("%d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'1', variables:['value = 1'], warningMax:0 }
+      },
+      {
+        name:'空白を挟んだ負数の減算は維持',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 1;\n    value = value - -1;\n    printf("%d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'2', variables:['value = 2'], warningMax:0 }
       }
     ];
 
