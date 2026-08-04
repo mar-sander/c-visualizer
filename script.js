@@ -43,10 +43,6 @@ function addHint(list, lineNo, title, text){
   list.push(`<div class="warning-line"><strong>${prefix}${title}</strong><br>${text}</div>`);
 }
 
-function isCommentLine(trimmed){
-  return trimmed.startsWith('//') || trimmed.startsWith('/*') || trimmed.startsWith('*') || trimmed.startsWith('*/');
-}
-
 function shouldProbablyEndWithSemicolon(trimmed){
   if(trimmed === '') return false;
   if(trimmed.endsWith(';')) return false;
@@ -112,6 +108,74 @@ function codeOutsideStringAndLineComment(text){
     if(!inString && ch === '/' && text[index + 1] === '/') break;
     code += inString ? ' ' : ch;
   }
+  return code;
+}
+
+// 文字列を残したまま、行コメントと複数行のブロックコメントを空白に置き換えます。
+// 改行位置を保つことで、元のコードと行番号を一致させます。
+function codeWithoutComments(text){
+  let code = '';
+  let inString = false;
+  let inLineComment = false;
+  let inBlockComment = false;
+  let escape = false;
+
+  for(let index = 0; index < text.length; index++){
+    const ch = text[index];
+    const next = text[index + 1];
+
+    if(inLineComment){
+      if(ch === '\n'){
+        inLineComment = false;
+        code += '\n';
+      }else{
+        code += ' ';
+      }
+      continue;
+    }
+
+    if(inBlockComment){
+      if(ch === '*' && next === '/'){
+        code += '  ';
+        index++;
+        inBlockComment = false;
+      }else{
+        code += ch === '\n' ? '\n' : ' ';
+      }
+      continue;
+    }
+
+    if(escape){
+      code += ch;
+      escape = false;
+      continue;
+    }
+    if(inString && ch === '\\'){
+      code += ch;
+      escape = true;
+      continue;
+    }
+    if(ch === '"'){
+      code += ch;
+      inString = !inString;
+      continue;
+    }
+    if(!inString && ch === '/' && next === '/'){
+      code += '  ';
+      index++;
+      inLineComment = true;
+      continue;
+    }
+    if(!inString && ch === '/' && next === '*'){
+      code += '  ';
+      index++;
+      inBlockComment = true;
+      continue;
+    }
+
+    code += ch;
+  }
+
   return code;
 }
 
@@ -498,7 +562,8 @@ function formatPrintfString(format, values){
 function visualizeCode(){
   const code = document.getElementById('codeInput').value.replace(/\r\n/g, '\n');
   const lines = code.split('\n');
-  const mainRange = findMainExecutionRange(lines);
+  const executableLines = codeWithoutComments(code).split('\n');
+  const mainRange = findMainExecutionRange(executableLines);
   const analysis = {};
   const hints = [];
   const executedLines = new Set();
@@ -512,8 +577,8 @@ function visualizeCode(){
   let hasReturn = false;
   let stepNo = 1;
 
-  for(const rawLine of lines){
-    for(const ch of bracesOutsideString(rawLine)){
+  for(const executableLine of executableLines){
+    for(const ch of bracesOutsideString(executableLine)){
       if(ch === '{') braceBalance++;
       if(ch === '}') braceBalance--;
     }
@@ -531,15 +596,14 @@ function visualizeCode(){
 
   function processSimpleLine(rawLine, index, insideIf = false){
     const lineNo = index + 1;
-    const trimmed = rawLine.trim();
+    const rawTrimmed = rawLine.trim();
+    const trimmed = executableLines[index].trim();
 
     if(trimmed === ''){
-      addAnalysis(analysis, lineNo, '空欄です。処理は行いません。');
-      return;
-    }
-
-    if(isCommentLine(trimmed)){
-      addAnalysis(analysis, lineNo, 'コメントです。プログラムの動作には直接関係しません。');
+      const message = rawTrimmed === ''
+        ? '空欄です。処理は行いません。'
+        : 'コメントです。プログラムの動作には直接関係しません。';
+      addAnalysis(analysis, lineNo, message);
       return;
     }
 
@@ -728,10 +792,10 @@ function visualizeCode(){
   }
 
   function describeNonExecutableLine(rawLine, index, reason){
-    const trimmed = rawLine.trim();
+    const trimmed = executableLines[index].trim();
     const lineNo = index + 1;
 
-    if(trimmed === '' || isCommentLine(trimmed) || /^#include\s*</.test(trimmed)){
+    if(trimmed === '' || /^#include\s*</.test(trimmed)){
       processSimpleLine(rawLine, index);
       return;
     }
@@ -744,8 +808,8 @@ function visualizeCode(){
       ? 'if文の条件を評価できなかったため、この行は実行されませんでした。'
       : 'if文の条件が成立しなかったため、この行は実行されませんでした。';
     for(let bodyIndex = startIndex; bodyIndex < endIndex; bodyIndex++){
-      const trimmed = lines[bodyIndex].trim();
-      if(trimmed === '' || isCommentLine(trimmed)){
+      const trimmed = executableLines[bodyIndex].trim();
+      if(trimmed === ''){
         processSimpleLine(lines[bodyIndex], bodyIndex, true);
         continue;
       }
@@ -774,8 +838,8 @@ function visualizeCode(){
     addHint(hints, lineNo, title, message);
     warningLines.add(lineNo);
     for(let index = startIndex + 1; index <= endIndex && index < lines.length; index++){
-      const trimmed = lines[index].trim();
-      if(trimmed === '' || isCommentLine(trimmed)){
+      const trimmed = executableLines[index].trim();
+      if(trimmed === ''){
         processSimpleLine(lines[index], index, true);
       }else{
         addAnalysis(analysis, index + 1, '未対応のif文に含まれるため、この行は実行されませんでした。');
@@ -791,7 +855,7 @@ function visualizeCode(){
     let hasElse = false;
 
     for(let index = startIndex; index < lines.length; index++){
-      const trimmed = lines[index].trim();
+      const trimmed = executableLines[index].trim();
       const structuralCode = codeOutsideStringAndLineComment(trimmed);
       if(index > startIndex && /^\s*if\s*\(/.test(structuralCode)) nested = true;
       if(/\belse\b/.test(structuralCode)) hasElse = true;
@@ -814,8 +878,8 @@ function visualizeCode(){
         }
 
         let next = index + 1;
-        while(next < lines.length && (lines[next].trim() === '' || isCommentLine(lines[next].trim()))) next++;
-        if(next < lines.length && /^else\b/.test(codeOutsideStringAndLineComment(lines[next]).trim())){
+        while(next < lines.length && executableLines[next].trim() === '') next++;
+        if(next < lines.length && /^else\b/.test(codeOutsideStringAndLineComment(executableLines[next]).trim())){
           return {
             endIndex:findElseControlledStatementEnd(next),
             nested,
@@ -824,7 +888,7 @@ function visualizeCode(){
             closed:true
           };
         }
-        return { endIndex:index, nested, unsupportedBlock, hasElse, closed:lines[index].trim() === '}' };
+        return { endIndex:index, nested, unsupportedBlock, hasElse, closed:executableLines[index].trim() === '}' };
       }
     }
     return { endIndex:lines.length - 1, nested, unsupportedBlock, hasElse, closed:false };
@@ -834,13 +898,12 @@ function visualizeCode(){
   // 制御対象も波かっこなしif文なら、その内側の制御対象までたどります。
   function findControlledStatementEnd(startIndex){
     let statementIndex = startIndex;
-    while(statementIndex < lines.length &&
-          (lines[statementIndex].trim() === '' || isCommentLine(lines[statementIndex].trim()))){
+    while(statementIndex < lines.length && executableLines[statementIndex].trim() === ''){
       statementIndex++;
     }
     if(statementIndex >= lines.length) return lines.length - 1;
 
-    const structuralCode = codeOutsideStringAndLineComment(lines[statementIndex]).trim();
+    const structuralCode = codeOutsideStringAndLineComment(executableLines[statementIndex]).trim();
     const inlineBody = inlineIfBodyCode(structuralCode);
     if(structuralCode === '{' || inlineBody === '{'){
       return findIfBlock(statementIndex).endIndex;
@@ -850,24 +913,22 @@ function visualizeCode(){
       let trueEndIndex = statementIndex;
       if(inlineBody === ''){
         let controlledIndex = statementIndex + 1;
-        while(controlledIndex < lines.length &&
-              (lines[controlledIndex].trim() === '' || isCommentLine(lines[controlledIndex].trim()))){
+        while(controlledIndex < lines.length && executableLines[controlledIndex].trim() === ''){
           controlledIndex++;
         }
         const controlledCode = controlledIndex < lines.length
-          ? codeOutsideStringAndLineComment(lines[controlledIndex]).trim()
+          ? codeOutsideStringAndLineComment(executableLines[controlledIndex]).trim()
           : '';
         if(controlledCode === '{') return findIfBlock(controlledIndex).endIndex;
         trueEndIndex = findControlledStatementEnd(statementIndex + 1);
       }
       let elseIndex = trueEndIndex + 1;
-      while(elseIndex < lines.length &&
-            (lines[elseIndex].trim() === '' || isCommentLine(lines[elseIndex].trim()))){
+      while(elseIndex < lines.length && executableLines[elseIndex].trim() === ''){
         elseIndex++;
       }
       if(elseIndex >= lines.length) return trueEndIndex;
 
-      const elseCode = codeOutsideStringAndLineComment(lines[elseIndex]).trim();
+      const elseCode = codeOutsideStringAndLineComment(executableLines[elseIndex]).trim();
       if(!/^else\b/.test(elseCode)) return trueEndIndex;
       if(/^else\s+if\s*\(/.test(elseCode)){
         return findControlledIfEnd(elseIndex);
@@ -882,7 +943,7 @@ function visualizeCode(){
 
   // else if の行をif文の開始行として扱い、後続のelseも含めて探します。
   function findControlledIfEnd(ifIndex, structuralCodeOverride = null){
-    const structuralCode = structuralCodeOverride ?? codeOutsideStringAndLineComment(lines[ifIndex]).trim();
+    const structuralCode = structuralCodeOverride ?? codeOutsideStringAndLineComment(executableLines[ifIndex]).trim();
     const ifCode = structuralCode.replace(/^else\s+/, '');
     const inlineBody = inlineIfBodyCode(ifCode);
     if(inlineBody === '{') return findIfBlock(ifIndex).endIndex;
@@ -890,24 +951,22 @@ function visualizeCode(){
     let trueEndIndex = ifIndex;
     if(inlineBody === ''){
       let controlledIndex = ifIndex + 1;
-      while(controlledIndex < lines.length &&
-            (lines[controlledIndex].trim() === '' || isCommentLine(lines[controlledIndex].trim()))){
+      while(controlledIndex < lines.length && executableLines[controlledIndex].trim() === ''){
         controlledIndex++;
       }
       if(controlledIndex < lines.length &&
-         codeOutsideStringAndLineComment(lines[controlledIndex]).trim() === '{'){
+         codeOutsideStringAndLineComment(executableLines[controlledIndex]).trim() === '{'){
         return findIfBlock(controlledIndex).endIndex;
       }
       trueEndIndex = findControlledStatementEnd(ifIndex + 1);
     }
     let elseIndex = trueEndIndex + 1;
-    while(elseIndex < lines.length &&
-          (lines[elseIndex].trim() === '' || isCommentLine(lines[elseIndex].trim()))){
+    while(elseIndex < lines.length && executableLines[elseIndex].trim() === ''){
       elseIndex++;
     }
     if(elseIndex >= lines.length) return trueEndIndex;
 
-    const elseCode = codeOutsideStringAndLineComment(lines[elseIndex]).trim();
+    const elseCode = codeOutsideStringAndLineComment(executableLines[elseIndex]).trim();
     if(!/^else\b/.test(elseCode)) return trueEndIndex;
     if(/^else\s+if\s*\(/.test(elseCode)) return findControlledIfEnd(elseIndex);
     if(/^else\s*\{/.test(elseCode)) return findIfBlock(elseIndex).endIndex;
@@ -917,7 +976,7 @@ function visualizeCode(){
 
   // 未対応のelseが制御する1文またはブロックの終わりを探します。
   function findElseControlledStatementEnd(elseIndex){
-    const structuralCode = codeOutsideStringAndLineComment(lines[elseIndex]).trim();
+    const structuralCode = codeOutsideStringAndLineComment(executableLines[elseIndex]).trim();
     const elsePosition = structuralCode.search(/\belse\b/);
     if(elsePosition < 0) return elseIndex;
 
@@ -944,8 +1003,7 @@ function visualizeCode(){
 
   function nextSignificantLine(startIndex){
     let index = startIndex;
-    while(index < executionEndIndex &&
-          (lines[index].trim() === '' || isCommentLine(lines[index].trim()))){
+    while(index < executionEndIndex && executableLines[index].trim() === ''){
       index++;
     }
     return index;
@@ -957,7 +1015,7 @@ function visualizeCode(){
     let opened = false;
 
     for(let index = startIndex; index < executionEndIndex; index++){
-      for(const brace of bracesOutsideString(lines[index])){
+      for(const brace of bracesOutsideString(executableLines[index])){
         if(brace === '{'){
           depth++;
           opened = true;
@@ -982,7 +1040,7 @@ function visualizeCode(){
   function findUnsupportedControlledStatementEnd(startIndex){
     if(startIndex >= executionEndIndex) return executionEndIndex - 1;
 
-    const structuralCode = codeOutsideStringAndLineComment(lines[startIndex]).trim();
+    const structuralCode = codeOutsideStringAndLineComment(executableLines[startIndex]).trim();
     if(unsupportedControlInfo(structuralCode)){
       return findUnsupportedControlRange(startIndex).endIndex;
     }
@@ -992,7 +1050,7 @@ function visualizeCode(){
   }
 
   function findUnsupportedControlRange(startIndex, structuralCodeOverride = null){
-    const structuralCode = structuralCodeOverride ?? codeOutsideStringAndLineComment(lines[startIndex]).trim();
+    const structuralCode = structuralCodeOverride ?? codeOutsideStringAndLineComment(executableLines[startIndex]).trim();
     const control = unsupportedControlInfo(structuralCode);
     if(!control) return { endIndex:startIndex, closed:true };
 
@@ -1008,7 +1066,7 @@ function visualizeCode(){
       }else if(inlineBody === ''){
         const bodyStartIndex = nextSignificantLine(startIndex + 1);
         if(bodyStartIndex < executionEndIndex){
-          if(codeOutsideStringAndLineComment(lines[bodyStartIndex]).trim().startsWith('{')){
+          if(codeOutsideStringAndLineComment(executableLines[bodyStartIndex]).trim().startsWith('{')){
             const block = findBracedUnsupportedBlock(bodyStartIndex);
             bodyEndIndex = block.endIndex;
             closed = block.closed;
@@ -1020,7 +1078,7 @@ function visualizeCode(){
 
       const terminatorIndex = nextSignificantLine(bodyEndIndex + 1);
       if(terminatorIndex < executionEndIndex){
-        const terminatorCode = codeOutsideStringAndLineComment(lines[terminatorIndex]).trim();
+        const terminatorCode = codeOutsideStringAndLineComment(executableLines[terminatorIndex]).trim();
         if(/^while\s*\(/.test(terminatorCode) && inlineUnsupportedControlBodyCode(terminatorCode) === ';'){
           bodyEndIndex = terminatorIndex;
         }
@@ -1029,7 +1087,7 @@ function visualizeCode(){
       return { endIndex:bodyEndIndex, closed };
     }
 
-    if(bracesOutsideString(lines[startIndex]).includes('{')){
+    if(bracesOutsideString(executableLines[startIndex]).includes('{')){
       return findBracedUnsupportedBlock(startIndex);
     }
 
@@ -1043,7 +1101,7 @@ function visualizeCode(){
     const bodyStartIndex = nextSignificantLine(startIndex + 1);
     if(bodyStartIndex >= executionEndIndex) return { endIndex:startIndex, closed:false };
 
-    const bodyCode = codeOutsideStringAndLineComment(lines[bodyStartIndex]).trim();
+    const bodyCode = codeOutsideStringAndLineComment(executableLines[bodyStartIndex]).trim();
     if(bodyCode.startsWith('{')) return findBracedUnsupportedBlock(bodyStartIndex);
     return { endIndex:findUnsupportedControlledStatementEnd(bodyStartIndex), closed:true };
   }
@@ -1056,8 +1114,8 @@ function visualizeCode(){
     warningLines.add(lineNo);
 
     for(let index = startIndex + 1; index <= range.endIndex && index < executionEndIndex; index++){
-      const trimmed = lines[index].trim();
-      if(trimmed === '' || isCommentLine(trimmed)){
+      const trimmed = executableLines[index].trim();
+      if(trimmed === ''){
         processSimpleLine(lines[index], index, true);
       }else{
         addAnalysis(analysis, index + 1, `未対応の${control.label}に含まれるため、この行は実行されませんでした。`);
@@ -1098,8 +1156,8 @@ function visualizeCode(){
   const executionEndIndex = mainRange?.closed ? mainRange.endIndex : 0;
 
   for(let index = executionStartIndex; index < executionEndIndex; index++){
-    const trimmed = lines[index].trim();
-    const structuralCode = codeOutsideStringAndLineComment(lines[index]).trim();
+    const trimmed = executableLines[index].trim();
+    const structuralCode = codeOutsideStringAndLineComment(executableLines[index]).trim();
     const unsupportedControl = unsupportedControlInfo(structuralCode);
     if(unsupportedControl){
       const range = findUnsupportedControlRange(index);
@@ -1108,7 +1166,7 @@ function visualizeCode(){
       continue;
     }
 
-    if(!/^if\s*\(/.test(trimmed)){
+    if(!/^if\s*\(/.test(structuralCode)){
       const result = processSimpleLine(lines[index], index);
       if(result === 'program-ended'){
         programEndIndex = index;
@@ -1117,14 +1175,14 @@ function visualizeCode(){
       continue;
     }
 
-    const headerMatch = trimmed.match(/^if\s*\((.*)\)\s*\{$/);
+    const headerMatch = structuralCode.match(/^if\s*\((.*)\)\s*\{$/);
     if(!headerMatch){
       let skippedIndex = index + 1;
-      while(skippedIndex < lines.length && (lines[skippedIndex].trim() === '' || isCommentLine(lines[skippedIndex].trim()))){
+      while(skippedIndex < lines.length && executableLines[skippedIndex].trim() === ''){
         skippedIndex++;
       }
       const nextStructuralCode = skippedIndex < lines.length
-        ? codeOutsideStringAndLineComment(lines[skippedIndex]).trim()
+        ? codeOutsideStringAndLineComment(executableLines[skippedIndex]).trim()
         : '';
       if(nextStructuralCode === '{'){
         const detachedBlock = findIfBlock(skippedIndex);
