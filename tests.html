@@ -389,6 +389,61 @@
         name:'同一行else whileの本文を実行しない',
         code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    if(value == 0){\n        value = 1;\n    } else while(value < 3)\n        value = 9;\n    printf("%d\\n", value);\n    return 0;\n}`,
         expect:{ output:'0', variables:['value = 0'], warningMin:1, hintsInclude:['else付きif文は未対応'], executedExcludes:['value = 1;', 'value = 9;'] }
+      },
+      {
+        name:'対応文の末尾にある行コメントを除外',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 1; // 初期値\n    value = value + 1; // 1を加える\n    printf("%d\\n", value); // 表示\n    return 0; // 終了\n}`,
+        expect:{ output:'2', variables:['value = 2'], warningMax:0, executedIncludes:['value = value + 1;', 'printf("%d'] }
+      },
+      {
+        name:'ifヘッダー末尾の行コメントを除外',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    if(1){ // 条件成立\n        value = 1;\n        printf("IF-COMMENT\\n");\n    }\n    printf("%d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'IF-COMMENT\n1', variables:['value = 1'], warningMax:0, executedIncludes:['value = 1;', 'printf("IF-COMMENT'] }
+      },
+      {
+        name:'mainヘッダー末尾のブロックコメントを除外',
+        code:`#include <stdio.h>\n\nint main(void){ /* 開始 */\n    int value = 3;\n    printf("%d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'3', variables:['value = 3'], warningMax:0 }
+      },
+      {
+        name:'複数行ブロックコメント内のコードを実行しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 1;\n    /*\n    value = 9;\n    printf("WRONG-BLOCK-CODE\\n");\n    return 0;\n    */\n    printf("%d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'1', outputExcludes:['WRONG-BLOCK-CODE'], variables:['value = 1'], variablesExclude:['value = 9'], warningMax:0, executedExcludes:['value = 9;', 'printf("WRONG-BLOCK-CODE'] }
+      },
+      {
+        name:'ブロックコメント内の波かっこを構造判定から除外',
+        code:`#include <stdio.h>\n\n/* } } } int main(void){ */\nint main(void){\n    /* { { } */\n    int value = 4;\n    printf("%d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'4', variables:['value = 4'], warningMax:0 }
+      },
+      {
+        name:'文中のブロックコメントを除外',
+        code:`#include <stdio.h>\n\nint main(void){\n    int /* 変数名 */ value = 5;\n    value = value /* 元の値 */ + 2;\n    printf("%d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'7', variables:['value = 7'], warningMax:0 }
+      },
+      {
+        name:'文字列内のコメント記号を保持',
+        code:`#include <stdio.h>\n\nint main(void){\n    printf("https://example.com /* text */ // end\\n");\n    return 0;\n}`,
+        expect:{ output:'https://example.com /* text */ // end', warningMax:0 }
+      },
+      {
+        name:'return末尾のブロックコメント後も終了',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 1;\n    return 0; /* ここで終了 */\n    value = 9;\n    printf("WRONG-AFTER-RETURN\\n");\n}`,
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG-AFTER-RETURN'], variables:['value = 1'], warningMax:0, executedExcludes:['value = 9;', 'printf("WRONG-AFTER-RETURN'] }
+      },
+      {
+        name:'elseと本文の間のブロックコメントを除外',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    if(1){\n        value = 1;\n    }\n    else\n        /* この行は制御対象ではない */\n        value = 9;\n    printf("%d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'0', variables:['value = 0'], warningMin:1, hintsInclude:['else付きif文は未対応'], executedExcludes:['value = 1;', 'value = 9;'] }
+      },
+      {
+        name:'if終了波かっこ末尾のコメントを除外',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    if(1){\n        value = 6;\n    } /* if終了 */\n    printf("%d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'6', variables:['value = 6'], warningMax:0 }
+      },
+      {
+        name:'閉じられていないブロックコメントでは実行しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 1;\n    /* コメントが閉じていない\n    }\n    printf("WRONG-UNCLOSED-COMMENT\\n");\n    return 0;`,
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG-UNCLOSED-COMMENT'], variablesExclude:['value ='], warningMin:1, hintsInclude:['main関数の終わりを確認'], executedExcludes:['int value = 1;', 'printf("WRONG-UNCLOSED-COMMENT', 'return 0;'] }
       }
     ];
 
