@@ -223,9 +223,9 @@
         expect:{ output:'終了', variables:['score = 78'], variablesExclude:['bonus ='], warningMin:1, hintsInclude:['分岐内の変数宣言は未対応'] }
       },
       {
-        name:'入れ子ifを安全に停止',
-        code:`#include <stdio.h>\n\nint main(void){\n    int a = 1;\n    int b = 1;\n    if(a > 0){\n        if(b > 0){\n            printf("WRONG\\n");\n        }\n    }\n    printf("終了\\n");\n    return 0;\n}`,
-        expect:{ output:'終了', outputExcludes:['WRONG'], warningMin:1, hintsInclude:['入れ子'], executedExcludes:['printf("WRONG'] }
+        name:'入れ子if・外側成立・内側成立',
+        code:`#include <stdio.h>\n\nint main(void){\n    int a = 1;\n    int b = 1;\n    if(a > 0){\n        if(b > 0){\n            printf("INNER\\n");\n        }\n    }\n    printf("終了\\n");\n    return 0;\n}`,
+        expect:{ output:'INNER\n終了', warningMax:0, stepsInclude:['入れ子のif文の条件 b > 0 を判定しました。条件が成立したため'], executedIncludes:['printf("INNER'] }
       },
       {
         name:'if〜else条件不成立・else側を実行',
@@ -263,9 +263,79 @@
         expect:{ output:'判定終了', outputExcludes:['WRONG-A', 'WRONG-B', 'WRONG-C'], warningMin:1, hintsInclude:['このelse付きif文は未対応'], executedExcludes:['printf("WRONG'] }
       },
       {
-        name:'else側の入れ子ifは安全に停止',
+        name:'if〜elseのelse側にある入れ子if',
         code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    if(0){\n        value = 1;\n    }else{\n        if(1){\n            value = 9;\n        }\n    }\n    printf("%d\\n", value);\n    return 0;\n}`,
-        expect:{ output:'0', variables:['value = 0'], warningMin:1, hintsInclude:['このelse付きif文は未対応'], executedExcludes:['value = 1;', 'value = 9;'] }
+        expect:{ output:'9', variables:['value = 9'], warningMax:0, stepsInclude:['入れ子のif文の条件 1 を判定しました。条件が成立したため'], executedIncludes:['value = 9;'], executedExcludes:['value = 1;'] }
+      },
+      {
+        name:'入れ子if・外側成立・内側不成立',
+        code:`#include <stdio.h>\n\nint main(void){\n    int score = 70;\n    if(score >= 60){\n        if(score >= 80){\n            printf("WRONG-INNER-FALSE\\n");\n        }\n        printf("外側は続行\\n");\n    }\n    return 0;\n}`,
+        expect:{ output:'外側は続行', outputExcludes:['WRONG-INNER-FALSE'], warningMax:0, stepsInclude:['入れ子のif文の条件 score >= 80 を判定しました。条件が成立しなかったため'], executedExcludes:['printf("WRONG-INNER-FALSE'] }
+      },
+      {
+        name:'外側不成立時は内側条件を評価しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    int score = 45;\n    if(score >= 60){\n        if(score >= 80){\n            printf("WRONG-OUTER-FALSE\\n");\n        }\n    }\n    printf("終了\\n");\n    return 0;\n}`,
+        expect:{ output:'終了', outputExcludes:['WRONG-OUTER-FALSE'], warningMax:0, stepsExclude:['入れ子のif文の条件 score >= 80 を判定'], analysisInclude:['外側の分岐が選択されなかったため、この入れ子のif文は評価されませんでした。'] }
+      },
+      {
+        name:'外側不成立時は内側の未宣言変数を警告しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    int score = 45;\n    if(score >= 60){\n        if(undefinedValue >= 80){\n            printf("WRONG-UNDECLARED-SKIP\\n");\n        }\n    }\n    printf("終了\\n");\n    return 0;\n}`,
+        expect:{ output:'終了', outputExcludes:['WRONG-UNDECLARED-SKIP'], warningMax:0, hintsExclude:['宣言されていません'], stepsExclude:['undefinedValue >= 80 を判定'] }
+      },
+      {
+        name:'if〜elseのif側にある入れ子if',
+        code:`#include <stdio.h>\n\nint main(void){\n    int score = 85;\n    if(score >= 60){\n        if(score >= 80){\n            printf("優秀\\n");\n        }\n    }else{\n        printf("WRONG-ELSE\\n");\n    }\n    return 0;\n}`,
+        expect:{ output:'優秀', outputExcludes:['WRONG-ELSE'], warningMax:0, stepsInclude:['入れ子のif文の条件 score >= 80 を判定しました。条件が成立したため'], executedExcludes:['printf("WRONG-ELSE'] }
+      },
+      {
+        name:'選択されなかったelse側の内側条件を評価しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    int score = 85;\n    if(score >= 60){\n        printf("合格\\n");\n    }else{\n        if(undefinedValue >= 40){\n            printf("WRONG-UNSELECTED-ELSE\\n");\n        }\n    }\n    return 0;\n}`,
+        expect:{ output:'合格', outputExcludes:['WRONG-UNSELECTED-ELSE'], warningMax:0, hintsExclude:['宣言されていません'], stepsExclude:['undefinedValue >= 40 を判定'], analysisInclude:['外側の分岐が選択されなかったため、この入れ子のif文は評価されませんでした。'] }
+      },
+      {
+        name:'内側ifで既存変数を更新',
+        code:`#include <stdio.h>\n\nint main(void){\n    int score = 85;\n    int result = 0;\n    if(score >= 60){\n        if(score >= 80){\n            result = 2;\n        }\n    }\n    printf("%d\\n", result);\n    return 0;\n}`,
+        expect:{ output:'2', variables:['result = 2'], warningMax:0, executedIncludes:['result = 2;'] }
+      },
+      {
+        name:'内側if終了後に外側の後続処理を実行',
+        code:`#include <stdio.h>\n\nint main(void){\n    int score = 85;\n    if(score >= 60){\n        if(score >= 80){\n            printf("内側\\n");\n        }\n        printf("外側の続き\\n");\n    }\n    return 0;\n}`,
+        expect:{ output:'内側\n外側の続き', warningMax:0, executedIncludes:['printf("内側', 'printf("外側の続き'] }
+      },
+      {
+        name:'内側条件の評価失敗後も外側を続行',
+        code:`#include <stdio.h>\n\nint main(void){\n    int score = 85;\n    if(score >= 60){\n        if(undefinedValue >= 80){\n            printf("WRONG-INNER-ERROR\\n");\n        }\n        printf("外側の続き\\n");\n    }\n    return 0;\n}`,
+        expect:{ output:'外側の続き', outputExcludes:['WRONG-INNER-ERROR'], warningMin:1, hintsInclude:['入れ子のif文の条件を評価できません', '宣言されていません'], executedIncludes:['printf("外側の続き'], executedExcludes:['printf("WRONG-INNER-ERROR'] }
+      },
+      {
+        name:'独立した内側ifを複数実行',
+        code:`#include <stdio.h>\n\nint main(void){\n    int score = 85;\n    if(score >= 60){\n        if(score >= 80){\n            printf("A\\n");\n        }\n        if(score >= 70){\n            printf("B\\n");\n        }\n    }\n    return 0;\n}`,
+        expect:{ output:'A\nB', warningMax:0, stepsInclude:['score >= 80 を判定しました', 'score >= 70 を判定しました'], executedIncludes:['printf("A', 'printf("B'] }
+      },
+      {
+        name:'3階層目のifを外側ごと安全停止',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    if(undefinedOuter > 0){\n        value = 1;\n        if(1){\n            if(1){\n                value = 9;\n                printf("WRONG-DEPTH-3\\n");\n            }\n        }\n    }\n    printf("%d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'0', outputExcludes:['WRONG-DEPTH-3'], variables:['value = 0'], warningMin:1, hintsInclude:['3階層以上のifは未対応'], hintsExclude:['undefinedOuter は宣言されていません'], executedExcludes:['value = 1;', 'value = 9;', 'printf("WRONG-DEPTH-3'] }
+      },
+      {
+        name:'内側if〜elseを外側ごと安全停止',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    if(undefinedOuter > 0){\n        value = 1;\n        if(1){\n            printf("WRONG-INNER-IF\\n");\n        }else{\n            printf("WRONG-INNER-ELSE\\n");\n        }\n    }\n    printf("%d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'0', outputExcludes:['WRONG-INNER-IF', 'WRONG-INNER-ELSE'], variables:['value = 0'], warningMin:1, hintsInclude:['入れ子のif〜elseは未対応'], hintsExclude:['undefinedOuter は宣言されていません'], executedExcludes:['value = 1;', 'printf("WRONG-INNER'] }
+      },
+      {
+        name:'構造未対応を含む外側分岐を部分実行しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    if(1){\n        value = 1;\n        printf("WRONG-BEFORE-STRUCTURE\\n");\n        if(1){\n            while(0){\n                value = 9;\n            }\n        }\n        printf("WRONG-AFTER-STRUCTURE\\n");\n    }\n    printf("AFTER %d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'AFTER 0', outputExcludes:['WRONG-BEFORE-STRUCTURE', 'WRONG-AFTER-STRUCTURE'], variables:['value = 0'], warningMin:1, hintsInclude:['入れ子のブロックは未対応'], executedExcludes:['value = 1;', 'value = 9;', 'printf("WRONG'] }
+      },
+      {
+        name:'入れ子ifでコメントや文字列内の記号を誤認しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 1;\n    if(value){\n        // if(1){ else }\n        if(value){\n            printf("if else { }\\n");\n            /* if(1){ }else{ } */\n        }\n    }\n    return 0;\n}`,
+        expect:{ output:'if else { }', warningMax:0 }
+      },
+      {
+        name:'内側ifの変数宣言は登録せず後続処理を続行',
+        code:`#include <stdio.h>\n\nint main(void){\n    int a = 1;\n    int b = 1;\n    if(a > 0){\n        if(b > 0){\n            int result = 1;\n            printf("続行\\n");\n        }\n    }\n    return 0;\n}`,
+        expect:{ output:'続行', variables:['a = 1', 'b = 1'], variablesExclude:['result ='], warningMin:1, hintsInclude:['分岐内の変数宣言は未対応'], executedIncludes:['printf("続行'], executedExcludes:['int result = 1;'] }
       },
       {
         name:'波かっこなしifを安全に停止',
@@ -560,6 +630,7 @@
         hints:normalizeText(document.getElementById('hintResult').textContent),
         warningCount:document.querySelectorAll('#hintResult .warning-line').length,
         steps:normalizeText(document.getElementById('stepResult').textContent),
+        analysis:normalizeText(document.getElementById('codePreview').textContent),
         executedLines:[...document.querySelectorAll('#codePreview .code-card.executed-line .code-line-text')].map(element => normalizeText(element.textContent)),
         editorSource:document.getElementById('codeHighlight').textContent,
         lineNumbers:document.getElementById('codeLineNumbers').textContent,
@@ -615,8 +686,20 @@
         if(!actual.hints.includes(text)) failures.push(`ヒントに「${text}」がない`);
       }
 
+      for(const text of expected.hintsExclude || []){
+        if(actual.hints.includes(text)) failures.push(`ヒントに「${text}」を含めない`);
+      }
+
       for(const text of expected.stepsInclude || []){
         if(!actual.steps.includes(text)) failures.push(`STEPに「${text}」がない`);
+      }
+
+      for(const text of expected.stepsExclude || []){
+        if(actual.steps.includes(text)) failures.push(`STEPに「${text}」を含めない`);
+      }
+
+      for(const text of expected.analysisInclude || []){
+        if(!actual.analysis.includes(text)) failures.push(`行説明に「${text}」がない`);
       }
 
       for(const text of expected.executedIncludes || []){
