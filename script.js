@@ -5,6 +5,7 @@ const samples = {
   assign: `#include <stdio.h>\n\nint main(void){\n    int score = 60;\n    score = score + 15;\n    printf("%d\\n", score);\n    return 0;\n}`,
   ifSimple: `#include <stdio.h>\n\nint main(void){\n    int score = 78;\n    if(score >= 60){\n        printf("合格です\\n");\n    }\n    return 0;\n}`,
   ifElse: `#include <stdio.h>\n\nint main(void){\n    int score = 45;\n    if(score >= 60){\n        printf("合格です\\n");\n    }else{\n        printf("もう一度挑戦\\n");\n    }\n    return 0;\n}`,
+  nestedIf: `#include <stdio.h>\n\nint main(void){\n    int score = 85;\n\n    if(score >= 60){\n        printf("合格です\\n");\n\n        if(score >= 80){\n            printf("高得点です\\n");\n        }\n    }\n\n    return 0;\n}`,
   unsupported: `#include <stdio.h>\n\nint main(void){\n    int score;\n    scanf("%d", &score);\n    return 0;\n}`
 };
 
@@ -852,8 +853,8 @@ function visualizeCode(){
     }
 
     if(/^if\s*\(/.test(trimmed) || /^for\s*\(/.test(trimmed) || /^while\s*\(/.test(trimmed) || /^scanf\s*\(/.test(trimmed)){
-      addAnalysis(analysis, lineNo, 'Ver.0.3_0805では未対応の構文です。今後の拡張対象として扱います。');
-      addHint(hints, lineNo, 'Ver.0.3_0805では未対応', '現在は int、代入、整数の四則演算、比較式、printf、単純なif〜else文の処理過程可視化に対応しています。この行は正確には実行シミュレートしていません。');
+      addAnalysis(analysis, lineNo, 'Ver.0.4_0810では未対応の構文です。今後の拡張対象として扱います。');
+      addHint(hints, lineNo, 'Ver.0.4_0810では未対応', '現在は int、代入、整数の四則演算、比較式、printf、単純なif〜else文、最大2階層の単純な入れ子ifの処理過程可視化に対応しています。この行は正確には実行シミュレートしていません。');
       warningLines.add(lineNo);
       return;
     }
@@ -990,9 +991,9 @@ function visualizeCode(){
       warningLines.add(lineNo);
     }
 
-    addAnalysis(analysis, lineNo, 'Ver.0.3_0805では説明未対応のコードです。');
+    addAnalysis(analysis, lineNo, 'Ver.0.4_0810では説明未対応のコードです。');
     if(trimmed !== ''){
-      addHint(hints, lineNo, '未対応コード', 'この行は現在の可視化対象外です。まずは int、代入、整数の四則演算、比較式、printf、単純なif〜else文の範囲で試してみましょう。');
+      addHint(hints, lineNo, '未対応コード', 'この行は現在の可視化対象外です。まずは int、代入、整数の四則演算、比較式、printf、単純なif〜else文、最大2階層の単純な入れ子ifの範囲で試してみましょう。');
       warningLines.add(lineNo);
     }
   }
@@ -1014,19 +1015,24 @@ function visualizeCode(){
       ? 'if文の条件を評価できなかったため、この行は実行されませんでした。'
       : 'if文の条件が成立しなかったため、この行は実行されませんでした。');
     for(let bodyIndex = startIndex; bodyIndex < endIndex; bodyIndex++){
-      const trimmed = executableLines[bodyIndex].trim();
-      if(trimmed === ''){
-        processSimpleLine(lines[bodyIndex], bodyIndex, true);
-        continue;
-      }
-      addSkippedLineWarnings(bodyIndex, trimmed);
-      if(/^int\s+/.test(trimmed)){
-        addAnalysis(analysis, bodyIndex + 1, `${reason} また、if側・else側で新しい変数を宣言する処理は現在未対応です。`);
-        addHint(hints, bodyIndex + 1, '分岐内の変数宣言は未対応', 'ブロックスコープを正確に再現できないため、変数は登録しません。');
-        warningLines.add(bodyIndex + 1);
-      }else{
-        addAnalysis(analysis, bodyIndex + 1, reason);
-      }
+      markSkippedLine(bodyIndex, reason);
+    }
+  }
+
+  function markSkippedLine(index, reason){
+    const trimmed = executableLines[index].trim();
+    if(trimmed === ''){
+      processSimpleLine(lines[index], index, true);
+      return;
+    }
+
+    addSkippedLineWarnings(index, trimmed);
+    if(/^int\s+/.test(trimmed)){
+      addAnalysis(analysis, index + 1, `${reason} また、if側・else側で新しい変数を宣言する処理は現在未対応です。`);
+      addHint(hints, index + 1, '分岐内の変数宣言は未対応', 'ブロックスコープを正確に再現できないため、変数は登録しません。');
+      warningLines.add(index + 1);
+    }else{
+      addAnalysis(analysis, index + 1, reason);
     }
   }
 
@@ -1100,99 +1106,249 @@ function visualizeCode(){
     return { endIndex:lines.length - 1, nested, unsupportedBlock, hasElse, closed:false };
   }
 
-  // 対応形式の単純なif〜else文について、if側とelse側の範囲を分けて返します。
-  // 「}else{」と、改行して「else{」を書く形の両方を受け付けます。
-  function findSimpleIfElseBranches(startIndex){
-    let depth = 0;
-    let ifEndIndex = -1;
-    let elseIndex = -1;
-    let elseHeaderCode = '';
-    let combinedElseLine = false;
+  // 外側のif全体を条件評価より先に調べ、最大2階層の対応構造だけを受け付けます。
+  // 選択されない側も構造だけは確認しますが、条件式や文の実行はここでは行いません。
+  function inspectSupportedOuterIf(startIndex){
+    const outerRange = findIfBlock(startIndex);
+    const safeEndIndex = Math.min(outerRange.endIndex, Math.max(startIndex, executionEndIndex - 1));
 
-    for(let index = startIndex; index < executionEndIndex; index++){
-      const structuralCode = codeOutsideStringAndLineComment(executableLines[index]).trim();
+    function failure(title, message){
+      return { ok:false, title, message, endIndex:safeEndIndex };
+    }
 
-      if(index > startIndex &&
-         (/^if\s*\(/.test(structuralCode) || unsupportedControlInfo(structuralCode))){
-        return null;
+    function unsupportedNestedIfForm(structuralCode){
+      const nextLineBrace = inlineIfBodyCode(structuralCode) === '';
+      if(nextLineBrace){
+        return failure(
+          '入れ子のif文の書き方は未対応',
+          '入れ子のif文では、開き波かっこをif文と同じ行に書いてください。外側のif文全体は実行しません。'
+        );
       }
+      return failure(
+        '入れ子のif文の書き方は未対応',
+        '波かっこを省略した入れ子のif文は現在未対応です。外側のif文全体は実行しません。'
+      );
+    }
 
-      for(let position = 0; position < structuralCode.length; position++){
-        const character = structuralCode[position];
-        if(character === '{'){
-          depth++;
-          if(depth > 1) return null;
+    function parseBranch(bodyStartIndex, depth){
+      const nestedIfs = [];
+
+      for(let index = bodyStartIndex; index < executionEndIndex; index++){
+        const structuralCode = codeOutsideStringAndLineComment(executableLines[index]).trim();
+        if(structuralCode === '') continue;
+
+        if(structuralCode.startsWith('}')){
+          return { ok:true, endIndex:index, closingCode:structuralCode, nestedIfs };
+        }
+
+        if(/^if\b/.test(structuralCode)){
+          const nestedHeader = structuralCode.match(/^if\s*\((.*)\)\s*\{$/);
+          if(!nestedHeader) return unsupportedNestedIfForm(structuralCode);
+          if(depth >= 2){
+            return failure(
+              '3階層以上のifは未対応',
+              '3階層以上に入れ子になったif文は現在未対応です。外側のif文全体は実行しません。'
+            );
+          }
+
+          const nestedIf = parseIf(index, depth + 1, false);
+          if(!nestedIf.ok) return nestedIf;
+          nestedIfs.push(nestedIf);
+          index = nestedIf.endIndex;
           continue;
         }
-        if(character !== '}') continue;
 
-        depth--;
-        if(depth < 0) return null;
-        if(depth !== 0) continue;
+        if(/^else\b/.test(structuralCode)){
+          return failure(
+            depth >= 2 ? '入れ子のif〜elseは未対応' : 'このelse付きif文は未対応',
+            depth >= 2
+              ? '入れ子のif文にelseを付ける形は現在未対応です。外側のif文全体は実行しません。'
+              : '単純なelse付きif文だけに対応しています。外側のif文全体は実行しません。'
+          );
+        }
 
-        if(structuralCode.slice(0, position).trim() !== '') return null;
-        ifEndIndex = index;
-        const afterIf = structuralCode.slice(position + 1).trim();
+        const unsupportedControl = unsupportedControlInfo(structuralCode);
+        if(unsupportedControl){
+          return failure(
+            '入れ子のブロックは未対応',
+            `${unsupportedControl.label}を含むif文の入れ子は現在未対応です。外側のif文全体は実行しません。`
+          );
+        }
 
-        if(afterIf !== ''){
-          if(!/^else\s*\{$/.test(afterIf)) return null;
-          elseIndex = index;
-          elseHeaderCode = afterIf;
-          combinedElseLine = true;
-        }else{
-          const candidateIndex = nextSignificantLine(index + 1);
-          if(candidateIndex >= executionEndIndex) return null;
+        if(bracesOutsideString(executableLines[index]).length > 0){
+          return failure(
+            '入れ子のブロックは未対応',
+            '対応範囲を確定できないブロックがif文内にあります。外側のif文全体は実行しません。'
+          );
+        }
+      }
+
+      return failure(
+        '閉じ波かっこを確認',
+        'if文の処理範囲を最後まで確認できないため、外側のif文全体は実行しません。'
+      );
+    }
+
+    function parseIf(ifIndex, depth, allowElse){
+      const structuralCode = codeOutsideStringAndLineComment(executableLines[ifIndex]).trim();
+      const headerMatch = structuralCode.match(/^if\s*\((.*)\)\s*\{$/);
+      if(!headerMatch){
+        return depth > 1
+          ? unsupportedNestedIfForm(structuralCode)
+          : failure('if文の書き方を確認', '対応範囲を確定できないif文のため、処理全体は実行しません。');
+      }
+
+      const ifBranch = parseBranch(ifIndex + 1, depth);
+      if(!ifBranch.ok) return ifBranch;
+
+      let elseIndex = -1;
+      let elseHeaderCode = '';
+      let combinedElseLine = false;
+      const afterClose = ifBranch.closingCode.slice(1).trim();
+
+      if(afterClose !== ''){
+        if(!/^else\b/.test(afterClose)){
+          return failure('閉じ波かっこを確認', 'if文の閉じ波かっこの後ろに未対応のコードがあります。外側のif文全体は実行しません。');
+        }
+        elseIndex = ifBranch.endIndex;
+        elseHeaderCode = afterClose;
+        combinedElseLine = true;
+      }else{
+        const candidateIndex = nextSignificantLine(ifBranch.endIndex + 1);
+        if(candidateIndex < executionEndIndex){
           const candidateCode = codeOutsideStringAndLineComment(executableLines[candidateIndex]).trim();
-          if(!/^else\s*\{$/.test(candidateCode)) return null;
-          elseIndex = candidateIndex;
-          elseHeaderCode = candidateCode;
+          if(/^else\b/.test(candidateCode)){
+            elseIndex = candidateIndex;
+            elseHeaderCode = candidateCode;
+          }
         }
-        break;
       }
 
-      if(ifEndIndex >= 0) break;
+      if(elseIndex < 0){
+        return {
+          ok:true,
+          startIndex:ifIndex,
+          condition:headerMatch[1].trim(),
+          ifBodyStartIndex:ifIndex + 1,
+          ifEndIndex:ifBranch.endIndex,
+          ifNestedIfs:ifBranch.nestedIfs,
+          hasElse:false,
+          endIndex:ifBranch.endIndex
+        };
+      }
+
+      if(!allowElse){
+        return failure(
+          '入れ子のif〜elseは未対応',
+          '入れ子のif文にelseを付ける形は現在未対応です。外側のif文全体は実行しません。'
+        );
+      }
+
+      if(!/^else\s*\{$/.test(elseHeaderCode)){
+        return failure(
+          'このelse付きif文は未対応',
+          '単純なelse付きif文だけに対応しています。else if、波かっこの省略、elseの次の行に開き波かっこを書く形は実行しません。'
+        );
+      }
+
+      const elseBranch = parseBranch(elseIndex + 1, depth);
+      if(!elseBranch.ok) return elseBranch;
+      if(elseBranch.closingCode !== '}'){
+        return failure(
+          '閉じ波かっこを確認',
+          'else文の終わりを安全に確定できないため、外側のif文全体は実行しません。'
+        );
+      }
+
+      return {
+        ok:true,
+        startIndex:ifIndex,
+        condition:headerMatch[1].trim(),
+        ifBodyStartIndex:ifIndex + 1,
+        ifEndIndex:ifBranch.endIndex,
+        ifNestedIfs:ifBranch.nestedIfs,
+        hasElse:true,
+        elseIndex,
+        elseBodyStartIndex:elseIndex + 1,
+        elseEndIndex:elseBranch.endIndex,
+        elseNestedIfs:elseBranch.nestedIfs,
+        combinedElseLine,
+        endIndex:elseBranch.endIndex
+      };
     }
 
-    if(ifEndIndex < 0 || elseIndex < 0) return null;
+    return parseIf(startIndex, 1, true);
+  }
 
-    depth = 0;
-    for(let index = elseIndex; index < executionEndIndex; index++){
-      const wholeCode = codeOutsideStringAndLineComment(executableLines[index]).trim();
-      const structuralCode = index === elseIndex
-        ? elseHeaderCode.slice(elseHeaderCode.indexOf('{'))
-        : wholeCode;
+  function executeNestedIf(node){
+    const lineNo = node.startIndex + 1;
+    const result = evaluateExpression(node.condition, variables);
 
-      if(index > elseIndex &&
-         (/^if\s*\(/.test(wholeCode) || unsupportedControlInfo(wholeCode))){
-        return null;
-      }
+    if(!result.ok){
+      addAnalysis(analysis, lineNo, `入れ子のif文の条件 <code>${escapeHtml(node.condition)}</code> を評価できませんでした。中の処理だけを実行しません。`);
+      addHint(hints, lineNo, '入れ子のif文の条件を評価できません', escapeHtml(result.error));
+      warningLines.add(lineNo);
+      addStep(lineNo, '入れ子のif文の条件を評価できなかったため、中の処理は実行しません。');
+      markSkippedIfBody(
+        node.ifBodyStartIndex,
+        node.ifEndIndex,
+        true,
+        '入れ子のif文の条件を評価できなかったため、この行は実行されませんでした。'
+      );
+    }else{
+      const conditionMet = result.value !== 0;
+      const conditionExplanation = result.comparison
+        ? describeComparison(result)
+        : `${escapeHtml(result.readable)} を計算した結果は ${result.value} です。C言語では0以外を条件成立、0を条件不成立として扱います。`;
+      const branchExplanation = conditionMet
+        ? '条件が成立したため、中の処理を実行します。'
+        : '条件が成立しなかったため、中の処理は実行しません。';
+      addAnalysis(analysis, lineNo, `入れ子のif文の条件 <code>${escapeHtml(node.condition)}</code> を判定しました。${conditionExplanation}${branchExplanation}`);
+      addStep(lineNo, `入れ子のif文の条件 ${escapeHtml(node.condition)} を判定しました。${branchExplanation}`);
 
-      for(const character of structuralCode){
-        if(character === '{'){
-          depth++;
-          if(depth > 1) return null;
-          continue;
-        }
-        if(character !== '}') continue;
-
-        depth--;
-        if(depth < 0) return null;
-        if(depth === 0){
-          if(index === elseIndex || wholeCode !== '}') return null;
-          return {
-            ifBodyStartIndex:startIndex + 1,
-            ifEndIndex,
-            elseIndex,
-            elseBodyStartIndex:elseIndex + 1,
-            elseEndIndex:index,
-            endIndex:index,
-            combinedElseLine
-          };
-        }
+      if(conditionMet){
+        executeIfBranch(node.ifBodyStartIndex, node.ifEndIndex, node.ifNestedIfs);
+      }else{
+        markSkippedIfBody(
+          node.ifBodyStartIndex,
+          node.ifEndIndex,
+          false,
+          '入れ子のif文の条件が成立しなかったため、この行は実行されませんでした。'
+        );
       }
     }
 
-    return null;
+    addAnalysis(analysis, node.ifEndIndex + 1, '入れ子のif文の処理範囲の終わりです。外側の処理へ戻ります。');
+  }
+
+  function executeIfBranch(startIndex, endIndex, nestedIfs){
+    const nestedIfMap = new Map(nestedIfs.map(node => [node.startIndex, node]));
+    for(let index = startIndex; index < endIndex; index++){
+      const nestedIf = nestedIfMap.get(index);
+      if(nestedIf){
+        executeNestedIf(nestedIf);
+        index = nestedIf.endIndex;
+        continue;
+      }
+      processSimpleLine(lines[index], index, true);
+    }
+  }
+
+  function markSkippedIfBranch(startIndex, endIndex, nestedIfs, reason, nestedReason){
+    const nestedIfMap = new Map(nestedIfs.map(node => [node.startIndex, node]));
+    for(let index = startIndex; index < endIndex; index++){
+      const nestedIf = nestedIfMap.get(index);
+      if(nestedIf){
+        addAnalysis(analysis, nestedIf.startIndex + 1, nestedReason);
+        for(let nestedIndex = nestedIf.ifBodyStartIndex; nestedIndex < nestedIf.ifEndIndex; nestedIndex++){
+          markSkippedLine(nestedIndex, reason);
+        }
+        addAnalysis(analysis, nestedIf.ifEndIndex + 1, reason);
+        index = nestedIf.endIndex;
+        continue;
+      }
+      markSkippedLine(index, reason);
+    }
   }
 
   // 波かっこなしif文が制御する「1文」の終わりを探します。
@@ -1498,42 +1654,37 @@ function visualizeCode(){
       continue;
     }
 
-    const block = findIfBlock(index);
-    const elseBranches = block.hasElse ? findSimpleIfElseBranches(index) : null;
-    if(block.hasElse && !elseBranches){
-      warnUnsupportedIf(index, block.endIndex, 'このelse付きif文は未対応', '単純なelse付きif文だけに対応しています。else if、入れ子、波かっこの省略、elseの次の行に開き波かっこを書く形は実行しません。');
-      index = block.endIndex;
-      continue;
-    }
-    if(!block.hasElse && (block.nested || block.unsupportedBlock)){
-      warnUnsupportedIf(index, block.endIndex, '入れ子のブロックは未対応', 'if文のネストや、if文内の別のブロックは現在未対応です。外側のif文も実行しません。');
-      index = block.endIndex;
-      continue;
-    }
-    if(!block.closed){
-      warnUnsupportedIf(index, block.endIndex, '閉じ波かっこを確認', 'if文の終わりを示す、単独行の } が見つかりません。中の処理は実行しません。');
+    const block = inspectSupportedOuterIf(index);
+    if(!block.ok){
+      warnUnsupportedIf(index, block.endIndex, block.title, block.message);
       index = block.endIndex;
       continue;
     }
 
     const lineNo = index + 1;
-    const condition = headerMatch[1].trim();
+    const condition = block.condition;
     const result = evaluateExpression(condition, variables);
-    const ifEndIndex = elseBranches ? elseBranches.ifEndIndex : block.endIndex;
-    const wholeEndIndex = elseBranches ? elseBranches.endIndex : block.endIndex;
+    const wholeEndIndex = block.endIndex;
     if(!result.ok){
-      const skippedTarget = elseBranches ? 'if側とelse側' : '波かっこの中';
+      const skippedTarget = block.hasElse ? 'if側とelse側' : '波かっこの中';
       addAnalysis(analysis, lineNo, `if文の条件 <code>${escapeHtml(condition)}</code> を評価できませんでした。${skippedTarget}の処理は実行しません。`);
       addHint(hints, lineNo, 'if文の条件を評価できません', escapeHtml(result.error));
       warningLines.add(lineNo);
-      addStep(lineNo, `if文の条件を評価できなかったため、${elseBranches ? 'if側とelse側' : '中'}の処理は実行しません。`);
-      markSkippedIfBody(index + 1, ifEndIndex, true);
-      if(elseBranches){
-        markSkippedIfBody(
-          elseBranches.elseBodyStartIndex,
-          elseBranches.elseEndIndex,
-          true,
-          'if文の条件を評価できなかったため、else文の中も実行されませんでした。'
+      addStep(lineNo, `if文の条件を評価できなかったため、${block.hasElse ? 'if側とelse側' : '中'}の処理は実行しません。`);
+      markSkippedIfBranch(
+        block.ifBodyStartIndex,
+        block.ifEndIndex,
+        block.ifNestedIfs,
+        'if文の条件を評価できなかったため、この行は実行されませんでした。',
+        '外側のif文の条件を評価できなかったため、この入れ子のif文は評価されませんでした。'
+      );
+      if(block.hasElse){
+        markSkippedIfBranch(
+          block.elseBodyStartIndex,
+          block.elseEndIndex,
+          block.elseNestedIfs,
+          'if文の条件を評価できなかったため、else文の中も実行されませんでした。',
+          '外側のif文の条件を評価できなかったため、else側の入れ子のif文は評価されませんでした。'
         );
       }
     }else{
@@ -1541,51 +1692,54 @@ function visualizeCode(){
       const conditionExplanation = result.comparison
         ? describeComparison(result)
         : `${escapeHtml(result.readable)} を計算した結果は ${result.value} です。C言語では0以外を条件成立、0を条件不成立として扱います。`;
-      const branchExplanation = elseBranches
+      const branchExplanation = block.hasElse
         ? (conditionMet
           ? 'if側の処理を実行し、else側は実行しません。'
           : 'if側は実行せず、else側の処理を実行します。')
         : (conditionMet ? '波かっこの中の処理を実行します。' : '波かっこの中の処理は実行しません。');
       addAnalysis(analysis, lineNo, `${conditionExplanation}${branchExplanation}`);
-      const stepExplanation = elseBranches
+      const stepExplanation = block.hasElse
         ? (conditionMet
           ? '条件が成立したため、if文の中へ進みます。else文の中は実行しません。'
           : '条件が成立しなかったため、if文の中は実行せず、else文の中へ進みます。')
         : (conditionMet ? '条件が成立したため、if文の中へ進みます。' : '条件が成立しなかったため、if文の中は実行しません。');
       addStep(lineNo, `${escapeHtml(condition)}を判定しました。<br>${stepExplanation}`);
       if(conditionMet){
-        for(let bodyIndex = index + 1; bodyIndex < ifEndIndex; bodyIndex++){
-          processSimpleLine(lines[bodyIndex], bodyIndex, true);
-        }
-        if(elseBranches){
-          markSkippedIfBody(
-            elseBranches.elseBodyStartIndex,
-            elseBranches.elseEndIndex,
-            false,
-            'if文の条件が成立したため、else文の中は実行されませんでした。'
+        executeIfBranch(block.ifBodyStartIndex, block.ifEndIndex, block.ifNestedIfs);
+        if(block.hasElse){
+          markSkippedIfBranch(
+            block.elseBodyStartIndex,
+            block.elseEndIndex,
+            block.elseNestedIfs,
+            'if文の条件が成立したため、else文の中は実行されませんでした。',
+            '外側の分岐が選択されなかったため、この入れ子のif文は評価されませんでした。'
           );
         }
       }else{
-        markSkippedIfBody(index + 1, ifEndIndex, false);
-        if(elseBranches){
-          for(let bodyIndex = elseBranches.elseBodyStartIndex; bodyIndex < elseBranches.elseEndIndex; bodyIndex++){
-            processSimpleLine(lines[bodyIndex], bodyIndex, true);
-          }
+        markSkippedIfBranch(
+          block.ifBodyStartIndex,
+          block.ifEndIndex,
+          block.ifNestedIfs,
+          'if文の条件が成立しなかったため、この行は実行されませんでした。',
+          '外側の分岐が選択されなかったため、この入れ子のif文は評価されませんでした。'
+        );
+        if(block.hasElse){
+          executeIfBranch(block.elseBodyStartIndex, block.elseEndIndex, block.elseNestedIfs);
         }
       }
     }
 
-    if(elseBranches){
-      if(elseBranches.combinedElseLine){
-        addAnalysis(analysis, elseBranches.ifEndIndex + 1, 'if側の終わりと、else側の始まりです。');
+    if(block.hasElse){
+      if(block.combinedElseLine){
+        addAnalysis(analysis, block.ifEndIndex + 1, 'if側の終わりと、else側の始まりです。');
       }else{
-        addAnalysis(analysis, elseBranches.ifEndIndex + 1, 'if側の処理範囲の終わりです。');
-        for(let gapIndex = elseBranches.ifEndIndex + 1; gapIndex < elseBranches.elseIndex; gapIndex++){
+        addAnalysis(analysis, block.ifEndIndex + 1, 'if側の処理範囲の終わりです。');
+        for(let gapIndex = block.ifEndIndex + 1; gapIndex < block.elseIndex; gapIndex++){
           processSimpleLine(lines[gapIndex], gapIndex, true);
         }
-        addAnalysis(analysis, elseBranches.elseIndex + 1, 'if文の条件が成立しなかったときに実行する、else側の始まりです。');
+        addAnalysis(analysis, block.elseIndex + 1, 'if文の条件が成立しなかったときに実行する、else側の始まりです。');
       }
-      addAnalysis(analysis, elseBranches.elseEndIndex + 1, 'if〜else文の処理範囲の終わりです。');
+      addAnalysis(analysis, block.elseEndIndex + 1, 'if〜else文の処理範囲の終わりです。');
     }else{
       addAnalysis(analysis, block.endIndex + 1, 'if文の処理範囲の終わりです。');
     }
