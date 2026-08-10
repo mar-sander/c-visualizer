@@ -46,7 +46,9 @@ Avoid:
 - adding many features at once
 - changing the core design without reason
 
-## Supported scope for Ver.0.3_0805
+## Supported scope for Ver.0.4_0810
+
+Last updated: 2026-08-10
 
 Currently supported:
 
@@ -61,11 +63,21 @@ Currently supported:
 - simple printf output
 - simple if statements
 - simple if-else statements
+- simple nested if statements up to two levels
+- a nested if inside either the outer if branch or the outer else branch
+- multiple independent nested if statements in the same outer branch
 - multiple independent simple if statements
 - multiple independent simple if-else statements
 - assignments to existing variables inside if
 - assignments to existing variables inside else
+- assignments to existing variables inside a nested if
 - printf inside if and else
+- printf inside a nested if
+- continuation of the outer branch after a nested if
+- propagation of values updated by a nested if to later statements
+- no evaluation of nested conditions in an unselected outer branch
+- inner-body-only stopping when a selected nested condition cannot be evaluated
+- outer-branch-level safe stopping for unsupported nested structures
 - safe skipping of false or unevaluable if bodies
 - safe branch selection: true executes only if, false executes only else
 - clear warnings for unsupported if structures
@@ -74,7 +86,7 @@ Currently supported:
 - variable state display
 - output display
 
-## Simple if-else statement specification
+## Simple if and nested-if specification
 
 Supported form:
 
@@ -91,30 +103,57 @@ Rules:
 - else is optional
 - support both `}else{` and a separate `else{` line after the if closing brace
 - no else if
-- no nested if
+- count a direct child of main as level 1 and an if inside its if or else branch as level 2
+- support a maximum depth of 2
+- allow multiple independent level-2 if statements in one outer branch
+- do not support else on a level-2 if
 - opening brace must be on the same line as if or else
 - the if closing brace may share a line with `else{` or be alone
 - the final closing brace must be alone on its line
 - braces are required
-- only assignment to an existing variable and printf are executed inside either branch
-- declarations inside if or else are unsupported
+- only assignment to an existing variable and printf are executed inside an outer or inner branch
+- declarations inside any branch are unsupported and must not register a variable
+- use the current expression evaluator for all conditions
+- treat `0` as false and every nonzero result as true
+- after a nested if finishes or its condition evaluation fails, continue with supported later statements in the selected outer branch
+- do not evaluate a nested condition in an unselected outer branch, and do not warn about undeclared or uninitialized values used only there
+- if a selected nested condition cannot be evaluated, skip only that nested body
+- if level 3 or deeper, an else on a nested if, or an unsupported control structure appears inside a nested if, do not partially execute the containing outer branch
 - unsupported if structures must fail safely
 - statements inside unsupported if structures must never be accidentally executed
-- braces and else text inside strings or line comments must not affect structure detection
+- if the structure cannot be bounded safely, do not guess or execute it
+- braces, if text, and else text inside strings or comments must not affect structure detection
 - one statement per line remains required
 
-## Unsupported scope for Ver.0.3_0805
+Supported nested form:
+
+```c
+if(outerCondition){
+    statement;
+
+    if(innerCondition){
+        statement;
+    }
+
+    statement;
+}
+```
+
+## Unsupported scope for Ver.0.4_0810
 
 Do not implement these unless explicitly requested:
 
 - else if
-- nested if
-- declarations inside if or else
+- else on a nested if
+- if nesting at level 3 or deeper
+- declarations inside any branch
 - braceless if
 - split-line opening brace style
 - split-line opening brace style for else
+- logical operators `&&`, `||`, and `!`
 - for
 - while
+- switch
 - arrays
 - user-defined functions
 - pointers
@@ -126,7 +165,7 @@ Do not implement these unless explicitly requested:
 
 ## Input rule
 
-In Ver.0.3_0805, assume one C statement per line.
+In Ver.0.4_0810, assume one C statement per line.
 
 If multiple statements are written on one line, show a warning instead of trying to parse them automatically.
 
