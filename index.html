@@ -13,7 +13,7 @@
 <div class="container">
   <header class="page-header">
     <h1 class="page-title">c<span class="subtitle"> code visualizer</span></h1>
-    <div class="page-subtitle">完全なC実行環境ではなく、処理の流れ・変数の変化・出力結果を見える化する学習支援ツールです。最大2階層の単純な入れ子ifにも対応しています（Ver.0.4_0810）</div>
+    <div class="page-subtitle">完全なC実行環境ではなく、処理の流れ・変数の変化・出力結果を見える化する学習支援ツールです。最大2階層の単純な入れ子if・if〜elseにも対応しています（Ver.0.5_0811）</div>
   </header>
 
   <div class="tool-grid">
@@ -48,10 +48,11 @@ int main(void){
         <button class="sample-btn" onclick="loadSample('ifSimple')"><i class="fa fa-code" aria-hidden="true"></i><span>if文</span></button>
         <button class="sample-btn" onclick="loadSample('ifElse')"><i class="fa fa-code" aria-hidden="true"></i><span>if〜else</span></button>
         <button class="sample-btn" onclick="loadSample('nestedIf')"><i class="fa fa-code" aria-hidden="true"></i><span>入れ子if</span></button>
+        <button class="sample-btn" onclick="loadSample('nestedIfElse')"><i class="fa fa-code" aria-hidden="true"></i><span>入れ子if〜else</span></button>
         <button class="sample-btn" onclick="loadSample('unsupported')"><i class="fa fa-code" aria-hidden="true"></i><span>未対応</span></button>
       </div>
       <div class="legend-box">
-        <span class="highlight">Ver.0.4_0810</span>では、int型の変数宣言・代入、整数の四則演算、比較式、printf、単純なif・if〜elseと、最大2階層の単純な入れ子ifに対応しています。<br>分岐内で実行できるのは既存変数への代入とprintfです。新しい変数の宣言、内側ifにelseを付ける形、3階層以上のifには対応していません。<br>開き波かっこはif・elseと同じ行に書き、最後の閉じ波かっこは単独行にしてください。正確に読み取るため、1つの文ごとに改行して入力してください。
+        <span class="highlight">Ver.0.5_0811</span>では、int型の変数宣言・代入、整数の四則演算、比較式、printf、main直下の単純なif・if〜elseと、最大2階層の単純な入れ子if・if〜elseに対応しています。<br>2階層目は外側のif側・else側のどちらにも置くことができ、ifのみ／if〜elseの両方に対応します。分岐内で実行できるのは既存変数への代入とprintfです。<br>else if、3階層以上、分岐内での新しい変数宣言、波かっこなし、開き波かっこを次の行に置く形式、論理演算子、scanf、for、while、switch、配列、ユーザー定義関数、ポインタには対応していません。<br>開き波かっこはif・elseと同じ行に書き、最後の閉じ波かっこは単独行にしてください。正確に読み取るため、1つの文ごとに改行して入力してください。
       </div>
     </section>
 
