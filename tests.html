@@ -349,9 +349,99 @@
         expect:{ output:'0', outputExcludes:['WRONG-DEPTH-3'], variables:['value = 0'], warningMin:1, hintsInclude:['3階層以上のifは未対応'], hintsExclude:['undefinedOuter は宣言されていません'], executedExcludes:['value = 1;', 'value = 9;', 'printf("WRONG-DEPTH-3'] }
       },
       {
-        name:'内側if〜elseを外側ごと安全停止',
-        code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    if(undefinedOuter > 0){\n        value = 1;\n        if(1){\n            printf("WRONG-INNER-IF\\n");\n        }else{\n            printf("WRONG-INNER-ELSE\\n");\n        }\n    }\n    printf("%d\\n", value);\n    return 0;\n}`,
-        expect:{ output:'0', outputExcludes:['WRONG-INNER-IF', 'WRONG-INNER-ELSE'], variables:['value = 0'], warningMin:1, hintsInclude:['入れ子のif〜elseは未対応'], hintsExclude:['undefinedOuter は宣言されていません'], executedExcludes:['value = 1;', 'printf("WRONG-INNER'] }
+        name:'内側if〜else・外側成立・内側成立',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    if(1){\n        if(1){\n            value = 1;\n            printf("INNER-IF\\n");\n        }else{\n            value = 9;\n            printf("WRONG-INNER-ELSE\\n");\n        }\n    }\n    printf("%d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'INNER-IF\n1', outputExcludes:['WRONG-INNER-ELSE'], variables:['value = 1'], warningMax:0, stepsInclude:['条件が成立したため、if側の処理を実行し、else側は実行しません'], executedIncludes:['value = 1;', 'printf("INNER-IF'], executedExcludes:['value = 9;', 'printf("WRONG-INNER-ELSE'] }
+      },
+      {
+        name:'内側if〜else・外側成立・内側不成立後も続行',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    if(1){\n        if(0){\n            value = 9;\n            printf("WRONG-INNER-IF\\n");\n        }else{\n            value = 2;\n        }\n        value = value + 1;\n        printf("%d\\n", value);\n    }\n    return 0;\n}`,
+        expect:{ output:'3', outputExcludes:['WRONG-INNER-IF'], variables:['value = 3'], warningMax:0, stepsInclude:['条件が成立しなかったため、if側は実行せず、else側の処理を実行します'], executedIncludes:['value = 2;', 'value = value + 1;', 'printf("%d'], executedExcludes:['value = 9;', 'printf("WRONG-INNER-IF'] }
+      },
+      {
+        name:'外側else側の内側if〜else・内側成立',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    if(0){\n        value = 9;\n    }else{\n        if(1){\n            value = 1;\n        }else{\n            value = 8;\n        }\n    }\n    printf("%d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'1', variables:['value = 1'], warningMax:0, executedIncludes:['value = 1;'], executedExcludes:['value = 9;', 'value = 8;'] }
+      },
+      {
+        name:'外側else側の内側if〜else・内側不成立',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    if(0){\n        value = 9;\n    }else{\n        if(0){\n            value = 8;\n        }else{\n            value = 2;\n        }\n    }\n    printf("%d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'2', variables:['value = 2'], warningMax:0, executedIncludes:['value = 2;'], executedExcludes:['value = 9;', 'value = 8;'] }
+      },
+      {
+        name:'内側if〜else・別行else形式',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    if(1){\n        if(0){\n            value = 9;\n        }\n        else{\n            value = 2;\n            printf("SEPARATE-ELSE\\n");\n        }\n    }\n    return 0;\n}`,
+        expect:{ output:'SEPARATE-ELSE', variables:['value = 2'], warningMax:0, analysisInclude:['入れ子のif文の条件が成立しなかったときに実行する、else側の始まりです'], executedIncludes:['value = 2;', 'printf("SEPARATE-ELSE'], executedExcludes:['value = 9;'] }
+      },
+      {
+        name:'複数の内側if〜elseを更新順に実行',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    if(1){\n        if(1){\n            value = 1;\n        }else{\n            value = 9;\n        }\n        if(value == 1){\n            value = 2;\n        }else{\n            value = 8;\n        }\n    }\n    printf("%d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'2', variables:['value = 2'], warningMax:0, stepsInOrder:['入れ子のif文の条件 1 を判定しました', '入れ子のif文の条件 value == 1 を判定しました'], executedIncludes:['value = 1;', 'value = 2;'], executedExcludes:['value = 9;', 'value = 8;'] }
+      },
+      {
+        name:'内側if〜elseの未宣言条件は両側を飛ばして外側を続行',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    if(1){\n        if(undefinedValue){\n            value = 1;\n        }else{\n            value = 2;\n        }\n        value = 3;\n        printf("%d\\n", value);\n    }\n    return 0;\n}`,
+        expect:{ output:'3', variables:['value = 3'], warningMin:1, hintsInclude:['入れ子のif文の条件を評価できません', '宣言されていません'], stepsInclude:['if側とelse側の処理は実行しません。外側の処理へ戻ります'], executedIncludes:['value = 3;', 'printf("%d'], executedExcludes:['value = 1;', 'value = 2;'] }
+      },
+      {
+        name:'内側if〜elseの未初期化条件は両側を飛ばして外側を続行',
+        code:`#include <stdio.h>\n\nint main(void){\n    int check;\n    int value = 0;\n    if(1){\n        if(check){\n            value = 1;\n        }else{\n            value = 2;\n        }\n        value = 3;\n        printf("%d\\n", value);\n    }\n    return 0;\n}`,
+        expect:{ output:'3', variables:['check = 未初期化', 'value = 3'], warningMin:1, hintsInclude:['入れ子のif文の条件を評価できません', 'まだ値が代入されていません'], executedIncludes:['value = 3;', 'printf("%d'], executedExcludes:['value = 1;', 'value = 2;'] }
+      },
+      {
+        name:'未選択の外側if側にある内側if〜else条件を評価しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    if(0){\n        if(undefinedValue){\n            value = 1;\n        }else{\n            value = 2;\n        }\n    }else{\n        printf("SELECTED-ELSE\\n");\n    }\n    return 0;\n}`,
+        expect:{ output:'SELECTED-ELSE', variables:['value = 0'], warningMax:0, hintsExclude:['宣言されていません'], stepsExclude:['undefinedValue を判定'], executedExcludes:['value = 1;', 'value = 2;'] }
+      },
+      {
+        name:'未選択の外側else側にある内側if〜else条件を評価しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    int check;\n    int value = 0;\n    if(1){\n        printf("SELECTED-IF\\n");\n    }else{\n        if(check){\n            value = 1;\n        }else{\n            value = 2;\n        }\n    }\n    return 0;\n}`,
+        expect:{ output:'SELECTED-IF', variables:['check = 未初期化', 'value = 0'], warningMax:0, hintsExclude:['まだ値が代入されていません'], stepsExclude:['入れ子のif文の条件 check を判定'], executedExcludes:['value = 1;', 'value = 2;'] }
+      },
+      {
+        name:'内側if〜elseのif側にある3階層目を外側ごと安全停止',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    if(1){\n        value = 1;\n        if(1){\n            if(1){\n                value = 9;\n            }\n        }else{\n            value = 8;\n        }\n        value = 2;\n    }\n    printf("%d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'0', variables:['value = 0'], warningMin:1, hintsInclude:['3階層以上のifは未対応'], executedExcludes:['value = 1;', 'value = 9;', 'value = 8;', 'value = 2;'] }
+      },
+      {
+        name:'内側if〜elseのelse側にある3階層目を外側ごと安全停止',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    if(1){\n        value = 1;\n        if(0){\n            value = 8;\n        }else{\n            if(1){\n                value = 9;\n            }\n        }\n        value = 2;\n    }\n    printf("%d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'0', variables:['value = 0'], warningMin:1, hintsInclude:['3階層以上のifは未対応'], executedExcludes:['value = 1;', 'value = 8;', 'value = 9;', 'value = 2;'] }
+      },
+      {
+        name:'内側のelse ifを外側ごと安全停止',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    if(1){\n        value = 1;\n        if(0){\n            value = 8;\n        }else if(1){\n            value = 9;\n        }\n        value = 2;\n    }\n    printf("%d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'0', variables:['value = 0'], warningMin:1, hintsInclude:['このelse付きif文は未対応'], executedExcludes:['value = 1;', 'value = 8;', 'value = 9;', 'value = 2;'] }
+      },
+      {
+        name:'内側if〜else内のforを外側ごと安全停止',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    if(1){\n        value = 1;\n        if(1){\n            for(int i = 0; i < 1; i++){\n                value = 9;\n            }\n        }else{\n            value = 8;\n        }\n        value = 2;\n    }\n    printf("%d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'0', variables:['value = 0'], variablesExclude:['i ='], warningMin:1, hintsInclude:['入れ子のブロックは未対応'], executedExcludes:['value = 1;', 'value = 9;', 'value = 8;', 'value = 2;'] }
+      },
+      {
+        name:'内側if〜else内のwhileを外側ごと安全停止',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    if(1){\n        value = 1;\n        if(0){\n            value = 8;\n        }else{\n            while(0){\n                value = 9;\n            }\n        }\n        value = 2;\n    }\n    printf("%d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'0', variables:['value = 0'], warningMin:1, hintsInclude:['入れ子のブロックは未対応'], executedExcludes:['value = 1;', 'value = 8;', 'value = 9;', 'value = 2;'] }
+      },
+      {
+        name:'内側if〜else内のswitchを外側ごと安全停止',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    if(1){\n        value = 1;\n        if(1){\n            value = 8;\n        }else{\n            switch(value){\n                case 0:\n                    value = 9;\n                    break;\n            }\n        }\n        value = 2;\n    }\n    printf("%d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'0', variables:['value = 0'], warningMin:1, hintsInclude:['入れ子のブロックは未対応'], executedExcludes:['value = 1;', 'value = 8;', 'value = 9;', 'value = 2;'] }
+      },
+      {
+        name:'未選択側の未対応構造も条件評価前に安全停止',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    if(1){\n        value = 1;\n    }else{\n        if(0){\n            value = 8;\n        }else{\n            while(0){\n                value = 9;\n            }\n        }\n    }\n    printf("%d\\n", value);\n    return 0;\n}`,
+        expect:{ output:'0', variables:['value = 0'], warningMin:1, hintsInclude:['入れ子のブロックは未対応'], executedExcludes:['value = 1;', 'value = 8;', 'value = 9;'] }
+      },
+      {
+        name:'内側if〜elseでコメントと文字列の構造記号を誤認しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    if(1){\n        // else { if(1){ }\n        if(0){\n            printf("WRONG\\n");\n        }else{\n            /*\n            if(1){\n            }else{\n            }\n            */\n            value = 2;\n            printf("if else { }\\n");\n        }\n    }\n    return 0;\n}`,
+        expect:{ output:'if else { }', outputExcludes:['WRONG'], variables:['value = 2'], warningMax:0, executedIncludes:['value = 2;', 'printf("if else'], executedExcludes:['printf("WRONG'] }
+      },
+      {
+        name:'内側if〜elseの変数宣言は登録せず後続処理を続行',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    if(1){\n        if(0){\n            value = 9;\n        }else{\n            int bonus = 5;\n            value = 2;\n            printf("CONTINUE\\n");\n        }\n    }\n    return 0;\n}`,
+        expect:{ output:'CONTINUE', variables:['value = 2'], variablesExclude:['bonus ='], warningMin:1, hintsInclude:['分岐内の変数宣言は未対応'], executedIncludes:['value = 2;', 'printf("CONTINUE'], executedExcludes:['int bonus = 5;', 'value = 9;'] }
       },
       {
         name:'構造未対応を含む外側分岐を部分実行しない',
