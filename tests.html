@@ -184,6 +184,21 @@
         }
       },
       {
+        name:'入れ子if〜elseサンプル',
+        code:samples.nestedIfElse,
+        loadSampleKey:'nestedIfElse',
+        expect:{
+          output:'合格です',
+          variables:['score = 75'],
+          warningMax:0,
+          stepsInOrder:['score >= 60を判定しました', '入れ子のif文の条件 score >= 80 を判定しました', '画面に「合格です', 'プログラムを終了します'],
+          executedIncludes:['if(score >= 60){', 'if(score >= 80){', 'printf("合格です', 'return 0;'],
+          executedExcludes:['printf("高得点です'],
+          editorScrollTop:0,
+          editorScrollLeft:0
+        }
+      },
+      {
         name:'再代入',
         code:`#include <stdio.h>\n\nint main(void){\n    int score = 60;\n    score = score + 15;\n    printf("%d\\n", score);\n    return 0;\n}`,
         expect:{ output:'75', variables:['score = 75'], warningMax:0 }
@@ -527,7 +542,7 @@
       {
         name:'scanf未対応サンプル',
         code:`#include <stdio.h>\n\nint main(void){\n    int score;\n    scanf("%d", &score);\n    return 0;\n}`,
-        expect:{ output:'出力はまだありません。', variables:['score = 未初期化'], warningMin:1, hintsInclude:['Ver.0.4_0810では未対応'] }
+        expect:{ output:'出力はまだありません。', variables:['score = 未初期化'], warningMin:1, hintsInclude:['Ver.0.5_0811では未対応'] }
       },
       {
         name:'return後のprintfを実行しない',
@@ -781,13 +796,23 @@
         executedLines:[...document.querySelectorAll('#codePreview .code-card.executed-line .code-line-text')].map(element => normalizeText(element.textContent)),
         editorSource:document.getElementById('codeHighlight').textContent,
         lineNumbers:document.getElementById('codeLineNumbers').textContent,
-        syntaxClasses:[...document.querySelectorAll('#codeHighlight span')].map(element => element.className)
+        syntaxClasses:[...document.querySelectorAll('#codeHighlight span')].map(element => element.className),
+        editorScrollTop:document.getElementById('codeInput').scrollTop,
+        editorScrollLeft:document.getElementById('codeInput').scrollLeft
       };
     }
 
     function checkCase(testCase){
-      document.getElementById('codeInput').value = testCase.code;
-      visualizeCode();
+      const codeInput = document.getElementById('codeInput');
+      if(testCase.loadSampleKey){
+        codeInput.value = 'sample loading check';
+        codeInput.scrollTop = 120;
+        codeInput.scrollLeft = 60;
+        loadSample(testCase.loadSampleKey);
+      }else{
+        codeInput.value = testCase.code;
+        visualizeCode();
+      }
       const actual = snapshotResult();
       const expected = testCase.expect;
       const failures = [];
@@ -803,6 +828,14 @@
 
       if(actual.lineNumbers !== expectedLineNumbers){
         failures.push('入力コードと行番号の数が一致しない');
+      }
+
+      if(expected.editorScrollTop !== undefined && actual.editorScrollTop !== expected.editorScrollTop){
+        failures.push(`入力欄の縦スクロール位置: 期待${expected.editorScrollTop} / 実際${actual.editorScrollTop}`);
+      }
+
+      if(expected.editorScrollLeft !== undefined && actual.editorScrollLeft !== expected.editorScrollLeft){
+        failures.push(`入力欄の横スクロール位置: 期待${expected.editorScrollLeft} / 実際${actual.editorScrollLeft}`);
       }
 
       if(expected.output !== undefined && actual.output !== expected.output){

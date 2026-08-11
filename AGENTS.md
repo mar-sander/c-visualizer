@@ -46,9 +46,9 @@ Avoid:
 - adding many features at once
 - changing the core design without reason
 
-## Supported scope for Ver.0.4_0810
+## Supported scope for Ver.0.5_0811
 
-Last updated: 2026-08-10
+Last updated: 2026-08-11
 
 Currently supported:
 
@@ -63,16 +63,16 @@ Currently supported:
 - simple printf output
 - simple if statements
 - simple if-else statements
-- simple nested if statements up to two levels
-- a nested if inside either the outer if branch or the outer else branch
-- multiple independent nested if statements in the same outer branch
+- simple nested if and if-else statements up to two levels
+- a nested if or if-else inside either the outer if branch or the outer else branch
+- multiple independent nested if or if-else statements in the same outer branch
 - multiple independent simple if statements
 - multiple independent simple if-else statements
 - assignments to existing variables inside if
 - assignments to existing variables inside else
-- assignments to existing variables inside a nested if
+- assignments to existing variables inside a nested if or if-else
 - printf inside if and else
-- printf inside a nested if
+- printf inside a nested if or if-else
 - continuation of the outer branch after a nested if
 - propagation of values updated by a nested if to later statements
 - no evaluation of nested conditions in an unselected outer branch
@@ -86,7 +86,7 @@ Currently supported:
 - variable state display
 - output display
 
-## Simple if and nested-if specification
+## Simple if and nested-if/if-else specification
 
 Supported form:
 
@@ -105,8 +105,8 @@ Rules:
 - no else if
 - count a direct child of main as level 1 and an if inside its if or else branch as level 2
 - support a maximum depth of 2
-- allow multiple independent level-2 if statements in one outer branch
-- do not support else on a level-2 if
+- allow multiple independent level-2 if or if-else statements in one outer branch
+- allow at most one else on a level-2 if
 - opening brace must be on the same line as if or else
 - the if closing brace may share a line with `else{` or be alone
 - the final closing brace must be alone on its line
@@ -115,10 +115,13 @@ Rules:
 - declarations inside any branch are unsupported and must not register a variable
 - use the current expression evaluator for all conditions
 - treat `0` as false and every nonzero result as true
-- after a nested if finishes or its condition evaluation fails, continue with supported later statements in the selected outer branch
+- validate the complete outer if/if-else structure before evaluating the outer condition
+- after a nested if or if-else finishes or its condition evaluation fails, continue with supported later statements in the selected outer branch
 - do not evaluate a nested condition in an unselected outer branch, and do not warn about undeclared or uninitialized values used only there
-- if a selected nested condition cannot be evaluated, skip only that nested body
-- if level 3 or deeper, an else on a nested if, or an unsupported control structure appears inside a nested if, do not partially execute the containing outer branch
+- if a selected nested condition cannot be evaluated, skip both its if and else branches
+- treat unsupported structures as safe-stop targets even when they appear in an unselected outer branch
+- if level 3 or deeper, else if, an extra else, or an unsupported control structure appears inside a nested if, do not partially execute the containing outer structure
+- never partially execute an outer if/if-else structure that fails structural validation
 - unsupported if structures must fail safely
 - statements inside unsupported if structures must never be accidentally executed
 - if the structure cannot be bounded safely, do not guess or execute it
@@ -133,18 +136,19 @@ if(outerCondition){
 
     if(innerCondition){
         statement;
+    }else{
+        statement;
     }
 
     statement;
 }
 ```
 
-## Unsupported scope for Ver.0.4_0810
+## Unsupported scope for Ver.0.5_0811
 
 Do not implement these unless explicitly requested:
 
 - else if
-- else on a nested if
 - if nesting at level 3 or deeper
 - declarations inside any branch
 - braceless if
@@ -165,7 +169,7 @@ Do not implement these unless explicitly requested:
 
 ## Input rule
 
-In Ver.0.4_0810, assume one C statement per line.
+In Ver.0.5_0811, assume one C statement per line.
 
 If multiple statements are written on one line, show a warning instead of trying to parse them automatically.
 
