@@ -36,6 +36,19 @@ int main(void){
 }</textarea>
         </div>
       </div>
+      <div class="scanf-input-group">
+        <label class="scanf-input-label" for="scanfInput">入力値（scanf用）</label>
+        <p class="scanf-input-help">scanfが複数ある場合は、上から順に1行ずつ使います。</p>
+        <textarea
+          id="scanfInput"
+          class="scanf-input"
+          rows="3"
+          placeholder="例：&#10;75&#10;80"
+          aria-label="scanf用の整数入力"
+          inputmode="numeric"
+          spellcheck="false"
+        ></textarea>
+      </div>
       <div class="control-row" style="margin-top:12px;">
         <button onclick="visualizeCode()">可視化する</button>
         <button class="reset-btn" onclick="resetCode()" title="リセット" aria-label="入力と結果をリセット"><i class="fa fa-refresh"></i></button>
