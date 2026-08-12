@@ -157,6 +157,10 @@
 
   <script src="script.js"></script>
   <script>
+    function makeMainCode(body){
+      return `#include <stdio.h>\n\nint main(void){\n${body}\n}`;
+    }
+
     const testCases = [
       {
         name:'基本の宣言・加算・printf',
@@ -856,9 +860,9 @@
         expect:{ output:'出力はまだありません。', outputExcludes:['WRONG'], variablesExclude:['value ='], warningMin:1, hintsInclude:['main関数の終わりを確認'], executedExcludes:['int value = 1;', 'printf("WRONG', 'return 0;'] }
       },
       {
-        name:'for文の本文を実行しない',
+        name:'forヘッダ内変数宣言は未対応・後続停止',
         code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    for(int i = 0; i < 3; i++){\n        value = 9;\n        printf("WRONG-FOR\\n");\n    }\n    printf("%d\\n", value);\n    return 0;\n}`,
-        expect:{ output:'0', outputExcludes:['WRONG-FOR'], variables:['value = 0'], variablesExclude:['i ='], warningMin:1, hintsInclude:['for文は未対応'], executedExcludes:['value = 9;', 'printf("WRONG-FOR'] }
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG-FOR'], variables:['value = 0'], variablesExclude:['i ='], warningMin:1, hintsInclude:['for文は未対応'], executedExcludes:['value = 9;', 'printf("WRONG-FOR', 'printf("%d'] }
       },
       {
         name:'while文の本文を実行しない',
@@ -881,9 +885,9 @@
         expect:{ output:'AFTER-DO 0', variables:['value = 0'], warningMin:1, hintsInclude:['do while文は未対応'], executedExcludes:['value = 9;', 'while(value < 3);'] }
       },
       {
-        name:'次行波かっこのfor文を実行しない',
+        name:'次行波かっこのfor文は未対応・後続停止',
         code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    for(int i = 0; i < 3; i++)\n    {\n        value = 9;\n        printf("WRONG-NEXT-BRACE\\n");\n    }\n    printf("%d\\n", value);\n    return 0;\n}`,
-        expect:{ output:'0', outputExcludes:['WRONG-NEXT-BRACE'], variables:['value = 0'], variablesExclude:['i ='], warningMin:1, hintsInclude:['for文は未対応'], executedExcludes:['value = 9;', 'printf("WRONG-NEXT-BRACE'] }
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG-NEXT-BRACE'], variables:['value = 0'], variablesExclude:['i ='], warningMin:1, hintsInclude:['for文は未対応'], executedExcludes:['value = 9;', 'printf("WRONG-NEXT-BRACE', 'printf("%d'] }
       },
       {
         name:'波かっこなしwhile文の制御対象だけを飛ばす',
@@ -896,9 +900,9 @@
         expect:{ output:'AFTER-EMPTY-WHILE', warningMin:1, hintsInclude:['while文は未対応'], executedIncludes:['printf("AFTER-EMPTY-WHILE'] }
       },
       {
-        name:'未対応for文内の入れ子ブロックも実行しない',
+        name:'未対応for文内の入れ子ブロックを実行せず後続停止',
         code:`#include <stdio.h>\n\nint main(void){\n    for(int i = 0; i < 1; i++){\n        if(1){\n            printf("WRONG-NESTED\\n");\n        }\n    }\n    printf("AFTER-NESTED\\n");\n    return 0;\n}`,
-        expect:{ output:'AFTER-NESTED', outputExcludes:['WRONG-NESTED'], variablesExclude:['i ='], warningMin:1, hintsInclude:['for文は未対応'], executedExcludes:['printf("WRONG-NESTED'] }
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG-NESTED', 'AFTER-NESTED'], variablesExclude:['i ='], warningMin:1, hintsInclude:['for文は未対応'], executedExcludes:['printf("WRONG-NESTED', 'printf("AFTER-NESTED'] }
       },
       {
         name:'対応if内のdo while文を安全に停止',
@@ -996,9 +1000,9 @@
         expect:{ output:'出力はまだありません。', outputExcludes:['WRONG-UNCLOSED-COMMENT'], variablesExclude:['value ='], warningMin:1, hintsInclude:['main関数の終わりを確認'], executedExcludes:['int value = 1;', 'printf("WRONG-UNCLOSED-COMMENT', 'return 0;'] }
       },
       {
-        name:'後置インクリメントを実行しない',
+        name:'後置インクリメントを単独更新文として実行',
         code:`#include <stdio.h>\n\nint main(void){\n    int value = 1;\n    value++;\n    printf("%d\\n", value);\n    return 0;\n}`,
-        expect:{ output:'1', variables:['value = 1'], warningMin:1, hintsInclude:['++・--は未対応'], executedExcludes:['value++;'] }
+        expect:{ output:'2', variables:['value = 2'], warningMax:0, executedIncludes:['value++;'] }
       },
       {
         name:'未対応演算子を含む複数文でも改行を警告',
@@ -1006,9 +1010,9 @@
         expect:{ output:'1', outputExcludes:['WRONG-MULTI'], variables:['value = 1'], warningMin:1, hintsInclude:['改行の確認'], executedExcludes:['value++; printf("WRONG-MULTI'] }
       },
       {
-        name:'後置デクリメントを実行しない',
+        name:'後置デクリメントを単独更新文として実行',
         code:`#include <stdio.h>\n\nint main(void){\n    int value = 1;\n    value--;\n    printf("%d\\n", value);\n    return 0;\n}`,
-        expect:{ output:'1', variables:['value = 1'], warningMin:1, hintsInclude:['++・--は未対応'], executedExcludes:['value--;'] }
+        expect:{ output:'0', variables:['value = 0'], warningMax:0, executedIncludes:['value--;'] }
       },
       {
         name:'前置インクリメントを初期値として解釈しない',
@@ -1049,6 +1053,289 @@
         name:'空白を挟んだ負数の減算は維持',
         code:`#include <stdio.h>\n\nint main(void){\n    int value = 1;\n    value = value - -1;\n    printf("%d\\n", value);\n    return 0;\n}`,
         expect:{ output:'2', variables:['value = 2'], warningMax:0 }
+      },
+      {
+        name:'for基本・小なり・後置インクリメント',
+        code:makeMainCode(`    int i;\n    for(i = 0; i < 3; i++){\n        printf("%d", i);\n    }\n    return 0;`),
+        expect:{
+          output:'012',
+          variables:['i = 3'],
+          warningMax:0,
+          stepCounts:{ 'for文の初期化':1, 'for文の条件':4, 'for文の更新':3, '最終条件が成立しなかった':1 },
+          stepsInOrder:['for文の初期化', 'for文の条件 i < 3', '画面に「0」', 'for文の更新', 'for文の条件 i < 3', '画面に「1」', '画面に「2」', '最終条件が成立しなかった']
+        }
+      },
+      {
+        name:'for基本・以下・前置インクリメント',
+        code:makeMainCode(`    int i;\n    for(i = 1; i <= 3; ++i){\n        printf("%d", i);\n    }\n    return 0;`),
+        expect:{ output:'123', variables:['i = 4'], warningMax:0, stepCounts:{ 'for文の条件':4, 'for文の更新':3 } }
+      },
+      {
+        name:'for基本・大なり・後置デクリメント',
+        code:makeMainCode(`    int i;\n    for(i = 3; i > 0; i--){\n        printf("%d", i);\n    }\n    return 0;`),
+        expect:{ output:'321', variables:['i = 0'], warningMax:0, stepCounts:{ 'for文の条件':4, 'for文の更新':3 } }
+      },
+      {
+        name:'for基本・以上・前置デクリメント',
+        code:makeMainCode(`    int i;\n    for(i = 3; i >= 0; --i){\n        printf("%d", i);\n    }\n    return 0;`),
+        expect:{ output:'3210', variables:['i = -1'], warningMax:0, stepCounts:{ 'for文の条件':5, 'for文の更新':4 } }
+      },
+      {
+        name:'for条件・等しい',
+        code:makeMainCode(`    int i;\n    for(i = 2; i == 2; i++){\n        printf("%d", i);\n    }\n    return 0;`),
+        expect:{ output:'2', variables:['i = 3'], warningMax:0, stepCounts:{ 'for文の条件':2, 'for文の更新':1 } }
+      },
+      {
+        name:'for条件・等しくない',
+        code:makeMainCode(`    int i;\n    for(i = 0; i != 3; i++){\n        printf("%d", i);\n    }\n    return 0;`),
+        expect:{ output:'012', variables:['i = 3'], warningMax:0, stepCounts:{ 'for文の条件':4, 'for文の更新':3 } }
+      },
+      {
+        name:'for更新・プラスイコール2',
+        code:makeMainCode(`    int i;\n    for(i = 0; i < 6; i += 2){\n        printf("%d", i);\n    }\n    return 0;`),
+        expect:{ output:'024', variables:['i = 6'], warningMax:0, stepCounts:{ 'for文の条件':4, 'for文の更新':3 } }
+      },
+      {
+        name:'for更新・マイナスイコール2',
+        code:makeMainCode(`    int i;\n    for(i = 6; i > 0; i -= 2){\n        printf("%d", i);\n    }\n    return 0;`),
+        expect:{ output:'642', variables:['i = 0'], warningMax:0, stepCounts:{ 'for文の条件':4, 'for文の更新':3 } }
+      },
+      {
+        name:'for更新・プラスイコール3',
+        code:makeMainCode(`    int i;\n    for(i = 0; i < 10; i += 3){\n        printf("%d", i);\n    }\n    return 0;`),
+        expect:{ output:'0369', variables:['i = 12'], warningMax:0, stepCounts:{ 'for文の条件':5, 'for文の更新':4 } }
+      },
+      {
+        name:'for更新・通常代入で加算',
+        code:makeMainCode(`    int i;\n    for(i = 0; i < 6; i = i + 2){\n        printf("%d", i);\n    }\n    return 0;`),
+        expect:{ output:'024', variables:['i = 6'], warningMax:0, stepCounts:{ 'for文の条件':4, 'for文の更新':3 } }
+      },
+      {
+        name:'for更新・通常代入で減算',
+        code:makeMainCode(`    int i;\n    for(i = 6; i > 0; i = i - 2){\n        printf("%d", i);\n    }\n    return 0;`),
+        expect:{ output:'642', variables:['i = 0'], warningMax:0, stepCounts:{ 'for文の条件':4, 'for文の更新':3 } }
+      },
+      {
+        name:'for本体・共通更新文6種',
+        code:makeMainCode(`    int i;\n    int sum = 0;\n    for(i = 0; i < 1; i++){\n        sum++;\n        ++sum;\n        sum--;\n        --sum;\n        sum += 3;\n        sum -= 1;\n        printf("%d", sum);\n    }\n    return 0;`),
+        expect:{ output:'2', variables:['i = 1', 'sum = 2'], warningMax:0, executedIncludes:['sum++;', '++sum;', 'sum--;', '--sum;', 'sum += 3;', 'sum -= 1;'] }
+      },
+      {
+        name:'for本体・複数printf',
+        code:makeMainCode(`    int i;\n    for(i = 0; i < 2; i++){\n        printf("A%d", i);\n        printf("B%d", i);\n    }\n    return 0;`),
+        expect:{ output:'A0B0A1B1', variables:['i = 2'], warningMax:0, stepCounts:{ 'for文の条件':3, 'for文の更新':2 } }
+      },
+      {
+        name:'for本体・代入とprintfを反復',
+        code:makeMainCode(`    int i;\n    int sum = 0;\n    for(i = 1; i <= 3; i++){\n        sum = sum + i;\n        printf("%d\\n", sum);\n    }\n    return 0;`),
+        expect:{ output:'1\n3\n6', variables:['i = 4', 'sum = 6'], warningMax:0, stepCounts:{ 'for文の条件':4, 'for文の更新':3 } }
+      },
+      {
+        name:'for本体でループ変数を変更',
+        code:makeMainCode(`    int i;\n    for(i = 0; i < 6; i++){\n        printf("%d", i);\n        i = i + 2;\n    }\n    return 0;`),
+        expect:{ output:'03', variables:['i = 6'], warningMax:0, stepCounts:{ 'for文の条件':3, 'for文の更新':2 } }
+      },
+      {
+        name:'空のfor本体・通常反復',
+        code:makeMainCode(`    int i;\n    for(i = 0; i < 3; i++){\n    }\n    printf("%d", i);\n    return 0;`),
+        expect:{ output:'3', variables:['i = 3'], warningMax:0, stepCounts:{ 'for文の条件':4, 'for文の更新':3, '最終条件が成立しなかった':1 } }
+      },
+      {
+        name:'空のfor本体・同一行の波かっこ',
+        code:makeMainCode(`    int i;\n    for(i = 0; i < 3; i++){}\n    printf("%d", i);\n    return 0;`),
+        expect:{ output:'3', variables:['i = 3'], warningMax:0, stepCounts:{ 'for文の条件':4, 'for文の更新':3 } }
+      },
+      {
+        name:'for構造・空白コメント文字列内の波かっこ',
+        code:makeMainCode(`    int i;\n    for ( i = 0 ; i < 2 ; i++ ) { /* { } */\n        // if(0){ }\n        printf("{%d}", i);\n    }\n    return 0;`),
+        expect:{ output:'{0}{1}', variables:['i = 2'], warningMax:0, stepCounts:{ 'for文の条件':3, 'for文の更新':2 } }
+      },
+      {
+        name:'for反復・0回実行',
+        code:makeMainCode(`    int i;\n    for(i = 5; i < 3; i++){\n        printf("WRONG");\n    }\n    printf("%d", i);\n    return 0;`),
+        expect:{ output:'5', outputExcludes:['WRONG'], variables:['i = 5'], warningMax:0, stepCounts:{ 'for文の条件':1, 'for文の更新':0 }, executedExcludes:['printf("WRONG'] }
+      },
+      {
+        name:'main直下に複数の独立for',
+        code:makeMainCode(`    int i;\n    for(i = 0; i < 2; i++){\n        printf("%d", i);\n    }\n    for(i = 3; i > 1; i--){\n        printf("%d", i);\n    }\n    return 0;`),
+        expect:{ output:'0132', variables:['i = 1'], warningMax:0, stepCounts:{ 'for文の初期化':2, 'for文の条件':6, 'for文の更新':4, '最終条件が成立しなかった':2 } }
+      },
+      {
+        name:'複数forの反復カウンタは独立',
+        code:makeMainCode(`    int i;\n    int total = 0;\n    for(i = 0; i < 500; i++){\n        total += 1;\n    }\n    for(i = 0; i < 1; i++){\n        total += 1;\n    }\n    printf("%d", total);\n    return 0;`),
+        expect:{ output:'501', variables:['i = 1', 'total = 501'], warningMax:0, hintsExclude:['安全上限'], stepCounts:{ 'for文の初期化':2, 'for文の条件':503, 'for文の更新':501 } }
+      },
+      {
+        name:'main直下scanfの値をfor条件に利用',
+        input:'3',
+        code:makeMainCode(`    int n;\n    int i;\n    scanf("%d", &n);\n    for(i = 0; i < n; i++){\n        printf("%d", i);\n    }\n    return 0;`),
+        expect:{ output:'012', variables:['n = 3', 'i = 3'], warningMax:0, stepCounts:{ 'for文の条件':4, 'for文の更新':3 } }
+      },
+      {
+        name:'for終了後に既存ifとprintfを継続',
+        code:makeMainCode(`    int i;\n    for(i = 0; i < 3; i++){\n        printf("%d", i);\n    }\n    if(i == 3){\n        printf("-OK");\n    }\n    return 0;`),
+        expect:{ output:'012-OK', variables:['i = 3'], warningMax:0, executedIncludes:['if(i == 3){', 'printf("-OK'] }
+      },
+      {
+        name:'for本体のreturn 0でプログラム全体終了',
+        code:makeMainCode(`    int i;\n    for(i = 0; i < 3; i++){\n        printf("START");\n        return 0;\n        printf("WRONG-BODY");\n    }\n    printf("WRONG-AFTER");`),
+        expect:{ output:'START', outputExcludes:['WRONG-BODY', 'WRONG-AFTER'], variables:['i = 0'], warningMax:0, stepCounts:{ 'for文の条件':1, 'for文の更新':0 }, executedExcludes:['printf("WRONG-BODY', 'printf("WRONG-AFTER'] }
+      },
+      {
+        name:'for本体の通常実行エラーを伝播',
+        code:makeMainCode(`    int i;\n    int sum = 5;\n    for(i = 0; i < 3; i++){\n        sum = 10 / (i - i);\n        printf("WRONG-BODY-ERROR");\n    }\n    printf("WRONG-AFTER-ERROR");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG-BODY-ERROR', 'WRONG-AFTER-ERROR'], variables:['i = 0', 'sum = 5'], warningMin:1, hintsInclude:['0で割ろうとしています'], stepCounts:{ 'for文の条件':1, 'for文の更新':0 }, executedExcludes:['printf("WRONG-BODY-ERROR', 'printf("WRONG-AFTER-ERROR'] }
+      },
+      {
+        name:'for条件エラーは初期化後に停止',
+        code:makeMainCode(`    int n;\n    int i = 9;\n    for(i = 0; i < n; i++){\n        printf("WRONG-CONDITION");\n    }\n    printf("WRONG-AFTER-CONDITION");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG-CONDITION', 'WRONG-AFTER-CONDITION'], variables:['n = 未初期化', 'i = 0'], warningMin:1, hintsInclude:['for文の条件を評価できません'], stepCounts:{ 'for文の初期化':1, 'for文の更新':0 }, executedExcludes:['printf("WRONG-CONDITION', 'printf("WRONG-AFTER-CONDITION'] }
+      },
+      {
+        name:'for更新エラーを握り潰さず停止',
+        code:makeMainCode(`    int i;\n    for(i = 0; i < 1; i = missing + 1){\n        printf("ONCE");\n    }\n    printf("WRONG-AFTER-UPDATE");\n    return 0;`),
+        expect:{ output:'ONCE', outputExcludes:['WRONG-AFTER-UPDATE'], variables:['i = 0'], warningMin:1, hintsInclude:['変数 missing は宣言されていません'], stepsInclude:['for文の更新を実行できない'], executedExcludes:['printf("WRONG-AFTER-UPDATE'] }
+      },
+      {
+        name:'for初期化の未宣言変数で停止',
+        code:makeMainCode(`    for(i = 0; i < 1; i++){\n        printf("WRONG-INIT");\n    }\n    printf("WRONG-AFTER-INIT");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG-INIT', 'WRONG-AFTER-INIT'], variablesExclude:['i ='], warningMin:1, hintsInclude:['宣言前の代入かも'], stepsInclude:['for文の初期化を実行できない'], executedExcludes:['printf("WRONG-INIT', 'printf("WRONG-AFTER-INIT'] }
+      },
+      {
+        name:'for本体のprintf評価エラーで停止',
+        code:makeMainCode(`    int i;\n    int value;\n    for(i = 0; i < 2; i++){\n        printf("%d", value);\n        printf("WRONG-NEXT-BODY");\n    }\n    printf("WRONG-AFTER-PRINTF");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG-NEXT-BODY', 'WRONG-AFTER-PRINTF'], variables:['i = 0', 'value = 未初期化'], warningMin:1, hintsInclude:['printfの値を確認'], stepCounts:{ 'for文の更新':0 }, executedExcludes:['printf("WRONG-NEXT-BODY', 'printf("WRONG-AFTER-PRINTF'] }
+      },
+      {
+        name:'main直下の前置更新と複合代入',
+        code:makeMainCode(`    int value = 1;\n    ++value;\n    --value;\n    value += 3;\n    value -= 1;\n    printf("%d", value);\n    return 0;`),
+        expect:{ output:'3', variables:['value = 3'], warningMax:0, executedIncludes:['++value;', '--value;', 'value += 3;', 'value -= 1;'] }
+      },
+      {
+        name:'for安全上限・500回で正常終了',
+        code:makeMainCode(`    int i;\n    int count = 0;\n    for(i = 0; i < 500; i++){\n        count++;\n    }\n    printf("%d", count);\n    return 0;`),
+        expect:{
+          output:'500',
+          variables:['i = 500', 'count = 500'],
+          warningMax:0,
+          hintsExclude:['安全上限'],
+          stepCounts:{ 'for文の条件':501, 'for文の更新':500, '最終条件が成立しなかった':1, '501回目の本体':0 }
+        }
+      },
+      {
+        name:'for安全上限・501回目の本体直前で停止',
+        code:makeMainCode(`    int i;\n    int count = 0;\n    for(i = 0; i <= 500; i++){\n        count++;\n    }\n    printf("WRONG-AFTER-LIMIT");\n    return 0;`),
+        expect:{
+          output:'出力はまだありません。',
+          outputExcludes:['WRONG-AFTER-LIMIT'],
+          variables:['i = 500', 'count = 500'],
+          warningMin:1,
+          hintsInclude:['繰り返し回数が安全上限に達しました', '非常に多い反復', '変数の値は、終了条件へ近づいていますか？'],
+          hintsExclude:['無限ループです'],
+          stepCounts:{ 'for文の条件':501, 'for文の更新':500, '501回目の本体':1, '最終条件が成立しなかった':0 },
+          executedExcludes:['printf("WRONG-AFTER-LIMIT']
+        }
+      },
+      {
+        name:'空のfor本体でも安全上限が機能',
+        code:makeMainCode(`    int i;\n    for(i = 0; i <= 500; i++){\n    }\n    printf("WRONG-AFTER-EMPTY-LIMIT");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG-AFTER-EMPTY-LIMIT'], variables:['i = 500'], warningMin:1, hintsInclude:['安全上限'], stepCounts:{ 'for文の条件':501, 'for文の更新':500, '501回目の本体':1 }, executedExcludes:['printf("WRONG-AFTER-EMPTY-LIMIT'] }
+      },
+      {
+        name:'無限ループ相当のforを安全停止',
+        code:makeMainCode(`    int i;\n    for(i = 0; i >= 0; i++){\n    }\n    printf("WRONG-AFTER-INFINITE");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG-AFTER-INFINITE'], variables:['i = 500'], warningMin:1, hintsInclude:['安全上限'], stepCounts:{ 'for文の更新':500 }, executedExcludes:['printf("WRONG-AFTER-INFINITE'] }
+      },
+      {
+        name:'終了条件から遠ざかる更新を安全停止',
+        code:makeMainCode(`    int i;\n    for(i = 1; i > 0; i++){\n    }\n    printf("WRONG-AFTER-AWAY");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG-AFTER-AWAY'], variables:['i = 501'], warningMin:1, hintsInclude:['安全上限'], stepCounts:{ 'for文の更新':500 }, executedExcludes:['printf("WRONG-AFTER-AWAY'] }
+      },
+      {
+        name:'本体内のループ変数変更で停止しないforを安全停止',
+        code:makeMainCode(`    int i;\n    for(i = 0; i < 3; i++){\n        i--;\n    }\n    printf("WRONG-AFTER-BODY-CHANGE");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG-AFTER-BODY-CHANGE'], variables:['i = 0'], warningMin:1, hintsInclude:['安全上限'], stepCounts:{ 'for文の更新':500 }, executedExcludes:['printf("WRONG-AFTER-BODY-CHANGE'] }
+      },
+      {
+        name:'for初期化で既存の整数式を再利用',
+        code:makeMainCode(`    int start = 1;\n    int i;\n    for(i = start + 1; i < 5; i++){\n        printf("%d", i);\n    }\n    return 0;`),
+        expect:{ output:'234', variables:['start = 1', 'i = 5'], warningMax:0, stepCounts:{ 'for文の条件':4, 'for文の更新':3 } }
+      },
+      {
+        name:'for本体のwhileを事前検証して部分実行しない',
+        code:makeMainCode(`    int i = 9;\n    printf("BEFORE");\n    for(i = 0; i < 2; i++){\n        printf("WRONG-EARLY");\n        while(i < 1){\n            i++;\n        }\n        printf("WRONG-LATE");\n    }\n    printf("WRONG-AFTER-WHILE");\n    return 0;`),
+        expect:{ output:'BEFORE', outputExcludes:['WRONG-EARLY', 'WRONG-LATE', 'WRONG-AFTER-WHILE'], variables:['i = 9'], warningMin:1, hintsInclude:['for文内の制御構造は未対応'], stepCounts:{ 'for文の初期化':0, 'for文の条件':0, 'for文の更新':0 }, executedExcludes:['printf("WRONG-EARLY', 'i++;', 'printf("WRONG-LATE', 'printf("WRONG-AFTER-WHILE'] }
+      },
+      {
+        name:'for本体のifを事前検証し内側braceを終端と誤認しない',
+        code:makeMainCode(`    int i = 9;\n    int value = 0;\n    for(i = 0; i < 2; i++){\n        value = 1;\n        if(i == 0){\n            value = 2;\n        }\n        value = 3;\n        printf("WRONG-LATE-IF");\n    }\n    printf("WRONG-AFTER-IF");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG-LATE-IF', 'WRONG-AFTER-IF'], variables:['i = 9', 'value = 0'], warningMin:1, hintsInclude:['for文内のifは未対応'], analysisInclude:['未対応のfor文に含まれるため、この行は実行されませんでした。'], stepCounts:{ 'for文の初期化':0 }, executedExcludes:['value = 1;', 'value = 2;', 'value = 3;', 'printf("WRONG-LATE-IF', 'printf("WRONG-AFTER-IF'] }
+      },
+      {
+        name:'入れ子forを事前検証して外側も実行しない',
+        code:makeMainCode(`    int i = 9;\n    int j = 8;\n    for(i = 0; i < 2; i++){\n        for(j = 0; j < 2; j++){\n            printf("WRONG-NESTED-FOR");\n        }\n    }\n    printf("WRONG-AFTER-NESTED-FOR");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG-NESTED-FOR', 'WRONG-AFTER-NESTED-FOR'], variables:['i = 9', 'j = 8'], warningMin:1, hintsInclude:['for文内の制御構造は未対応'], stepCounts:{ 'for文の初期化':0 }, executedExcludes:['printf("WRONG-NESTED-FOR', 'printf("WRONG-AFTER-NESTED-FOR'] }
+      },
+      {
+        name:'for本体のscanfを事前検証して入力を消費しない',
+        input:'7',
+        code:makeMainCode(`    int n;\n    int i = 9;\n    for(i = 0; i < 2; i++){\n        scanf("%d", &n);\n    }\n    scanf("%d", &n);\n    printf("WRONG-AFTER-FOR-SCANF");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG-AFTER-FOR-SCANF'], variables:['n = 未初期化', 'i = 9'], warningMin:1, hintsInclude:['for文内のscanfは未対応'], stepCounts:{ 'for文の初期化':0 }, executedExcludes:['scanf("%d", &n);', 'printf("WRONG-AFTER-FOR-SCANF'] }
+      },
+      {
+        name:'for本体の変数宣言を事前検証',
+        code:makeMainCode(`    int i = 9;\n    for(i = 0; i < 2; i++){\n        int local = i;\n        printf("WRONG-DECLARATION");\n    }\n    printf("WRONG-AFTER-DECLARATION");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG-DECLARATION', 'WRONG-AFTER-DECLARATION'], variables:['i = 9'], variablesExclude:['local ='], warningMin:1, hintsInclude:['for文内の変数宣言は未対応'], stepCounts:{ 'for文の初期化':0 }, executedExcludes:['int local = i;', 'printf("WRONG-DECLARATION', 'printf("WRONG-AFTER-DECLARATION'] }
+      },
+      {
+        name:'for本体のbreakは未対応で全体停止',
+        code:makeMainCode(`    int i = 9;\n    for(i = 0; i < 2; i++){\n        break;\n    }\n    printf("WRONG-AFTER-BREAK");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG-AFTER-BREAK'], variables:['i = 9'], warningMin:1, hintsInclude:['for文本体の文は未対応'], stepCounts:{ 'for文の初期化':0 }, executedExcludes:['break;', 'printf("WRONG-AFTER-BREAK'] }
+      },
+      {
+        name:'for本体のcontinueは未対応で全体停止',
+        code:makeMainCode(`    int i = 9;\n    for(i = 0; i < 2; i++){\n        continue;\n    }\n    printf("WRONG-AFTER-CONTINUE");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG-AFTER-CONTINUE'], variables:['i = 9'], warningMin:1, hintsInclude:['for文本体の文は未対応'], stepCounts:{ 'for文の初期化':0 }, executedExcludes:['continue;', 'printf("WRONG-AFTER-CONTINUE'] }
+      },
+      {
+        name:'波かっこなしforは未対応で後続停止',
+        code:makeMainCode(`    int i = 9;\n    for(i = 0; i < 2; i++)\n        printf("WRONG-BRACELESS");\n    printf("WRONG-AFTER-BRACELESS");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG-BRACELESS', 'WRONG-AFTER-BRACELESS'], variables:['i = 9'], warningMin:1, hintsInclude:['for文は未対応', '波かっこ'], stepCounts:{ 'for文の初期化':0 }, executedExcludes:['printf("WRONG-BRACELESS', 'printf("WRONG-AFTER-BRACELESS'] }
+      },
+      {
+        name:'条件省略forは未対応で後続停止',
+        code:makeMainCode(`    int i = 9;\n    for(i = 0; ; i++){\n        printf("WRONG-MISSING-CONDITION");\n    }\n    printf("WRONG-AFTER-MISSING-CONDITION");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG-MISSING-CONDITION', 'WRONG-AFTER-MISSING-CONDITION'], variables:['i = 9'], warningMin:1, hintsInclude:['初期化・条件・更新を省略'], stepCounts:{ 'for文の初期化':0 }, executedExcludes:['printf("WRONG-MISSING-CONDITION', 'printf("WRONG-AFTER-MISSING-CONDITION'] }
+      },
+      {
+        name:'for二重セミコロン形は未対応で後続停止',
+        code:makeMainCode(`    int i = 9;\n    for(;;){\n        printf("WRONG-EMPTY-HEADER");\n    }\n    printf("WRONG-AFTER-EMPTY-HEADER");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG-EMPTY-HEADER', 'WRONG-AFTER-EMPTY-HEADER'], variables:['i = 9'], warningMin:1, hintsInclude:['初期化・条件・更新を省略'], stepCounts:{ 'for文の初期化':0 }, executedExcludes:['printf("WRONG-EMPTY-HEADER', 'printf("WRONG-AFTER-EMPTY-HEADER'] }
+      },
+      {
+        name:'for初期化部の複数式は未対応',
+        code:makeMainCode(`    int i = 9;\n    int j = 8;\n    for(i = 0, j = 0; i < 2; i++){\n        printf("WRONG-COMMA");\n    }\n    printf("WRONG-AFTER-COMMA");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG-COMMA', 'WRONG-AFTER-COMMA'], variables:['i = 9', 'j = 8'], warningMin:1, hintsInclude:['複数式やカンマ演算子'], stepCounts:{ 'for文の初期化':0 }, executedExcludes:['printf("WRONG-COMMA', 'printf("WRONG-AFTER-COMMA'] }
+      },
+      {
+        name:'for更新部省略は未対応',
+        code:makeMainCode(`    int i = 9;\n    for(i = 0; i < 2; ){\n        printf("WRONG-MISSING-UPDATE");\n    }\n    printf("WRONG-AFTER-MISSING-UPDATE");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG-MISSING-UPDATE', 'WRONG-AFTER-MISSING-UPDATE'], variables:['i = 9'], warningMin:1, hintsInclude:['初期化・条件・更新を省略'], stepCounts:{ 'for文の初期化':0 }, executedExcludes:['printf("WRONG-MISSING-UPDATE', 'printf("WRONG-AFTER-MISSING-UPDATE'] }
+      },
+      {
+        name:'for更新部の変数による複合代入は未対応',
+        code:makeMainCode(`    int i = 9;\n    int step = 1;\n    for(i = 0; i < 2; i += step){\n        printf("WRONG-VARIABLE-STEP");\n    }\n    printf("WRONG-AFTER-VARIABLE-STEP");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG-VARIABLE-STEP', 'WRONG-AFTER-VARIABLE-STEP'], variables:['i = 9', 'step = 1'], warningMin:1, hintsInclude:['更新部では'], stepCounts:{ 'for文の初期化':0 }, executedExcludes:['printf("WRONG-VARIABLE-STEP', 'printf("WRONG-AFTER-VARIABLE-STEP'] }
+      },
+      {
+        name:'同一行に本文を持つforは未対応で後続停止',
+        code:makeMainCode(`    int i = 9;\n    for(i = 0; i < 2; i++){ printf("WRONG-INLINE"); }\n    printf("WRONG-AFTER-INLINE");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG-INLINE', 'WRONG-AFTER-INLINE'], variables:['i = 9'], warningMin:1, hintsInclude:['for文は未対応'], stepCounts:{ 'for文の初期化':0 }, executedExcludes:['printf("WRONG-INLINE', 'printf("WRONG-AFTER-INLINE'] }
+      },
+      {
+        name:'for本体の式中インクリメントを事前検証',
+        code:makeMainCode(`    int i = 9;\n    int value = 0;\n    for(i = 0; i < 2; i++){\n        value = i++;\n        printf("WRONG-SIDE-EFFECT");\n    }\n    printf("WRONG-AFTER-SIDE-EFFECT");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG-SIDE-EFFECT', 'WRONG-AFTER-SIDE-EFFECT'], variables:['i = 9', 'value = 0'], warningMin:1, hintsInclude:['式中の++・--は未対応'], stepCounts:{ 'for文の初期化':0 }, executedExcludes:['value = i++;', 'printf("WRONG-SIDE-EFFECT', 'printf("WRONG-AFTER-SIDE-EFFECT'] }
       }
     ];
 
@@ -1167,6 +1454,13 @@
 
       for(const text of expected.stepsExclude || []){
         if(actual.steps.includes(text)) failures.push(`STEPに「${text}」を含めない`);
+      }
+
+      for(const [text, expectedCount] of Object.entries(expected.stepCounts || {})){
+        const actualCount = actual.steps.split(text).length - 1;
+        if(actualCount !== expectedCount){
+          failures.push(`STEP内「${text}」の回数: 期待${expectedCount}回 / 実際${actualCount}回`);
+        }
       }
 
       let stepSearchStart = 0;

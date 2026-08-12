@@ -19,6 +19,9 @@ const sampleScanfInputs = {
 // 数値の 0 と区別して、まだ値が入っていない状態を表します。
 const UNINITIALIZED = Symbol('uninitialized');
 
+// ブラウザ停止を防ぐため、1つのfor文で本体へ入れる回数を制限します。
+const MAX_FOR_ITERATIONS = 500;
+
 function escapeHtml(str){
   return String(str)
     .replace(/&/g, '&amp;')
@@ -279,6 +282,160 @@ function hasMultipleStatementsOnOneLine(trimmed){
   return countSemicolonsOutsideString(trimmed) >= 2;
 }
 
+// ++ / -- / += / -= を、for専用ではない共通の変数更新として読み取ります。
+function parseVariableUpdate(text, requiresSemicolon){
+  const trimmed = String(text).trim();
+  const hasSemicolon = trimmed.endsWith(';');
+  if(requiresSemicolon !== hasSemicolon) return null;
+
+  const code = hasSemicolon ? trimmed.slice(0, -1).trim() : trimmed;
+  let match = code.match(/^([A-Za-z_]\w*)\s*(\+\+|--)$/);
+  if(match){
+    return {
+      name:match[1],
+      operator:match[2],
+      amount:match[2] === '++' ? 1 : -1,
+      source:code
+    };
+  }
+
+  match = code.match(/^(\+\+|--)\s*([A-Za-z_]\w*)$/);
+  if(match){
+    return {
+      name:match[2],
+      operator:match[1],
+      amount:match[1] === '++' ? 1 : -1,
+      source:code
+    };
+  }
+
+  match = code.match(/^([A-Za-z_]\w*)\s*(\+=|-=)\s*([-+]?\d+)$/);
+  if(match){
+    const integer = Number(match[3]);
+    return {
+      name:match[1],
+      operator:match[2],
+      amount:match[2] === '+=' ? integer : -integer,
+      operand:integer,
+      source:code
+    };
+  }
+
+  return null;
+}
+
+// forヘッダを、初期化・条件・更新の3要素へ分けて構造として保持します。
+function parseForHeader(structuralCode){
+  const code = String(structuralCode).trim();
+  const forMatch = code.match(/^for\b/);
+  if(!forMatch){
+    return { ok:false, error:'for文の開始位置を読み取れません。' };
+  }
+
+  let openIndex = forMatch[0].length;
+  while(/\s/.test(code[openIndex] || '')) openIndex++;
+  if(code[openIndex] !== '('){
+    return { ok:false, error:'forの直後に、初期化・条件・更新を囲む丸かっこが必要です。' };
+  }
+
+  let depth = 0;
+  let closeIndex = -1;
+  for(let index = openIndex; index < code.length; index++){
+    if(code[index] === '(') depth++;
+    if(code[index] === ')'){
+      depth--;
+      if(depth === 0){
+        closeIndex = index;
+        break;
+      }
+      if(depth < 0) break;
+    }
+  }
+  if(closeIndex < 0){
+    return { ok:false, error:'forヘッダの閉じ丸かっこを確認してください。' };
+  }
+
+  const tail = code.slice(closeIndex + 1).trim();
+  const compactTail = tail.replace(/\s/g, '');
+  const inlineEmptyBody = compactTail === '{}';
+  if(tail !== '{' && !inlineEmptyBody){
+    return {
+      ok:false,
+      error:'現在のVisualizerでは、for文の開き波かっこをヘッダと同じ行に書き、本体を波かっこで囲んでください。'
+    };
+  }
+
+  const headerText = code.slice(openIndex + 1, closeIndex);
+  const clauses = [];
+  let clause = '';
+  depth = 0;
+  for(const character of headerText){
+    if(character === '(') depth++;
+    if(character === ')') depth--;
+    if(depth < 0){
+      return { ok:false, error:'forヘッダ内の丸かっこの対応を確認してください。' };
+    }
+    if(character === ';' && depth === 0){
+      clauses.push(clause.trim());
+      clause = '';
+    }else{
+      clause += character;
+    }
+  }
+  clauses.push(clause.trim());
+
+  if(depth !== 0 || clauses.length !== 3){
+    return { ok:false, error:'forヘッダは「初期化; 条件; 更新」の3つに分けて書いてください。' };
+  }
+
+  const [initializationText, condition, updateText] = clauses;
+  if(!initializationText || !condition || !updateText){
+    return { ok:false, error:'初期化・条件・更新を省略したfor文は現在未対応です。' };
+  }
+  if(clauses.some(part => part.includes(','))){
+    return { ok:false, error:'複数式やカンマ演算子を使うforヘッダは現在未対応です。' };
+  }
+
+  const initializationMatch = initializationText.match(/^([A-Za-z_]\w*)\s*=\s*(.+)$/);
+  if(!initializationMatch || /\+\+|--/.test(initializationMatch[2])){
+    return {
+      ok:false,
+      error:'初期化部では、宣言済みのint変数への単純な代入を使用してください。forヘッダ内の変数宣言は現在未対応です。'
+    };
+  }
+
+  const variableUpdate = parseVariableUpdate(updateText, false);
+  let update;
+  if(variableUpdate){
+    update = { type:'variable-update', value:variableUpdate };
+  }else{
+    const assignmentMatch = updateText.match(/^([A-Za-z_]\w*)\s*=\s*(.+)$/);
+    if(!assignmentMatch || /\+\+|--/.test(assignmentMatch[2])){
+      return {
+        ok:false,
+        error:'更新部では、単独の++ / --、整数定数による+= / -=、または既存の代入式を使用してください。'
+      };
+    }
+    update = {
+      type:'assignment',
+      name:assignmentMatch[1],
+      expression:assignmentMatch[2].trim(),
+      source:updateText
+    };
+  }
+
+  return {
+    ok:true,
+    initialization:{
+      name:initializationMatch[1],
+      expression:initializationMatch[2].trim(),
+      source:initializationText
+    },
+    condition,
+    update
+  };
+}
+
 // 文字列と行コメントを空白に置き換え、構文として読む部分だけを残します。
 function codeOutsideStringAndLineComment(text){
   let code = '';
@@ -490,7 +647,7 @@ function tokenizeExpression(expr){
 
 function evaluateArithmeticExpression(expr, variables){
   if(/\+\+|--/.test(expr)){
-    return { ok:false, error:'++ と -- は現在未対応です。値を1増減する処理は、代入と四則演算に書き換えてください。' };
+    return { ok:false, error:'式の中で使う ++ と -- は現在未対応です。値を1増減するときは、単独の更新文として使用してください。' };
   }
 
   const tokenResult = tokenizeExpression(expr);
@@ -759,6 +916,10 @@ function formatPrintfString(format, values){
   return { text, usedCount:index };
 }
 
+function matchSimplePrintfStatement(text){
+  return String(text).trim().match(/^printf\s*\(\s*"((?:\\.|[^"\\])*)"\s*(?:,\s*(.*))?\)\s*;$/);
+}
+
 function visualizeCode(){
   updateCodeEditor();
   const code = document.getElementById('codeInput').value.replace(/\r\n/g, '\n');
@@ -802,12 +963,81 @@ function visualizeCode(){
     variables[name] = value;
   }
 
-  function addStep(lineNo, text){
+  function addStep(lineNo, text, markAsExecuted = true){
     steps.push({ step:stepNo++, lineNo, text });
-    executedLines.add(lineNo);
+    if(markAsExecuted) executedLines.add(lineNo);
   }
 
-  function processSimpleLine(rawLine, index, insideIf = false){
+  // main直下・for初期化・for更新で同じ代入処理を共有します。
+  function executeAssignment(name, expr, lineNo, contextLabel = ''){
+    const analysisPrefix = contextLabel ? `<strong>${escapeHtml(contextLabel)}：</strong> ` : '';
+    const stepPrefix = contextLabel ? `${contextLabel}：` : '';
+
+    if(!(name in variables)){
+      addAnalysis(analysis, lineNo, `${analysisPrefix}変数 <code>${name}</code> に代入しようとしています。`);
+      addHint(hints, lineNo, '宣言前の代入かも', `変数 <code>${name}</code> が先に <code>int ${name};</code> のように宣言されているか確認してみましょう。`);
+      warningLines.add(lineNo);
+      return { ok:false };
+    }
+
+    const result = evaluateExpression(expr, variables);
+    if(!result.ok){
+      addAnalysis(analysis, lineNo, `${analysisPrefix}変数 <code>${name}</code> への代入を読み取ろうとしましたが、式を計算できませんでした。`);
+      addHint(hints, lineNo, '式を計算できません', escapeHtml(result.error));
+      warningLines.add(lineNo);
+      return { ok:false };
+    }
+
+    const before = variables[name];
+    rememberVariable(name, result.value);
+    if(result.comparison){
+      const cValue = result.comparison.conditionMet ? '成立を1' : '不成立を0';
+      addAnalysis(analysis, lineNo, `${analysisPrefix}${describeComparison(result)} C言語では条件の${cValue}として扱うため、<code>${name}</code> に <code>${result.value}</code> を代入しました。`);
+    }else{
+      addAnalysis(analysis, lineNo, `${analysisPrefix}変数 <code>${name}</code> に、<code>${escapeHtml(expr)}</code> の計算結果 <code>${result.value}</code> を代入しました。`);
+    }
+
+    if(before === UNINITIALIZED){
+      addStep(lineNo, `${stepPrefix}${name} の中身に ${result.value} を代入しました。計算：${escapeHtml(result.readable)} = ${result.value}`);
+    }else{
+      addStep(lineNo, `${stepPrefix}${name} の中身を ${before} から ${result.value} に変えました。計算：${escapeHtml(result.readable)} = ${result.value}`);
+    }
+    return { ok:true, value:result.value };
+  }
+
+  // 許可された場所の ++ / -- / += / -= は、すべてこの共通処理で更新します。
+  function executeVariableUpdate(update, lineNo, contextLabel = ''){
+    const analysisPrefix = contextLabel ? `<strong>${escapeHtml(contextLabel)}：</strong> ` : '';
+    const stepPrefix = contextLabel ? `${contextLabel}：` : '';
+    const name = update.name;
+
+    if(!(name in variables)){
+      addAnalysis(analysis, lineNo, `${analysisPrefix}変数 <code>${name}</code> を更新しようとしています。`);
+      addHint(hints, lineNo, '宣言前の更新かも', `変数 <code>${name}</code> が先に <code>int ${name};</code> のように宣言されているか確認してみましょう。`);
+      warningLines.add(lineNo);
+      return { ok:false };
+    }
+    if(variables[name] === UNINITIALIZED){
+      addAnalysis(analysis, lineNo, `${analysisPrefix}変数 <code>${name}</code> はまだ値が代入されていないため、更新できませんでした。`);
+      addHint(hints, lineNo, '更新する値がありません', `変数 <code>${name}</code> に整数を代入してから更新してください。`);
+      warningLines.add(lineNo);
+      return { ok:false };
+    }
+
+    const before = variables[name];
+    const after = before + update.amount;
+    rememberVariable(name, after);
+    const direction = update.amount >= 0 ? '増やし' : '減らし';
+    addAnalysis(
+      analysis,
+      lineNo,
+      `${analysisPrefix}<code>${escapeHtml(update.source)}</code> により、変数 <code>${name}</code> を <code>${Math.abs(update.amount)}</code> ${direction}、<code>${before}</code> から <code>${after}</code> に更新しました。`
+    );
+    addStep(lineNo, `${stepPrefix}${name} の中身を ${before} から ${after} に変えました。更新：${escapeHtml(update.source)}`);
+    return { ok:true, value:after };
+  }
+
+  function processSimpleLine(rawLine, index, insideIf = false, insideFor = false){
     const lineNo = index + 1;
     const rawTrimmed = rawLine.trim();
     const trimmed = executableLines[index].trim();
@@ -823,6 +1053,13 @@ function visualizeCode(){
     const structuralCode = codeOutsideStringAndLineComment(trimmed);
 
     const hasScanfCall = /^scanf\b/.test(structuralCode) || /\bscanf\s*\(/.test(structuralCode);
+    if(insideFor && hasScanfCall){
+      addAnalysis(analysis, lineNo, 'for文の本体内でscanfを使う形は現在未対応です。');
+      addHint(hints, lineNo, 'for文内のscanfは未対応', 'Stage1では、scanfはmain直下に置く場合だけ実行できます。');
+      warningLines.add(lineNo);
+      return 'execution-error';
+    }
+
     if(!insideIf && hasScanfCall){
       function stopScanf(title, message){
         addAnalysis(analysis, lineNo, `${message} この行でプログラムの実行を停止します。`);
@@ -886,20 +1123,26 @@ function visualizeCode(){
       return;
     }
 
-    if(/\+\+|--/.test(structuralCode)){
-      const message = '++ と -- は現在未対応です。この行は実行しません。値を1増減するときは、value = value + 1; のように書いてください。';
-      addAnalysis(analysis, lineNo, message);
-      addHint(hints, lineNo, '++・--は未対応', message);
-      warningLines.add(lineNo);
-      return;
-    }
-
     if(insideIf && !/^int\s+/.test(trimmed) &&
        !/^[A-Za-z_]\w*\s*=/.test(trimmed) && !/^printf\s*\(/.test(trimmed)){
       addAnalysis(analysis, lineNo, 'この処理はif側・else側の中では現在未対応のため、実行しません。');
       addHint(hints, lineNo, '分岐内では未対応', 'if側・else側では、既存の変数への代入とprintfだけを実行できます。');
       warningLines.add(lineNo);
       return;
+    }
+
+    const variableUpdate = parseVariableUpdate(trimmed, true);
+    if(variableUpdate){
+      const result = executeVariableUpdate(variableUpdate, lineNo);
+      return !result.ok && insideFor ? 'execution-error' : undefined;
+    }
+
+    if(/\+\+|--/.test(structuralCode)){
+      const message = '式の中で評価値や副作用を利用する ++ と -- は現在未対応です。この行は実行しません。単独の更新文として使用してください。';
+      addAnalysis(analysis, lineNo, message);
+      addHint(hints, lineNo, '++・--は未対応', message);
+      warningLines.add(lineNo);
+      return insideFor ? 'execution-error' : undefined;
     }
 
     let checkTarget = trimmed;
@@ -941,11 +1184,13 @@ function visualizeCode(){
 
     const declMatch = trimmed.match(/^int\s+([A-Za-z_]\w*)\s*(?:=\s*(.+))?;$/);
     if(declMatch){
-      if(insideIf){
-        addAnalysis(analysis, lineNo, 'if側・else側で新しい変数を宣言する処理は、現在未対応です。この行は実行しません。');
-        addHint(hints, lineNo, '分岐内の変数宣言は未対応', 'ブロックスコープを正確に再現できないため、変数は登録しません。');
+      if(insideIf || insideFor){
+        const scopeLabel = insideFor ? 'for文の本体' : 'if側・else側';
+        const hintTitle = insideFor ? 'for文内の変数宣言は未対応' : '分岐内の変数宣言は未対応';
+        addAnalysis(analysis, lineNo, `${scopeLabel}で新しい変数を宣言する処理は、現在未対応です。この行は実行しません。`);
+        addHint(hints, lineNo, hintTitle, 'ブロックスコープを正確に再現できないため、変数は登録しません。');
         warningLines.add(lineNo);
-        return;
+        return insideFor ? 'execution-error' : undefined;
       }
       const name = declMatch[1];
       const expr = declMatch[2];
@@ -974,36 +1219,11 @@ function visualizeCode(){
     if(assignMatch){
       const name = assignMatch[1];
       const expr = assignMatch[2];
-      if(!(name in variables)){
-        addAnalysis(analysis, lineNo, `変数 <code>${name}</code> に代入しようとしています。`);
-        addHint(hints, lineNo, '宣言前の代入かも', `変数 <code>${name}</code> が先に <code>int ${name};</code> のように宣言されているか確認してみましょう。`);
-        warningLines.add(lineNo);
-        return;
-      }
-      const result = evaluateExpression(expr, variables);
-      if(result.ok){
-        const before = variables[name];
-        rememberVariable(name, result.value);
-        if(result.comparison){
-          const cValue = result.comparison.conditionMet ? '成立を1' : '不成立を0';
-          addAnalysis(analysis, lineNo, `${describeComparison(result)} C言語では条件の${cValue}として扱うため、<code>${name}</code> に <code>${result.value}</code> を代入しました。`);
-        }else{
-          addAnalysis(analysis, lineNo, `変数 <code>${name}</code> に、<code>${escapeHtml(expr)}</code> の計算結果 <code>${result.value}</code> を代入しました。`);
-        }
-        if(before === UNINITIALIZED){
-          addStep(lineNo, `${name} の中身に ${result.value} を代入しました。計算：${escapeHtml(result.readable)} = ${result.value}`);
-        }else{
-          addStep(lineNo, `${name} の中身を ${before} から ${result.value} に変えました。計算：${escapeHtml(result.readable)} = ${result.value}`);
-        }
-      }else{
-        addAnalysis(analysis, lineNo, `変数 <code>${name}</code> への代入を読み取ろうとしましたが、式を計算できませんでした。`);
-        addHint(hints, lineNo, '式を計算できません', escapeHtml(result.error));
-        warningLines.add(lineNo);
-      }
-      return;
+      const result = executeAssignment(name, expr, lineNo);
+      return !result.ok && insideFor ? 'execution-error' : undefined;
     }
 
-    const printfMatch = trimmed.match(/^printf\s*\(\s*"((?:\\.|[^"\\])*)"\s*(?:,\s*(.*))?\)\s*;$/);
+    const printfMatch = matchSimplePrintfStatement(trimmed);
     if(printfMatch){
       const format = printfMatch[1];
       if(format.includes('%%')){
@@ -1011,7 +1231,7 @@ function visualizeCode(){
         addAnalysis(analysis, lineNo, message);
         addHint(hints, lineNo, 'printfの%%は未対応', message);
         warningLines.add(lineNo);
-        return;
+        return insideFor ? 'execution-error' : undefined;
       }
 
       const argText = printfMatch[2] || '';
@@ -1062,6 +1282,7 @@ function visualizeCode(){
         addAnalysis(analysis, lineNo, 'printfで表示しようとしましたが、表示する値を計算できませんでした。');
         addHint(hints, lineNo, 'printfの値を確認', escapeHtml(error));
         warningLines.add(lineNo);
+        return insideFor ? 'execution-error' : undefined;
       }
       return;
     }
@@ -1076,6 +1297,7 @@ function visualizeCode(){
       addHint(hints, lineNo, '未対応コード', 'この行は現在の可視化対象外です。まずは int、代入、整数の四則演算、比較式、printf、main直下の単純なscanf、単純なif〜else文、最大2階層の単純な入れ子if・if〜elseの範囲で試してみましょう。');
       warningLines.add(lineNo);
     }
+    return insideFor ? 'execution-error' : undefined;
   }
 
   function describeNonExecutableLine(rawLine, index, reason){
@@ -1715,6 +1937,211 @@ function visualizeCode(){
     }
   }
 
+  // for全体を初期化前に検査し、Stage1で安全に実行できる本体だけを受け付けます。
+  function inspectSupportedFor(startIndex){
+    const range = findUnsupportedControlRange(startIndex);
+    const safeEndIndex = Math.min(range.endIndex, Math.max(startIndex, executionEndIndex - 1));
+    const structuralCode = codeOutsideStringAndLineComment(executableLines[startIndex]).trim();
+    const header = parseForHeader(structuralCode);
+
+    function failure(message, title = 'for文は未対応'){
+      return {
+        ok:false,
+        title,
+        message,
+        endIndex:safeEndIndex,
+        closed:range.closed
+      };
+    }
+
+    if(!header.ok){
+      return failure(`${header.error} C言語として正しい形であっても、現在のVisualizerの対応範囲外である場合は実行しません。`);
+    }
+    if(!range.closed){
+      return failure('for文を閉じる波かっこを確認できないため、初期化を含めて実行しません。', 'for文の終わりを確認');
+    }
+
+    for(let index = startIndex + 1; index < safeEndIndex; index++){
+      const trimmed = executableLines[index].trim();
+      const structuralBodyCode = codeOutsideStringAndLineComment(executableLines[index]).trim();
+      if(structuralBodyCode === '') continue;
+
+      if(hasMultipleStatementsOnOneLine(trimmed)){
+        return failure('for文の本体に1行で複数の文が書かれています。本体を部分実行せず、この地点で停止します。', 'for文本体の改行を確認');
+      }
+      if(/^scanf\b/.test(structuralBodyCode) || /\bscanf\s*\(/.test(structuralBodyCode)){
+        return failure('for文の本体内にscanfがあります。Stage1ではfor内scanfに対応していないため、for文全体を実行しません。', 'for文内のscanfは未対応');
+      }
+      if(/^if\b/.test(structuralBodyCode)){
+        return failure('for文の本体内にif文があります。Stage1ではfor + ifに対応していないため、for文全体を実行しません。', 'for文内のifは未対応');
+      }
+
+      const nestedControl = unsupportedControlInfo(structuralBodyCode);
+      if(nestedControl){
+        return failure(`for文の本体内に${nestedControl.label}があります。Stage1では制御構造の入れ子に対応していないため、for文全体を実行しません。`, 'for文内の制御構造は未対応');
+      }
+      if(/^do\b|^else\b/.test(structuralBodyCode) || bracesOutsideString(executableLines[index]).length > 0){
+        return failure('for文の本体内に、Stage1では実行できないブロック構造があります。for文全体を実行しません。', 'for文内のブロックは未対応');
+      }
+      if(/^int\b/.test(structuralBodyCode)){
+        return failure('for文の本体内で変数を宣言する形はStage1では未対応です。for文全体を実行しません。', 'for文内の変数宣言は未対応');
+      }
+
+      const variableUpdate = parseVariableUpdate(structuralBodyCode, true);
+      if(/\+\+|--/.test(structuralBodyCode) && variableUpdate === null){
+        return failure('for文の本体に、式中で副作用を利用する++ / --があります。Stage1では単独更新文だけに対応しているため、for文全体を実行しません。', '式中の++・--は未対応');
+      }
+
+      const looksLikePrintf = /^printf\b/.test(structuralBodyCode);
+      const printfMatch = looksLikePrintf ? matchSimplePrintfStatement(trimmed) : null;
+      if(looksLikePrintf && (!printfMatch || printfMatch[1].includes('%%'))){
+        return failure('for文の本体に、既存の単純printfとして安全に実行できない文があります。for文全体を実行しません。', 'for文本体のprintfは未対応');
+      }
+
+      const supportedSimpleStatement =
+        /^return\s+0\s*;?$/.test(structuralBodyCode) ||
+        variableUpdate !== null ||
+        /^[A-Za-z_]\w*\s*=\s*.+;$/.test(structuralBodyCode) ||
+        printfMatch !== null;
+      if(!supportedSimpleStatement){
+        return failure('for文の本体に、Stage1では実行できない文があります。本体を部分実行せず、この地点で停止します。', 'for文本体の文は未対応');
+      }
+    }
+
+    return {
+      ok:true,
+      ...header,
+      startIndex,
+      bodyStartIndex:startIndex + 1,
+      bodyEndIndex:safeEndIndex,
+      endIndex:safeEndIndex
+    };
+  }
+
+  function warnUnsupportedFor(startIndex, inspection){
+    const lineNo = startIndex + 1;
+    addAnalysis(analysis, lineNo, `${inspection.message} for文の初期化・条件・本体・更新は実行していません。`);
+    addHint(hints, lineNo, inspection.title, inspection.message);
+    warningLines.add(lineNo);
+    addStep(lineNo, 'このfor文は現在のVisualizerでは実行できないため、プログラムの実行を停止します。', false);
+
+    for(let index = startIndex + 1; index <= inspection.endIndex && index < executionEndIndex; index++){
+      const trimmed = executableLines[index].trim();
+      if(trimmed === ''){
+        processSimpleLine(lines[index], index, false, true);
+      }else{
+        addAnalysis(analysis, index + 1, '未対応のfor文に含まれるため、この行は実行されませんでした。');
+        addSkippedLineWarnings(index, trimmed);
+      }
+    }
+  }
+
+  function executeFor(node){
+    const lineNo = node.startIndex + 1;
+    const initialization = executeAssignment(
+      node.initialization.name,
+      node.initialization.expression,
+      lineNo,
+      'for文の初期化'
+    );
+    if(!initialization.ok){
+      addStep(lineNo, 'for文の初期化を実行できないため、プログラムの実行を停止します。');
+      return {
+        status:'execution-stopped',
+        stopIndex:node.startIndex,
+        reason:'for文の初期化で実行を停止したため、この行は実行されませんでした。'
+      };
+    }
+
+    let iterationCount = 0;
+    while(true){
+      const conditionResult = evaluateExpression(node.condition, variables);
+      if(!conditionResult.ok){
+        addAnalysis(analysis, lineNo, `for文の条件 <code>${escapeHtml(node.condition)}</code> を評価できませんでした。`);
+        addHint(hints, lineNo, 'for文の条件を評価できません', escapeHtml(conditionResult.error));
+        warningLines.add(lineNo);
+        addStep(lineNo, 'for文の条件を評価できないため、プログラムの実行を停止します。');
+        return {
+          status:'execution-stopped',
+          stopIndex:node.startIndex,
+          reason:'for文の条件評価で実行を停止したため、この行は実行されませんでした。'
+        };
+      }
+
+      const conditionMet = conditionResult.value !== 0;
+      const conditionExplanation = conditionResult.comparison
+        ? describeComparison(conditionResult)
+        : `${escapeHtml(conditionResult.readable)} を計算した結果は ${conditionResult.value} です。C言語では0以外を条件成立、0を条件不成立として扱います。`;
+      const nextAction = conditionMet
+        ? '条件が成立したため、for文の本体へ進みます。'
+        : '条件が成立しなかったため、for文を終了します。';
+      addAnalysis(analysis, lineNo, `<strong>for文の条件：</strong> ${conditionExplanation}${nextAction}`);
+      addStep(lineNo, `for文の条件 ${escapeHtml(node.condition)} を判定しました。<br>${nextAction}`);
+
+      if(!conditionMet){
+        addAnalysis(analysis, node.endIndex + 1, 'for文の処理範囲の終わりです。後続の処理へ進みます。');
+        addStep(lineNo, 'for文の最終条件が成立しなかったため、for文を終了します。');
+        return { status:'normal' };
+      }
+
+      // 500回目までは実行し、501回目の本体へ入る直前に停止します。
+      if(iterationCount >= MAX_FOR_ITERATIONS){
+        const nextIterationNumber = MAX_FOR_ITERATIONS + 1;
+        const safetyMessage = '無限ループ、または非常に多い反復の可能性があります。安全のため実行を停止しました。for文の「条件」と「更新式」を確認してみましょう。<strong>変数の値は、終了条件へ近づいていますか？</strong>';
+        addAnalysis(analysis, lineNo, `繰り返し回数が安全上限の ${MAX_FOR_ITERATIONS} 回に達したため、次の本体へ入らず停止しました。`);
+        addHint(hints, lineNo, '繰り返し回数が安全上限に達しました', safetyMessage);
+        warningLines.add(lineNo);
+        addStep(lineNo, `for文は ${MAX_FOR_ITERATIONS} 回反復しました。${nextIterationNumber}回目の本体へ入る前に、安全のためプログラムの実行を停止します。`);
+        addAnalysis(analysis, node.endIndex + 1, 'for文が安全上限で停止したため、後続の処理へは進みません。');
+        return {
+          status:'execution-stopped',
+          stopIndex:node.endIndex,
+          reason:'for文が安全上限で停止したため、この行は実行されませんでした。'
+        };
+      }
+
+      iterationCount++;
+      for(let index = node.bodyStartIndex; index < node.bodyEndIndex; index++){
+        // 空行とコメントは最初の反復で一度だけ説明し、同じ説明の大量重複を避けます。
+        if(executableLines[index].trim() === '' && iterationCount > 1) continue;
+
+        const bodyResult = processSimpleLine(lines[index], index, false, true);
+        if(bodyResult === 'program-ended'){
+          return { status:'program-ended', stopIndex:index };
+        }
+        if(bodyResult === 'execution-error' || bodyResult === 'scanf-error'){
+          addStep(index + 1, 'for文の本体で処理を継続できないため、プログラムの実行を停止します。');
+          return {
+            status:'execution-stopped',
+            stopIndex:index,
+            reason:'for文の本体で実行を停止したため、この行は実行されませんでした。'
+          };
+        }
+      }
+
+      let updateResult;
+      if(node.update.type === 'variable-update'){
+        updateResult = executeVariableUpdate(node.update.value, lineNo, 'for文の更新');
+      }else{
+        updateResult = executeAssignment(
+          node.update.name,
+          node.update.expression,
+          lineNo,
+          'for文の更新'
+        );
+      }
+      if(!updateResult.ok){
+        addStep(lineNo, 'for文の更新を実行できないため、プログラムの実行を停止します。');
+        addAnalysis(analysis, node.endIndex + 1, 'for文の更新で実行を停止したため、後続の処理へは進みません。');
+        return {
+          status:'execution-stopped',
+          stopIndex:node.endIndex,
+          reason:'for文の更新で実行を停止したため、この行は実行されませんでした。'
+        };
+      }
+    }
+  }
+
   // main関数の外側は説明だけを付け、実行処理には渡しません。
   for(let index = 0; index < lines.length; index++){
     if(mainRange?.closed && index > mainRange.startIndex && index < mainRange.endIndex) continue;
@@ -1740,12 +2167,42 @@ function visualizeCode(){
 
   let programEndIndex = null;
   let scanfStopIndex = null;
+  let executionStop = null;
   const executionStartIndex = mainRange?.closed ? mainRange.startIndex + 1 : 0;
   const executionEndIndex = mainRange?.closed ? mainRange.endIndex : 0;
 
   for(let index = executionStartIndex; index < executionEndIndex; index++){
     const trimmed = executableLines[index].trim();
     const structuralCode = codeOutsideStringAndLineComment(executableLines[index]).trim();
+
+    if(/^for\b/.test(structuralCode)){
+      const forNode = inspectSupportedFor(index);
+      if(!forNode.ok){
+        warnUnsupportedFor(index, forNode);
+        executionStop = {
+          index:forNode.endIndex,
+          reason:'未対応のfor文で実行を停止したため、この行は実行されませんでした。'
+        };
+        break;
+      }
+
+      const forResult = executeFor(forNode);
+      if(forResult.status === 'program-ended'){
+        programEndIndex = forResult.stopIndex;
+        break;
+      }
+      if(forResult.status === 'execution-stopped'){
+        executionStop = {
+          index:forResult.stopIndex,
+          reason:forResult.reason
+        };
+        break;
+      }
+
+      index = forNode.endIndex;
+      continue;
+    }
+
     const unsupportedControl = unsupportedControlInfo(structuralCode);
     if(unsupportedControl){
       const range = findUnsupportedControlRange(index);
@@ -1889,6 +2346,12 @@ function visualizeCode(){
   if(scanfStopIndex !== null){
     for(let index = scanfStopIndex + 1; index < executionEndIndex; index++){
       addAnalysis(analysis, index + 1, 'scanfで実行を停止したため、この行は実行されませんでした。');
+    }
+  }
+
+  if(executionStop !== null){
+    for(let index = executionStop.index + 1; index < executionEndIndex; index++){
+      addAnalysis(analysis, index + 1, executionStop.reason);
     }
   }
 
