@@ -7,7 +7,13 @@ const samples = {
   ifElse: `#include <stdio.h>\n\nint main(void){\n    int score = 45;\n    if(score >= 60){\n        printf("合格です\\n");\n    }else{\n        printf("もう一度挑戦\\n");\n    }\n    return 0;\n}`,
   nestedIf: `#include <stdio.h>\n\nint main(void){\n    int score = 85;\n\n    if(score >= 60){\n        printf("合格です\\n");\n\n        if(score >= 80){\n            printf("高得点です\\n");\n        }\n    }\n\n    return 0;\n}`,
   nestedIfElse: `#include <stdio.h>\n\nint main(void){\n    int score = 75;\n\n    if(score >= 60){\n        if(score >= 80){\n            printf("高得点です\\n");\n        }else{\n            printf("合格です\\n");\n        }\n    }\n\n    return 0;\n}`,
+  scanfInput: `#include <stdio.h>\n\nint main(void){\n    int score;\n\n    scanf("%d", &score);\n\n    if(score >= 60){\n        printf("合格です\\n");\n    }else{\n        printf("不合格です\\n");\n    }\n\n    return 0;\n}`,
   unsupported: `#include <stdio.h>\n\nint main(void){\n    int count = 0;\n\n    while(count < 3){\n        count = count + 1;\n    }\n\n    return 0;\n}`
+};
+
+// scanfを使うサンプルだけ、コードと一緒に専用入力欄の値も準備します。
+const sampleScanfInputs = {
+  scanfInput: '75'
 };
 
 // 数値の 0 と区別して、まだ値が入っていない状態を表します。
@@ -215,9 +221,11 @@ function resetCode(){
 
 function loadSample(type){
   const codeInput = document.getElementById('codeInput');
+  const scanfInput = document.getElementById('scanfInput');
   codeInput.value = samples[type] || '';
   codeInput.scrollTop = 0;
   codeInput.scrollLeft = 0;
+  if(scanfInput) scanfInput.value = sampleScanfInputs[type] || '';
   visualizeCode();
 }
 
@@ -925,8 +933,8 @@ function visualizeCode(){
     }
 
     if(/^if\s*\(/.test(trimmed) || /^for\s*\(/.test(trimmed) || /^while\s*\(/.test(trimmed)){
-      addAnalysis(analysis, lineNo, 'Ver.0.5_0811では未対応の構文です。今後の拡張対象として扱います。');
-      addHint(hints, lineNo, 'Ver.0.5_0811では未対応', '現在は int、代入、整数の四則演算、比較式、printf、単純なif〜else文、最大2階層の単純な入れ子if・if〜elseの処理過程可視化に対応しています。この行は正確には実行シミュレートしていません。');
+      addAnalysis(analysis, lineNo, 'Ver.0.6_0812では未対応の構文です。今後の拡張対象として扱います。');
+      addHint(hints, lineNo, 'Ver.0.6_0812では未対応', '現在は int、代入、整数の四則演算、比較式、printf、main直下の単純なscanf、単純なif〜else文、最大2階層の単純な入れ子if・if〜elseの処理過程可視化に対応しています。この行は正確には実行シミュレートしていません。');
       warningLines.add(lineNo);
       return;
     }
@@ -1063,9 +1071,9 @@ function visualizeCode(){
       warningLines.add(lineNo);
     }
 
-    addAnalysis(analysis, lineNo, 'Ver.0.5_0811では説明未対応のコードです。');
+    addAnalysis(analysis, lineNo, 'Ver.0.6_0812では説明未対応のコードです。');
     if(trimmed !== ''){
-      addHint(hints, lineNo, '未対応コード', 'この行は現在の可視化対象外です。まずは int、代入、整数の四則演算、比較式、printf、単純なif〜else文、最大2階層の単純な入れ子if・if〜elseの範囲で試してみましょう。');
+      addHint(hints, lineNo, '未対応コード', 'この行は現在の可視化対象外です。まずは int、代入、整数の四則演算、比較式、printf、main直下の単純なscanf、単純なif〜else文、最大2階層の単純な入れ子if・if〜elseの範囲で試してみましょう。');
       warningLines.add(lineNo);
     }
   }

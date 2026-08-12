@@ -200,6 +200,28 @@
         }
       },
       {
+        name:'scanf正式サンプル・75を入力して合格',
+        code:samples.scanfInput,
+        loadSampleKey:'scanfInput',
+        expect:{
+          output:'合格です',
+          outputExcludes:['不合格です'],
+          variables:['score = 75'],
+          warningMax:0,
+          scanfInputValue:'75',
+          stepsInOrder:['入力値 75', 'score >= 60を判定しました', '画面に「合格です', 'プログラムを終了します'],
+          executedIncludes:['scanf("%d", &score);', 'if(score >= 60){', 'printf("合格です', 'return 0;'],
+          executedExcludes:['printf("不合格です']
+        }
+      },
+      {
+        name:'既存サンプル読込時はscanf入力値を残さない',
+        code:samples.basic,
+        input:'99',
+        loadSampleKey:'basic',
+        expect:{ output:'8', variables:['a = 3', 'b = 5', 'c = 8'], warningMax:0, scanfInputValue:'' }
+      },
+      {
         name:'再代入',
         code:`#include <stdio.h>\n\nint main(void){\n    int score = 60;\n    score = score + 15;\n    printf("%d\\n", score);\n    return 0;\n}`,
         expect:{ output:'75', variables:['score = 75'], warningMax:0 }
