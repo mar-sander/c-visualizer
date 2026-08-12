@@ -46,9 +46,9 @@ Avoid:
 - adding many features at once
 - changing the core design without reason
 
-## Supported scope for Ver.0.5_0811
+## Supported scope for Ver.0.6_0812
 
-Last updated: 2026-08-11
+Last updated: 2026-08-12
 
 Currently supported:
 
@@ -61,6 +61,10 @@ Currently supported:
 - comparison operators `<`, `<=`, `>`, `>=`, `==`, `!=`
 - C-style truth values: `0` is false, nonzero is true
 - simple printf output
+- simple integer input with `scanf("%d", &variable);` directly inside main
+- one declared int variable per scanf call
+- one scanf input value per non-empty line in the dedicated input field
+- safe stopping on missing input, invalid input, undeclared variables, or unsupported scanf forms
 - simple if statements
 - simple if-else statements
 - simple nested if and if-else statements up to two levels
@@ -85,6 +89,33 @@ Currently supported:
 - line-by-line explanations
 - variable state display
 - output display
+
+## Simple scanf specification
+
+Supported form:
+
+```c
+int score;
+scanf("%d", &score);
+```
+
+Rules:
+
+- scanf must be a direct child statement of main
+- only `%d` is supported
+- accept exactly one target per scanf call
+- the target must be a previously declared int variable
+- allow ordinary spacing differences such as `scanf ( "%d" , &score );`
+- recreate the input queue from the dedicated textarea on each visualization run
+- trim each input line and ignore empty lines
+- consume values from top to bottom across multiple scanf calls
+- validate an input value only when a scanf call actually uses it
+- consume the value only after the scanf form, declaration, presence, and integer format are all valid
+- do not validate or warn about unused extra input lines
+- stop later main statements safely when input is missing or invalid, or when the scanf form is unsupported
+- keep variables and output produced before a scanf error
+- if any branch of an outer if or if-else contains scanf, skip the complete outer structure without consuming input
+- `&variable` is recognized only as part of the supported scanf syntax; it does not mean general address-operator or pointer support
 
 ## Simple if and nested-if/if-else specification
 
@@ -144,7 +175,7 @@ if(outerCondition){
 }
 ```
 
-## Unsupported scope for Ver.0.5_0811
+## Unsupported scope for Ver.0.6_0812
 
 Do not implement these unless explicitly requested:
 
@@ -160,8 +191,14 @@ Do not implement these unless explicitly requested:
 - switch
 - arrays
 - user-defined functions
-- pointers
-- scanf
+- scanf conversion specifiers other than `%d`, including `%f`, `%lf`, `%c`, and `%s`
+- multiple scanf targets in one call
+- scanf inside if or else branches
+- scanf input into float, char, strings, or arrays
+- using the scanf return value
+- general address-operator and pointer behavior
+- interactive console input
+- complete C execution involving scanf
 - structs
 - file I/O
 - multiple source files
@@ -169,7 +206,7 @@ Do not implement these unless explicitly requested:
 
 ## Input rule
 
-In Ver.0.5_0811, assume one C statement per line.
+In Ver.0.6_0812, assume one C statement per line.
 
 If multiple statements are written on one line, show a warning instead of trying to parse them automatically.
 

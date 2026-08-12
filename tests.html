@@ -145,6 +145,7 @@
 
   <div id="testSandbox" aria-hidden="true">
     <textarea id="codeInput"></textarea>
+    <textarea id="scanfInput"></textarea>
     <pre id="codeHighlight"></pre>
     <pre id="codeLineNumbers"></pre>
     <div id="outputResult"></div>
@@ -197,6 +198,28 @@
           editorScrollTop:0,
           editorScrollLeft:0
         }
+      },
+      {
+        name:'scanf正式サンプル・75を入力して合格',
+        code:samples.scanfInput,
+        loadSampleKey:'scanfInput',
+        expect:{
+          output:'合格です',
+          outputExcludes:['不合格です'],
+          variables:['score = 75'],
+          warningMax:0,
+          scanfInputValue:'75',
+          stepsInOrder:['入力値 75', 'score >= 60を判定しました', '画面に「合格です', 'プログラムを終了します'],
+          executedIncludes:['scanf("%d", &score);', 'if(score >= 60){', 'printf("合格です', 'return 0;'],
+          executedExcludes:['printf("不合格です']
+        }
+      },
+      {
+        name:'既存サンプル読込時はscanf入力値を残さない',
+        code:samples.basic,
+        input:'99',
+        loadSampleKey:'basic',
+        expect:{ output:'8', variables:['a = 3', 'b = 5', 'c = 8'], warningMax:0, scanfInputValue:'' }
       },
       {
         name:'再代入',
@@ -540,9 +563,257 @@
         expect:{ output:'終了', outputExcludes:['INNER-TRUE', 'INNER-ELSE'], warningMin:1 }
       },
       {
-        name:'scanf未対応サンプル',
-        code:`#include <stdio.h>\n\nint main(void){\n    int score;\n    scanf("%d", &score);\n    return 0;\n}`,
-        expect:{ output:'出力はまだありません。', variables:['score = 未初期化'], warningMin:1, hintsInclude:['Ver.0.5_0811では未対応'] }
+        name:'scanf・未初期化intへ正の整数入力',
+        code:`#include <stdio.h>\n\nint main(void){\n    int score;\n    scanf("%d", &score);\n    printf("%d\\n", score);\n    return 0;\n}`,
+        input:'75',
+        expect:{
+          output:'75',
+          variables:['score = 75'],
+          warningMax:0,
+          stepsInclude:['入力値 75 を整数として受け取り、変数 score に代入しました'],
+          analysisInclude:['入力値 75 を整数として受け取り、変数 score に代入します'],
+          syntaxClasses:['syntax-function', 'syntax-string', 'syntax-operator']
+        }
+      },
+      {
+        name:'scanf・初期化済みintを上書き',
+        code:`#include <stdio.h>\n\nint main(void){\n    int score = 10;\n    scanf("%d", &score);\n    printf("%d\\n", score);\n    return 0;\n}`,
+        input:'80',
+        expect:{ output:'80', variables:['score = 80'], warningMax:0 }
+      },
+      {
+        name:'scanf・0を入力',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value;\n    scanf("%d", &value);\n    printf("%d\\n", value);\n    return 0;\n}`,
+        input:'0',
+        expect:{ output:'0', variables:['value = 0'], warningMax:0 }
+      },
+      {
+        name:'scanf・負の整数を入力',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value;\n    scanf("%d", &value);\n    printf("%d\\n", value);\n    return 0;\n}`,
+        input:'-20',
+        expect:{ output:'-20', variables:['value = -20'], warningMax:0 }
+      },
+      {
+        name:'scanf・プラス記号付き整数を入力',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value;\n    scanf("%d", &value);\n    printf("%d\\n", value);\n    return 0;\n}`,
+        input:'+15',
+        expect:{ output:'15', variables:['value = 15'], warningMax:0 }
+      },
+      {
+        name:'scanf・一般的な空白差を許容',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value;\n    scanf ( "%d" , &value );\n    printf("%d\\n", value);\n    return 0;\n}`,
+        input:'  42  ',
+        expect:{ output:'42', variables:['value = 42'], warningMax:0 }
+      },
+      {
+        name:'scanf・2回を入力順に消費',
+        code:`#include <stdio.h>\n\nint main(void){\n    int a;\n    int b;\n    scanf("%d", &a);\n    scanf("%d", &b);\n    printf("%d\\n", a + b);\n    return 0;\n}`,
+        input:`10\n20`,
+        expect:{ output:'30', variables:['a = 10', 'b = 20'], warningMax:0, stepsInOrder:['入力値 10', '入力値 20', '画面に「30」'] }
+      },
+      {
+        name:'scanf・間に別処理があっても入力順を維持',
+        code:`#include <stdio.h>\n\nint main(void){\n    int a;\n    int b;\n    scanf("%d", &a);\n    a = a + 1;\n    printf("途中:%d\\n", a);\n    scanf("%d", &b);\n    printf("最後:%d\\n", b);\n    return 0;\n}`,
+        input:`10\n20`,
+        expect:{ output:'途中:11\n最後:20', variables:['a = 11', 'b = 20'], warningMax:0 }
+      },
+      {
+        name:'scanf・入力欄の空行を無視',
+        code:`#include <stdio.h>\n\nint main(void){\n    int a;\n    int b;\n    scanf("%d", &a);\n    scanf("%d", &b);\n    printf("%d %d\\n", a, b);\n    return 0;\n}`,
+        input:`\n  7  \n   \n9\n`,
+        expect:{ output:'7 9', variables:['a = 7', 'b = 9'], warningMax:0 }
+      },
+      {
+        name:'scanf・再実行で入力を先頭から再利用',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value;\n    scanf("%d", &value);\n    printf("%d\\n", value);\n    return 0;\n}`,
+        input:'12',
+        rerun:true,
+        expect:{ output:'12', variables:['value = 12'], warningMax:0, scanfInputValue:'12' }
+      },
+      {
+        name:'scanf・余剰の正常入力は警告しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value;\n    scanf("%d", &value);\n    printf("%d\\n", value);\n    return 0;\n}`,
+        input:`10\n20`,
+        expect:{ output:'10', variables:['value = 10'], warningMax:0 }
+      },
+      {
+        name:'scanf・未使用の不正値は検証しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value;\n    scanf("%d", &value);\n    printf("%d\\n", value);\n    return 0;\n}`,
+        input:`75\nabc`,
+        expect:{ output:'75', variables:['value = 75'], warningMax:0 }
+      },
+      {
+        name:'scanf値を算術式で使用',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value;\n    int result;\n    scanf("%d", &value);\n    result = value * 2 + 1;\n    printf("%d\\n", result);\n    return 0;\n}`,
+        input:'12',
+        expect:{ output:'25', variables:['value = 12', 'result = 25'], warningMax:0 }
+      },
+      {
+        name:'scanf値をif条件で使用',
+        code:`#include <stdio.h>\n\nint main(void){\n    int score;\n    scanf("%d", &score);\n    if(score >= 60){\n        printf("合格\\n");\n    }\n    return 0;\n}`,
+        input:'75',
+        expect:{ output:'合格', variables:['score = 75'], warningMax:0, executedIncludes:['printf("合格'] }
+      },
+      {
+        name:'scanf値をif〜else条件で使用',
+        code:`#include <stdio.h>\n\nint main(void){\n    int score;\n    scanf("%d", &score);\n    if(score >= 60){\n        printf("合格です\\n");\n    }else{\n        printf("不合格です\\n");\n    }\n    return 0;\n}`,
+        input:'75',
+        expect:{ output:'合格です', outputExcludes:['不合格です'], variables:['score = 75'], warningMax:0, executedIncludes:['return 0;'] }
+      },
+      {
+        name:'scanf値を最大2階層の入れ子if〜elseで使用',
+        code:`#include <stdio.h>\n\nint main(void){\n    int score;\n    scanf("%d", &score);\n    if(score >= 60){\n        if(score >= 80){\n            printf("高得点\\n");\n        }else{\n            printf("合格\\n");\n        }\n    }else{\n        printf("不合格\\n");\n    }\n    return 0;\n}`,
+        input:'75',
+        expect:{ output:'合格', outputExcludes:['高得点', '不合格'], variables:['score = 75'], warningMax:0, executedIncludes:['scanf("%d"', 'printf("合格', 'return 0;'] }
+      },
+      {
+        name:'scanf後も剰余演算を維持',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value;\n    scanf("%d", &value);\n    value = value % 2;\n    printf("%d\\n", value);\n    return 0;\n}`,
+        input:'5',
+        expect:{ output:'1', variables:['value = 1'], warningMax:0 }
+      },
+      {
+        name:'scanf後にreturn 0で正常終了',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value;\n    scanf("%d", &value);\n    return 0;\n}`,
+        input:'3',
+        expect:{ output:'出力はまだありません。', variables:['value = 3'], warningMax:0, stepsInOrder:['入力値 3', 'プログラムを終了します'] }
+      },
+      {
+        name:'scanf・入力不足で停止',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value;\n    scanf("%d", &value);\n    printf("WRONG\\n");\n    return 0;\n}`,
+        expect:{ output:'出力はまだありません。', variables:['value = 未初期化'], warningMin:1, hintsInclude:['scanfで使う入力値が足りません'], hintsExclude:['return 0; が見当たりません'], executedExcludes:['printf("WRONG', 'return 0;'], analysisInclude:['scanfで実行を停止したため'] }
+      },
+      {
+        name:'scanf・英字入力で停止',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 5;\n    scanf("%d", &value);\n    printf("WRONG\\n");\n    return 0;\n}`,
+        input:'abc',
+        expect:{ output:'出力はまだありません。', variables:['value = 5'], warningMin:1, hintsInclude:['整数として読み取れない'], executedExcludes:['printf("WRONG'] }
+      },
+      {
+        name:'scanf・小数入力で停止',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value;\n    scanf("%d", &value);\n    return 0;\n}`,
+        input:'3.14',
+        expect:{ variables:['value = 未初期化'], warningMin:1, hintsInclude:['整数として読み取れない'] }
+      },
+      {
+        name:'scanf・1行に2値の入力で停止',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value;\n    scanf("%d", &value);\n    return 0;\n}`,
+        input:'10 20',
+        expect:{ variables:['value = 未初期化'], warningMin:1, hintsInclude:['1行に1つ、整数を入力'] }
+      },
+      {
+        name:'scanf・未宣言変数で停止',
+        code:`#include <stdio.h>\n\nint main(void){\n    scanf("%d", &value);\n    printf("WRONG\\n");\n    return 0;\n}`,
+        input:'10',
+        expect:{ warningMin:1, hintsInclude:['変数 value が先に', '宣言'], executedExcludes:['printf("WRONG'], scanfInputValue:'10' }
+      },
+      {
+        name:'scanf・percent fは未対応で停止',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 1;\n    scanf("%f", &value);\n    printf("WRONG\\n");\n    return 0;\n}`,
+        input:'10',
+        expect:{ variables:['value = 1'], warningMin:1, hintsInclude:['このscanf形式は未対応'], executedExcludes:['printf("WRONG'], scanfInputValue:'10' }
+      },
+      {
+        name:'scanf・複数変数は未対応で停止',
+        code:`#include <stdio.h>\n\nint main(void){\n    int a = 1;\n    int b = 2;\n    scanf("%d %d", &a, &b);\n    printf("WRONG\\n");\n    return 0;\n}`,
+        input:'10',
+        expect:{ variables:['a = 1', 'b = 2'], warningMin:1, hintsInclude:['このscanf形式は未対応'], executedExcludes:['printf("WRONG'] }
+      },
+      {
+        name:'scanf・アドレス演算子なしは未対応で停止',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 1;\n    scanf("%d", value);\n    printf("WRONG\\n");\n    return 0;\n}`,
+        input:'10',
+        expect:{ variables:['value = 1'], warningMin:1, hintsInclude:['このscanf形式は未対応'], executedExcludes:['printf("WRONG'] }
+      },
+      {
+        name:'scanf・セミコロン不足で停止',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 1;\n    scanf("%d", &value)\n    printf("WRONG\\n");\n    return 0;\n}`,
+        input:'10',
+        expect:{ variables:['value = 1'], warningMin:1, hintsInclude:['セミコロンの不足かも'], executedExcludes:['printf("WRONG'] }
+      },
+      {
+        name:'scanf・戻り値の利用は未対応で停止',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 1;\n    int result = scanf("%d", &value);\n    printf("WRONG\\n");\n    return 0;\n}`,
+        input:'10',
+        expect:{ variables:['value = 1'], variablesExclude:['result ='], warningMin:1, hintsInclude:['このscanf形式は未対応'], executedExcludes:['printf("WRONG'], scanfInputValue:'10' }
+      },
+      {
+        name:'scanf・2回目の入力不足でも直前までを保持',
+        code:`#include <stdio.h>\n\nint main(void){\n    int a;\n    int b;\n    scanf("%d", &a);\n    printf("入力済み:%d\\n", a);\n    scanf("%d", &b);\n    printf("WRONG\\n");\n    return 0;\n}`,
+        input:'10',
+        expect:{ output:'入力済み:10', outputExcludes:['WRONG'], variables:['a = 10', 'b = 未初期化'], warningMin:1, executedExcludes:['printf("WRONG'] }
+      },
+      {
+        name:'scanf・不正入力前までの変数と出力を保持',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 7;\n    printf("開始\\n");\n    scanf("%d", &value);\n    value = 99;\n    printf("WRONG\\n");\n    return 0;\n}`,
+        input:'abc',
+        expect:{ output:'開始', outputExcludes:['WRONG'], variables:['value = 7'], warningMin:1, executedExcludes:['value = 99;', 'printf("WRONG'] }
+      },
+      {
+        name:'scanf・未対応形式前までの出力を保持',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 7;\n    printf("開始\\n");\n    scanf("%d", value);\n    printf("WRONG\\n");\n    return 0;\n}`,
+        input:'20',
+        expect:{ output:'開始', outputExcludes:['WRONG'], variables:['value = 7'], warningMin:1, hintsExclude:['return 0; が見当たりません'] }
+      },
+      {
+        name:'scanf・コメント行を誤検出しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 3;\n    // scanf("%d", &value);\n    printf("%d\\n", value);\n    return 0;\n}`,
+        input:'99',
+        expect:{ output:'3', variables:['value = 3'], warningMax:0, scanfInputValue:'99' }
+      },
+      {
+        name:'scanf・ブロックコメントを誤検出しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 4;\n    /*\n    scanf("%d", &value);\n    */\n    printf("%d\\n", value);\n    return 0;\n}`,
+        input:'99',
+        expect:{ output:'4', variables:['value = 4'], warningMax:0 }
+      },
+      {
+        name:'scanf・printf文字列内を誤検出しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    printf("scanf(\\\"%%d\\\", &a);\\n");\n    return 0;\n}`,
+        input:'99',
+        expect:{ output:'出力はまだありません。', warningMin:1, hintsInclude:['printfの%%は未対応'], hintsExclude:['scanfの入力値'] }
+      },
+      {
+        name:'分岐内scanf・選択側でも外側if全体を実行しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 1;\n    if(1){\n        value = 2;\n        scanf("%d", &value);\n        printf("WRONG\\n");\n    }\n    printf("AFTER:%d\\n", value);\n    return 0;\n}`,
+        input:'9',
+        expect:{ output:'AFTER:1', outputExcludes:['WRONG'], variables:['value = 1'], warningMin:1, hintsInclude:['分岐内のscanfは未対応'], executedExcludes:['value = 2;', 'scanf("%d"', 'printf("WRONG'] }
+      },
+      {
+        name:'分岐内scanf・未選択else側でも外側if全体を実行しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 1;\n    if(1){\n        value = 2;\n        printf("SELECTED\\n");\n    }else{\n        scanf("%d", &value);\n    }\n    printf("AFTER:%d\\n", value);\n    return 0;\n}`,
+        input:'9',
+        expect:{ output:'AFTER:1', outputExcludes:['SELECTED'], variables:['value = 1'], warningMin:1, hintsInclude:['分岐内のscanfは未対応'], executedExcludes:['value = 2;', 'printf("SELECTED', 'scanf("%d"'] }
+      },
+      {
+        name:'分岐内scanfを飛ばした後のmain直下scanfが先頭入力を使用',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 0;\n    if(0){\n        scanf("%d", &value);\n    }\n    scanf("%d", &value);\n    printf("%d\\n", value);\n    return 0;\n}`,
+        input:'7',
+        expect:{ output:'7', variables:['value = 7'], warningMin:1, hintsInclude:['分岐内のscanfは未対応'], stepsInclude:['入力値 7'] }
+      },
+      {
+        name:'入れ子分岐内scanfでも外側if全体を実行しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value = 1;\n    if(1){\n        value = 2;\n        if(1){\n            scanf("%d", &value);\n        }\n    }\n    printf("%d\\n", value);\n    return 0;\n}`,
+        input:'9',
+        expect:{ output:'1', variables:['value = 1'], warningMin:1, hintsInclude:['分岐内のscanfは未対応'], executedExcludes:['value = 2;', 'scanf("%d"'] }
+      },
+      {
+        name:'resetCodeでscanf入力欄も初期化',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value;\n    scanf("%d", &value);\n    printf("%d\\n", value);\n    return 0;\n}`,
+        input:'75',
+        resetAfterVisualize:true,
+        expect:{ output:'', warningMax:0, codeInputValue:'', scanfInputValue:'' }
+      },
+      {
+        name:'scanf入力欄はテスト間で残留しない',
+        code:`#include <stdio.h>\n\nint main(void){\n    int value;\n    scanf("%d", &value);\n    return 0;\n}`,
+        expect:{ variables:['value = 未初期化'], warningMin:1, hintsInclude:['入力値が足りません'], scanfInputValue:'' }
+      },
+      {
+        name:'未対応サンプルはwhileで安全に停止',
+        code:samples.unsupported,
+        loadSampleKey:'unsupported',
+        expect:{ output:'出力はまだありません。', variables:['count = 0'], warningMin:1, hintsInclude:['while文は未対応'], executedExcludes:['count = count + 1;'] }
       },
       {
         name:'return後のprintfを実行しない',
@@ -787,6 +1058,8 @@
 
     function snapshotResult(){
       return {
+        codeInputValue:document.getElementById('codeInput').value,
+        scanfInputValue:document.getElementById('scanfInput').value,
         output:normalizeText(document.getElementById('outputResult').textContent),
         variables:[...document.querySelectorAll('#variableState .variable-chip')].map(element => normalizeText(element.textContent)),
         hints:normalizeText(document.getElementById('hintResult').textContent),
@@ -804,6 +1077,10 @@
 
     function checkCase(testCase){
       const codeInput = document.getElementById('codeInput');
+      const scanfInput = document.getElementById('scanfInput');
+      scanfInput.value = '';
+      if(testCase.input !== undefined) scanfInput.value = testCase.input;
+
       if(testCase.loadSampleKey){
         codeInput.value = 'sample loading check';
         codeInput.scrollTop = 120;
@@ -813,10 +1090,16 @@
         codeInput.value = testCase.code;
         visualizeCode();
       }
+
+      if(testCase.rerun) visualizeCode();
+      if(testCase.resetAfterVisualize) resetCode();
+
       const actual = snapshotResult();
       const expected = testCase.expect;
       const failures = [];
-      const editorSource = testCase.code.replace(/\r\n/g, '\n');
+      const editorSource = testCase.resetAfterVisualize
+        ? ''
+        : testCase.code.replace(/\r\n/g, '\n');
       const expectedLineNumbers = Array.from(
         { length:editorSource.split('\n').length },
         (_, index) => index + 1
@@ -828,6 +1111,14 @@
 
       if(actual.lineNumbers !== expectedLineNumbers){
         failures.push('入力コードと行番号の数が一致しない');
+      }
+
+      if(expected.codeInputValue !== undefined && actual.codeInputValue !== expected.codeInputValue){
+        failures.push(`コード入力欄: 期待「${expected.codeInputValue}」/ 実際「${actual.codeInputValue}」`);
+      }
+
+      if(expected.scanfInputValue !== undefined && actual.scanfInputValue !== expected.scanfInputValue){
+        failures.push(`scanf入力欄: 期待「${expected.scanfInputValue}」/ 実際「${actual.scanfInputValue}」`);
       }
 
       if(expected.editorScrollTop !== undefined && actual.editorScrollTop !== expected.editorScrollTop){

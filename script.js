@@ -7,7 +7,13 @@ const samples = {
   ifElse: `#include <stdio.h>\n\nint main(void){\n    int score = 45;\n    if(score >= 60){\n        printf("合格です\\n");\n    }else{\n        printf("もう一度挑戦\\n");\n    }\n    return 0;\n}`,
   nestedIf: `#include <stdio.h>\n\nint main(void){\n    int score = 85;\n\n    if(score >= 60){\n        printf("合格です\\n");\n\n        if(score >= 80){\n            printf("高得点です\\n");\n        }\n    }\n\n    return 0;\n}`,
   nestedIfElse: `#include <stdio.h>\n\nint main(void){\n    int score = 75;\n\n    if(score >= 60){\n        if(score >= 80){\n            printf("高得点です\\n");\n        }else{\n            printf("合格です\\n");\n        }\n    }\n\n    return 0;\n}`,
-  unsupported: `#include <stdio.h>\n\nint main(void){\n    int score;\n    scanf("%d", &score);\n    return 0;\n}`
+  scanfInput: `#include <stdio.h>\n\nint main(void){\n    int score;\n\n    scanf("%d", &score);\n\n    if(score >= 60){\n        printf("合格です\\n");\n    }else{\n        printf("不合格です\\n");\n    }\n\n    return 0;\n}`,
+  unsupported: `#include <stdio.h>\n\nint main(void){\n    int count = 0;\n\n    while(count < 3){\n        count = count + 1;\n    }\n\n    return 0;\n}`
+};
+
+// scanfを使うサンプルだけ、コードと一緒に専用入力欄の値も準備します。
+const sampleScanfInputs = {
+  scanfInput: '75'
 };
 
 // 数値の 0 と区別して、まだ値が入っていない状態を表します。
@@ -200,9 +206,11 @@ function initializeCodeEditor(){
 
 function resetCode(){
   const codeInput = document.getElementById('codeInput');
+  const scanfInput = document.getElementById('scanfInput');
   codeInput.value = '';
   codeInput.scrollTop = 0;
   codeInput.scrollLeft = 0;
+  if(scanfInput) scanfInput.value = '';
   document.getElementById('outputResult').textContent = '';
   document.getElementById('variableState').innerHTML = '';
   document.getElementById('stepResult').innerHTML = '';
@@ -213,9 +221,11 @@ function resetCode(){
 
 function loadSample(type){
   const codeInput = document.getElementById('codeInput');
+  const scanfInput = document.getElementById('scanfInput');
   codeInput.value = samples[type] || '';
   codeInput.scrollTop = 0;
   codeInput.scrollLeft = 0;
+  if(scanfInput) scanfInput.value = sampleScanfInputs[type] || '';
   visualizeCode();
 }
 
@@ -752,6 +762,12 @@ function formatPrintfString(format, values){
 function visualizeCode(){
   updateCodeEditor();
   const code = document.getElementById('codeInput').value.replace(/\r\n/g, '\n');
+  const scanfInput = document.getElementById('scanfInput');
+  const scanfValues = String(scanfInput?.value || '')
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .map(value => value.trim())
+    .filter(value => value !== '');
   const lines = code.split('\n');
   const executableLines = codeWithoutComments(code).split('\n');
   const mainRange = findMainExecutionRange(executableLines);
@@ -766,6 +782,12 @@ function visualizeCode(){
   let braceBalance = 0;
   let hasMain = mainRange !== null;
   let hasReturn = false;
+  const hasReturnInMain = mainRange?.closed
+    ? executableLines
+      .slice(mainRange.startIndex + 1, mainRange.endIndex)
+      .some(line => /^return\s+0\s*;$/.test(line.trim()))
+    : false;
+  let scanfValueIndex = 0;
   let stepNo = 1;
 
   for(const executableLine of executableLines){
@@ -799,6 +821,63 @@ function visualizeCode(){
     }
 
     const structuralCode = codeOutsideStringAndLineComment(trimmed);
+
+    const hasScanfCall = /^scanf\b/.test(structuralCode) || /\bscanf\s*\(/.test(structuralCode);
+    if(!insideIf && hasScanfCall){
+      function stopScanf(title, message){
+        addAnalysis(analysis, lineNo, `${message} この行でプログラムの実行を停止します。`);
+        addHint(hints, lineNo, title, message);
+        warningLines.add(lineNo);
+        addStep(lineNo, 'scanfを実行できないため、プログラムの実行を停止します。');
+        return 'scanf-error';
+      }
+
+      if(!structuralCode.trim().endsWith(';')){
+        return stopScanf(
+          'セミコロンの不足かも',
+          'scanfの文末に <code>;</code> が必要です。セミコロンが付いているか確認してください。'
+        );
+      }
+
+      const scanfMatch = trimmed.match(/^scanf\s*\(\s*"%d"\s*,\s*&\s*([A-Za-z_]\w*)\s*\)\s*;$/);
+      if(!scanfMatch){
+        return stopScanf(
+          'このscanf形式は未対応',
+          '現在は <code>scanf("%d", &amp;変数);</code> の形で、宣言済みのint変数へ整数を1つ入力する場合に対応しています。'
+        );
+      }
+
+      const name = scanfMatch[1];
+      if(!(name in variables)){
+        return stopScanf(
+          'scanfの変数が宣言されていません',
+          `変数 <code>${name}</code> が先に <code>int ${name};</code> のように宣言されているか確認してください。`
+        );
+      }
+
+      if(scanfValueIndex >= scanfValues.length){
+        return stopScanf(
+          'scanfの入力値が足りません',
+          'scanfで使う入力値が足りません。「入力値（scanf用）」に整数を追加してください。'
+        );
+      }
+
+      const inputText = scanfValues[scanfValueIndex];
+      if(!/^[-+]?\d+$/.test(inputText)){
+        return stopScanf(
+          'scanfで整数を読み取れません',
+          'scanfで整数として読み取れない入力値です。1行に1つ、整数を入力してください。'
+        );
+      }
+
+      const inputValue = Number(inputText);
+      scanfValueIndex++;
+      rememberVariable(name, inputValue);
+      addAnalysis(analysis, lineNo, `入力値 <code>${escapeHtml(inputText)}</code> を整数として受け取り、変数 <code>${name}</code> に代入します。`);
+      addStep(lineNo, `入力値 ${escapeHtml(inputText)} を整数として受け取り、変数 ${name} に代入しました。`);
+      return;
+    }
+
     if(hasMultipleStatementsOnOneLine(trimmed)){
       const message = '1行に複数の文があります。文の終わりで改行してください。';
       addAnalysis(analysis, lineNo, message);
@@ -853,9 +932,9 @@ function visualizeCode(){
       return 'program-ended';
     }
 
-    if(/^if\s*\(/.test(trimmed) || /^for\s*\(/.test(trimmed) || /^while\s*\(/.test(trimmed) || /^scanf\s*\(/.test(trimmed)){
-      addAnalysis(analysis, lineNo, 'Ver.0.5_0811では未対応の構文です。今後の拡張対象として扱います。');
-      addHint(hints, lineNo, 'Ver.0.5_0811では未対応', '現在は int、代入、整数の四則演算、比較式、printf、単純なif〜else文、最大2階層の単純な入れ子if・if〜elseの処理過程可視化に対応しています。この行は正確には実行シミュレートしていません。');
+    if(/^if\s*\(/.test(trimmed) || /^for\s*\(/.test(trimmed) || /^while\s*\(/.test(trimmed)){
+      addAnalysis(analysis, lineNo, 'Ver.0.6_0812では未対応の構文です。今後の拡張対象として扱います。');
+      addHint(hints, lineNo, 'Ver.0.6_0812では未対応', '現在は int、代入、整数の四則演算、比較式、printf、main直下の単純なscanf、単純なif〜else文、最大2階層の単純な入れ子if・if〜elseの処理過程可視化に対応しています。この行は正確には実行シミュレートしていません。');
       warningLines.add(lineNo);
       return;
     }
@@ -992,9 +1071,9 @@ function visualizeCode(){
       warningLines.add(lineNo);
     }
 
-    addAnalysis(analysis, lineNo, 'Ver.0.5_0811では説明未対応のコードです。');
+    addAnalysis(analysis, lineNo, 'Ver.0.6_0812では説明未対応のコードです。');
     if(trimmed !== ''){
-      addHint(hints, lineNo, '未対応コード', 'この行は現在の可視化対象外です。まずは int、代入、整数の四則演算、比較式、printf、単純なif〜else文、最大2階層の単純な入れ子if・if〜elseの範囲で試してみましょう。');
+      addHint(hints, lineNo, '未対応コード', 'この行は現在の可視化対象外です。まずは int、代入、整数の四則演算、比較式、printf、main直下の単純なscanf、単純なif〜else文、最大2階層の単純な入れ子if・if〜elseの範囲で試してみましょう。');
       warningLines.add(lineNo);
     }
   }
@@ -1163,6 +1242,13 @@ function visualizeCode(){
           return failure(
             'このelse付きif文は未対応',
             '対応するif文を安全に確定できないelseがあります。外側のif文全体は実行しません。'
+          );
+        }
+
+        if(/^scanf\b/.test(structuralCode) || /\bscanf\s*\(/.test(structuralCode)){
+          return failure(
+            '分岐内のscanfは未対応',
+            'if側・else側の中にscanfがある形は現在未対応です。外側のif文全体は実行しません。'
           );
         }
 
@@ -1653,6 +1739,7 @@ function visualizeCode(){
   }
 
   let programEndIndex = null;
+  let scanfStopIndex = null;
   const executionStartIndex = mainRange?.closed ? mainRange.startIndex + 1 : 0;
   const executionEndIndex = mainRange?.closed ? mainRange.endIndex : 0;
 
@@ -1671,6 +1758,10 @@ function visualizeCode(){
       const result = processSimpleLine(lines[index], index);
       if(result === 'program-ended'){
         programEndIndex = index;
+        break;
+      }
+      if(result === 'scanf-error'){
+        scanfStopIndex = index;
         break;
       }
       continue;
@@ -1795,11 +1886,17 @@ function visualizeCode(){
     }
   }
 
+  if(scanfStopIndex !== null){
+    for(let index = scanfStopIndex + 1; index < executionEndIndex; index++){
+      addAnalysis(analysis, index + 1, 'scanfで実行を停止したため、この行は実行されませんでした。');
+    }
+  }
+
   if(!hasMain){
     addHint(hints, null, 'main関数が見当たりません', '学習用の基本的なCプログラムでは、<code>int main(void)</code> などの開始地点を書くことが多いです。');
   }
 
-  if(!hasReturn){
+  if(!hasReturn && !hasReturnInMain){
     addHint(hints, null, 'return 0; が見当たりません', '学習用の基本形として、最後に <code>return 0;</code> を書く形も確認しておきましょう。');
   }
 
