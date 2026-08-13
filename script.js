@@ -22,6 +22,10 @@ const UNINITIALIZED = Symbol('uninitialized');
 // ブラウザ停止を防ぐため、1つのfor文で本体へ入れる回数を制限します。
 const MAX_FOR_ITERATIONS = 500;
 
+// for文の説明は6反復まで全件を表示し、それ以上は先頭3反復と最終反復へ圧縮します。
+const MAX_FULL_FOR_EXPLANATION_ITERATIONS = 6;
+const LEADING_FOR_EXPLANATION_ITERATIONS = 3;
+
 function escapeHtml(str){
   return String(str)
     .replace(/&/g, '&amp;')
@@ -2036,8 +2040,129 @@ function visualizeCode(){
     }
   }
 
+  // for文の実行中に生成された説明の範囲だけを記録し、実行後に表示用履歴を整えます。
+  // 出力・変数・条件評価・本体実行・更新には触れず、説明配列とSTEP配列だけを編集します。
+  function createForExplanationHistory(node){
+    const iterationRecords = [];
+    const firstLineNo = node.startIndex + 1;
+    const lastLineNo = node.endIndex + 1;
+
+    function snapshot(){
+      const analysisLengths = {};
+      for(let lineNo = firstLineNo; lineNo <= lastLineNo; lineNo++){
+        analysisLengths[lineNo] = (analysis[lineNo] || []).length;
+      }
+      return { analysisLengths, stepLength:steps.length };
+    }
+
+    function beginIteration(iterationNumber){
+      return { iterationNumber, before:snapshot() };
+    }
+
+    function finishIteration(activeIteration){
+      iterationRecords.push({
+        iterationNumber:activeIteration.iterationNumber,
+        before:activeIteration.before,
+        after:snapshot()
+      });
+    }
+
+    function iterationPrefix(iterationNumber){
+      return `<strong>【${iterationNumber}回目】</strong> `;
+    }
+
+    function omissionText(firstOmitted, lastOmitted){
+      return `<span class="dim">…… ${firstOmitted}～${lastOmitted}回目の反復を省略しました ……</span>`;
+    }
+
+    function labeledSlice(items, startIndex, endIndex, iterationNumber, mapItem){
+      return items
+        .slice(startIndex, endIndex)
+        .map(item => mapItem(item, iterationPrefix(iterationNumber)));
+    }
+
+    function finalize(){
+      if(iterationRecords.length === 0) return;
+
+      const shouldCompress = iterationRecords.length > MAX_FULL_FOR_EXPLANATION_ITERATIONS;
+      const lastRecord = iterationRecords[iterationRecords.length - 1];
+      const shownRecords = shouldCompress
+        ? [
+          ...iterationRecords.slice(0, LEADING_FOR_EXPLANATION_ITERATIONS),
+          lastRecord
+        ]
+        : iterationRecords;
+      const omittedFirst = LEADING_FOR_EXPLANATION_ITERATIONS + 1;
+      const omittedLast = iterationRecords.length - 1;
+
+      for(let lineNo = firstLineNo; lineNo <= lastLineNo; lineNo++){
+        const originalEntries = analysis[lineNo] || [];
+        const firstIterationStart = iterationRecords[0].before.analysisLengths[lineNo];
+        const lastIterationEnd = lastRecord.after.analysisLengths[lineNo];
+        const rebuiltEntries = originalEntries.slice(0, firstIterationStart);
+
+        for(let recordIndex = 0; recordIndex < shownRecords.length; recordIndex++){
+          const record = shownRecords[recordIndex];
+          const rangeStart = record.before.analysisLengths[lineNo];
+          const rangeEnd = record.after.analysisLengths[lineNo];
+          rebuiltEntries.push(...labeledSlice(
+            originalEntries,
+            rangeStart,
+            rangeEnd,
+            record.iterationNumber,
+            (entry, prefix) => `${prefix}${entry}`
+          ));
+
+          if(shouldCompress && recordIndex === LEADING_FOR_EXPLANATION_ITERATIONS - 1){
+            const omittedHasEntries = iterationRecords
+              .slice(LEADING_FOR_EXPLANATION_ITERATIONS, -1)
+              .some(omittedRecord =>
+                omittedRecord.after.analysisLengths[lineNo] > omittedRecord.before.analysisLengths[lineNo]
+              );
+            if(omittedHasEntries){
+              rebuiltEntries.push(omissionText(omittedFirst, omittedLast));
+            }
+          }
+        }
+
+        rebuiltEntries.push(...originalEntries.slice(lastIterationEnd));
+        if(rebuiltEntries.length > 0) analysis[lineNo] = rebuiltEntries;
+      }
+
+      const originalSteps = [...steps];
+      const firstStepIndex = iterationRecords[0].before.stepLength;
+      const lastStepIndex = lastRecord.after.stepLength;
+      const rebuiltSteps = originalSteps.slice(0, firstStepIndex);
+
+      for(let recordIndex = 0; recordIndex < shownRecords.length; recordIndex++){
+        const record = shownRecords[recordIndex];
+        rebuiltSteps.push(...labeledSlice(
+          originalSteps,
+          record.before.stepLength,
+          record.after.stepLength,
+          record.iterationNumber,
+          (item, prefix) => ({ ...item, text:`${prefix}${item.text}` })
+        ));
+
+        if(shouldCompress && recordIndex === LEADING_FOR_EXPLANATION_ITERATIONS - 1){
+          rebuiltSteps.push({
+            step:0,
+            lineNo:firstLineNo,
+            text:omissionText(omittedFirst, omittedLast)
+          });
+        }
+      }
+
+      rebuiltSteps.push(...originalSteps.slice(lastStepIndex));
+      steps.splice(0, steps.length, ...rebuiltSteps);
+    }
+
+    return { beginIteration, finishIteration, finalize };
+  }
+
   function executeFor(node){
     const lineNo = node.startIndex + 1;
+    const explanationHistory = createForExplanationHistory(node);
     const initialization = executeAssignment(
       node.initialization.name,
       node.initialization.expression,
@@ -2055,12 +2180,14 @@ function visualizeCode(){
 
     let iterationCount = 0;
     while(true){
+      const activeIteration = explanationHistory.beginIteration(iterationCount + 1);
       const conditionResult = evaluateExpression(node.condition, variables);
       if(!conditionResult.ok){
-        addAnalysis(analysis, lineNo, `for文の条件 <code>${escapeHtml(node.condition)}</code> を評価できませんでした。`);
+        addAnalysis(analysis, lineNo, `<strong>【条件判定エラー】</strong> for文の条件 <code>${escapeHtml(node.condition)}</code> を評価できませんでした。`);
         addHint(hints, lineNo, 'for文の条件を評価できません', escapeHtml(conditionResult.error));
         warningLines.add(lineNo);
-        addStep(lineNo, 'for文の条件を評価できないため、プログラムの実行を停止します。');
+        addStep(lineNo, '<strong>【条件判定エラー】</strong> for文の条件を評価できないため、プログラムの実行を停止します。');
+        explanationHistory.finalize();
         return {
           status:'execution-stopped',
           stopIndex:node.startIndex,
@@ -2072,27 +2199,36 @@ function visualizeCode(){
       const conditionExplanation = conditionResult.comparison
         ? describeComparison(conditionResult)
         : `${escapeHtml(conditionResult.readable)} を計算した結果は ${conditionResult.value} です。C言語では0以外を条件成立、0を条件不成立として扱います。`;
-      const nextAction = conditionMet
-        ? '条件が成立したため、for文の本体へ進みます。'
-        : '条件が成立しなかったため、for文を終了します。';
-      addAnalysis(analysis, lineNo, `<strong>for文の条件：</strong> ${conditionExplanation}${nextAction}`);
-      addStep(lineNo, `for文の条件 ${escapeHtml(node.condition)} を判定しました。<br>${nextAction}`);
+      const reachesSafetyLimit = conditionMet && iterationCount >= MAX_FOR_ITERATIONS;
+      const nextAction = reachesSafetyLimit
+        ? `条件が成立したため、本来は${iterationCount + 1}回目の本体へ進む必要があります。`
+        : (conditionMet
+          ? '条件が成立したため、for文の本体へ進みます。'
+          : '条件が成立しなかったため、for文を終了します。');
+      const conditionDisplayPrefix = !conditionMet
+        ? `<strong>【${iterationCount === 0 ? '最初の条件判定／終了判定' : '終了判定'}】</strong> `
+        : (reachesSafetyLimit
+          ? `<strong>【${iterationCount + 1}回目へ進む条件判定】</strong> `
+          : '');
+      addAnalysis(analysis, lineNo, `${conditionDisplayPrefix}<strong>for文の条件：</strong> ${conditionExplanation}${nextAction}`);
+      addStep(lineNo, `${conditionDisplayPrefix}for文の条件 ${escapeHtml(node.condition)} を判定しました。<br>${nextAction}`);
 
       if(!conditionMet){
-        addAnalysis(analysis, node.endIndex + 1, 'for文の処理範囲の終わりです。後続の処理へ進みます。');
-        addStep(lineNo, 'for文の最終条件が成立しなかったため、for文を終了します。');
+        addAnalysis(analysis, node.endIndex + 1, '<strong>【for終了】</strong> 最終条件が成立しなかったため、for文の処理を終えて後続の処理へ進みます。');
+        addStep(lineNo, '<strong>【for終了】</strong> for文の最終条件が成立しなかったため、for文を終了します。');
+        explanationHistory.finalize();
         return { status:'normal' };
       }
 
       // 500回目までは実行し、501回目の本体へ入る直前に停止します。
-      if(iterationCount >= MAX_FOR_ITERATIONS){
-        const nextIterationNumber = MAX_FOR_ITERATIONS + 1;
+      if(reachesSafetyLimit){
         const safetyMessage = '無限ループ、または非常に多い反復の可能性があります。安全のため実行を停止しました。for文の「条件」と「更新式」を確認してみましょう。<strong>変数の値は、終了条件へ近づいていますか？</strong>';
-        addAnalysis(analysis, lineNo, `繰り返し回数が安全上限の ${MAX_FOR_ITERATIONS} 回に達したため、次の本体へ入らず停止しました。`);
+        addAnalysis(analysis, lineNo, `<strong>【安全上限停止】</strong> 繰り返し回数が安全上限の ${MAX_FOR_ITERATIONS} 回に達したため、次の本体へ入らず停止しました。`);
         addHint(hints, lineNo, '繰り返し回数が安全上限に達しました', safetyMessage);
         warningLines.add(lineNo);
-        addStep(lineNo, `for文は ${MAX_FOR_ITERATIONS} 回反復しました。${nextIterationNumber}回目の本体へ入る前に、安全のためプログラムの実行を停止します。`);
-        addAnalysis(analysis, node.endIndex + 1, 'for文が安全上限で停止したため、後続の処理へは進みません。');
+        addStep(lineNo, `<strong>【安全上限停止】</strong> for文は ${MAX_FOR_ITERATIONS} 回反復しました。その本体へ入る前に、安全のためプログラムの実行を停止します。`);
+        addAnalysis(analysis, node.endIndex + 1, '<strong>【安全上限停止】</strong> for文が安全上限で停止したため、後続の処理へは進みません。');
+        explanationHistory.finalize();
         return {
           status:'execution-stopped',
           stopIndex:node.endIndex,
@@ -2107,10 +2243,14 @@ function visualizeCode(){
 
         const bodyResult = processSimpleLine(lines[index], index, false, true);
         if(bodyResult === 'program-ended'){
+          explanationHistory.finishIteration(activeIteration);
+          explanationHistory.finalize();
           return { status:'program-ended', stopIndex:index };
         }
         if(bodyResult === 'execution-error' || bodyResult === 'scanf-error'){
           addStep(index + 1, 'for文の本体で処理を継続できないため、プログラムの実行を停止します。');
+          explanationHistory.finishIteration(activeIteration);
+          explanationHistory.finalize();
           return {
             status:'execution-stopped',
             stopIndex:index,
@@ -2133,12 +2273,15 @@ function visualizeCode(){
       if(!updateResult.ok){
         addStep(lineNo, 'for文の更新を実行できないため、プログラムの実行を停止します。');
         addAnalysis(analysis, node.endIndex + 1, 'for文の更新で実行を停止したため、後続の処理へは進みません。');
+        explanationHistory.finishIteration(activeIteration);
+        explanationHistory.finalize();
         return {
           status:'execution-stopped',
           stopIndex:node.endIndex,
           reason:'for文の更新で実行を停止したため、この行は実行されませんでした。'
         };
       }
+      explanationHistory.finishIteration(activeIteration);
     }
   }
 
@@ -2400,6 +2543,11 @@ function visualizeCode(){
       return `<div class="variable-chip">${escapeHtml(name)} = ${escapeHtml(value)}</div>`;
     }).join('')
     : `<div class="note">変数の状態はまだありません。</div>`;
+
+  // 圧縮後もSTEP番号が連番になるよう、最終表示の直前に振り直します。
+  steps.forEach((item, index) => {
+    item.step = index + 1;
+  });
 
   const stepHtml = steps.length
     ? steps.map(item => `<div class="step-card"><strong>STEP ${item.step}</strong> <span class="dim">${item.lineNo}行目</span><br>${item.text}</div>`).join('')

@@ -1163,7 +1163,7 @@
       {
         name:'複数forの反復カウンタは独立',
         code:makeMainCode(`    int i;\n    int total = 0;\n    for(i = 0; i < 500; i++){\n        total += 1;\n    }\n    for(i = 0; i < 1; i++){\n        total += 1;\n    }\n    printf("%d", total);\n    return 0;`),
-        expect:{ output:'501', variables:['i = 1', 'total = 501'], warningMax:0, hintsExclude:['安全上限'], stepCounts:{ 'for文の初期化':2, 'for文の条件':503, 'for文の更新':501 } }
+        expect:{ output:'501', variables:['i = 1', 'total = 501'], warningMax:0, hintsExclude:['安全上限'], stepCounts:{ 'for文の初期化':2, 'for文の条件':7, 'for文の更新':5 } }
       },
       {
         name:'main直下scanfの値をfor条件に利用',
@@ -1219,7 +1219,7 @@
           variables:['i = 500', 'count = 500'],
           warningMax:0,
           hintsExclude:['安全上限'],
-          stepCounts:{ 'for文の条件':501, 'for文の更新':500, '最終条件が成立しなかった':1, '501回目の本体':0 }
+          stepCounts:{ 'for文の条件':5, 'for文の更新':4, '最終条件が成立しなかった':1, '501回目の本体':0 }
         }
       },
       {
@@ -1232,29 +1232,29 @@
           warningMin:1,
           hintsInclude:['繰り返し回数が安全上限に達しました', '非常に多い反復', '変数の値は、終了条件へ近づいていますか？'],
           hintsExclude:['無限ループです'],
-          stepCounts:{ 'for文の条件':501, 'for文の更新':500, '501回目の本体':1, '最終条件が成立しなかった':0 },
+          stepCounts:{ 'for文の条件':5, 'for文の更新':4, '501回目の本体':1, '最終条件が成立しなかった':0 },
           executedExcludes:['printf("WRONG-AFTER-LIMIT']
         }
       },
       {
         name:'空のfor本体でも安全上限が機能',
         code:makeMainCode(`    int i;\n    for(i = 0; i <= 500; i++){\n    }\n    printf("WRONG-AFTER-EMPTY-LIMIT");\n    return 0;`),
-        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG-AFTER-EMPTY-LIMIT'], variables:['i = 500'], warningMin:1, hintsInclude:['安全上限'], stepCounts:{ 'for文の条件':501, 'for文の更新':500, '501回目の本体':1 }, executedExcludes:['printf("WRONG-AFTER-EMPTY-LIMIT'] }
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG-AFTER-EMPTY-LIMIT'], variables:['i = 500'], warningMin:1, hintsInclude:['安全上限'], stepCounts:{ 'for文の条件':5, 'for文の更新':4, '501回目の本体':1 }, executedExcludes:['printf("WRONG-AFTER-EMPTY-LIMIT'] }
       },
       {
         name:'無限ループ相当のforを安全停止',
         code:makeMainCode(`    int i;\n    for(i = 0; i >= 0; i++){\n    }\n    printf("WRONG-AFTER-INFINITE");\n    return 0;`),
-        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG-AFTER-INFINITE'], variables:['i = 500'], warningMin:1, hintsInclude:['安全上限'], stepCounts:{ 'for文の更新':500 }, executedExcludes:['printf("WRONG-AFTER-INFINITE'] }
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG-AFTER-INFINITE'], variables:['i = 500'], warningMin:1, hintsInclude:['安全上限'], stepCounts:{ 'for文の更新':4 }, executedExcludes:['printf("WRONG-AFTER-INFINITE'] }
       },
       {
         name:'終了条件から遠ざかる更新を安全停止',
         code:makeMainCode(`    int i;\n    for(i = 1; i > 0; i++){\n    }\n    printf("WRONG-AFTER-AWAY");\n    return 0;`),
-        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG-AFTER-AWAY'], variables:['i = 501'], warningMin:1, hintsInclude:['安全上限'], stepCounts:{ 'for文の更新':500 }, executedExcludes:['printf("WRONG-AFTER-AWAY'] }
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG-AFTER-AWAY'], variables:['i = 501'], warningMin:1, hintsInclude:['安全上限'], stepCounts:{ 'for文の更新':4 }, executedExcludes:['printf("WRONG-AFTER-AWAY'] }
       },
       {
         name:'本体内のループ変数変更で停止しないforを安全停止',
         code:makeMainCode(`    int i;\n    for(i = 0; i < 3; i++){\n        i--;\n    }\n    printf("WRONG-AFTER-BODY-CHANGE");\n    return 0;`),
-        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG-AFTER-BODY-CHANGE'], variables:['i = 0'], warningMin:1, hintsInclude:['安全上限'], stepCounts:{ 'for文の更新':500 }, executedExcludes:['printf("WRONG-AFTER-BODY-CHANGE'] }
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG-AFTER-BODY-CHANGE'], variables:['i = 0'], warningMin:1, hintsInclude:['安全上限'], stepCounts:{ 'for文の更新':4 }, executedExcludes:['printf("WRONG-AFTER-BODY-CHANGE'] }
       },
       {
         name:'for初期化で既存の整数式を再利用',
@@ -1336,6 +1336,247 @@
         name:'for本体の式中インクリメントを事前検証',
         code:makeMainCode(`    int i = 9;\n    int value = 0;\n    for(i = 0; i < 2; i++){\n        value = i++;\n        printf("WRONG-SIDE-EFFECT");\n    }\n    printf("WRONG-AFTER-SIDE-EFFECT");\n    return 0;`),
         expect:{ output:'出力はまだありません。', outputExcludes:['WRONG-SIDE-EFFECT', 'WRONG-AFTER-SIDE-EFFECT'], variables:['i = 9', 'value = 0'], warningMin:1, hintsInclude:['式中の++・--は未対応'], stepCounts:{ 'for文の初期化':0 }, executedExcludes:['value = i++;', 'printf("WRONG-SIDE-EFFECT', 'printf("WRONG-AFTER-SIDE-EFFECT'] }
+      },
+      {
+        name:'Stage2表示・0反復は初回条件偽を全表示',
+        code:makeMainCode(`    int i;\n    for(i = 10; i < 3; i++){\n        printf("WRONG-ZERO");\n    }\n    printf("%d", i);\n    return 0;`),
+        expect:{
+          output:'10',
+          outputExcludes:['WRONG-ZERO'],
+          variables:['i = 10'],
+          warningMax:0,
+          stepsInclude:['【最初の条件判定／終了判定】', '【for終了】'],
+          stepsExclude:['【1回目】', '反復を省略しました'],
+          analysisByLineIncludes:{ '5':['【最初の条件判定／終了判定】'], '7':['【for終了】'] },
+          analysisByLineExcludes:{ '5':['【1回目】', '反復を省略しました'] },
+          executedExcludes:['printf("WRONG-ZERO']
+        }
+      },
+      {
+        name:'Stage2表示・1反復は全表示',
+        code:makeMainCode(`    int i;\n    for(i = 0; i < 1; i++){\n        printf("%d", i);\n    }\n    return 0;`),
+        expect:{
+          output:'0',
+          variables:['i = 1'],
+          warningMax:0,
+          stepsInclude:['【1回目】', '【終了判定】', '【for終了】'],
+          stepsExclude:['【2回目】', '反復を省略しました'],
+          analysisByLineIncludes:{ '5':['【1回目】', '【終了判定】'], '6':['【1回目】'] },
+          analysisByLineExcludes:{ '5':['【2回目】', '反復を省略しました'] }
+        }
+      },
+      {
+        name:'Stage2表示・3反復は全表示',
+        code:makeMainCode(`    int i;\n    for(i = 0; i < 3; i++){\n        printf("%d", i);\n    }\n    return 0;`),
+        expect:{
+          output:'012',
+          variables:['i = 3'],
+          warningMax:0,
+          stepsInclude:['【1回目】', '【2回目】', '【3回目】', '【終了判定】'],
+          stepsExclude:['【4回目】', '反復を省略しました'],
+          analysisByLineIncludes:{ '5':['【1回目】', '【2回目】', '【3回目】'], '6':['【1回目】', '【2回目】', '【3回目】'] }
+        }
+      },
+      {
+        name:'Stage2境界・6反復では中略しない',
+        code:makeMainCode(`    int i;\n    for(i = 0; i < 6; i++){\n        printf("%d", i);\n    }\n    return 0;`),
+        expect:{
+          output:'012345',
+          variables:['i = 6'],
+          warningMax:0,
+          stepsInclude:['【1回目】', '【2回目】', '【3回目】', '【4回目】', '【5回目】', '【6回目】', '【終了判定】'],
+          stepsExclude:['反復を省略しました'],
+          stepCounts:{ 'for文の条件':7, 'for文の更新':6, '反復を省略しました':0 },
+          analysisByLineIncludes:{ '5':['【1回目】', '【4回目】', '【6回目】'], '6':['【1回目】', '【4回目】', '【6回目】'] },
+          analysisByLineExcludes:{ '5':['反復を省略しました'], '6':['反復を省略しました'] }
+        }
+      },
+      {
+        name:'Stage2境界・7反復で最初3回と最後1回へ圧縮',
+        code:makeMainCode(`    int i;\n    for(i = 0; i < 7; i++){\n        printf("%d", i);\n    }\n    return 0;`),
+        expect:{
+          output:'0123456',
+          variables:['i = 7'],
+          warningMax:0,
+          stepsInclude:['【1回目】', '【2回目】', '【3回目】', '4～6回目の反復を省略しました', '【7回目】', '【終了判定】', '【for終了】'],
+          stepsExclude:['【4回目】', '【5回目】', '【6回目】'],
+          stepsInOrder:['【1回目】', '【2回目】', '【3回目】', '4～6回目の反復を省略しました', '【7回目】', '【終了判定】', '【for終了】'],
+          stepCounts:{ 'for文の条件':5, 'for文の更新':4, '反復を省略しました':1 },
+          analysisByLineIncludes:{
+            '5':['【1回目】', '【2回目】', '【3回目】', '4～6回目の反復を省略しました', '【7回目】', '【終了判定】'],
+            '6':['【1回目】', '【2回目】', '【3回目】', '4～6回目の反復を省略しました', '【7回目】']
+          },
+          analysisByLineExcludes:{ '5':['【4回目】', '【6回目】'], '6':['【4回目】', '【6回目】'] },
+          analysisByLineCounts:{ '5':{ '反復を省略しました':1 }, '6':{ '反復を省略しました':1 } }
+        }
+      },
+      {
+        name:'Stage2更新方式・i--を10反復圧縮',
+        code:makeMainCode(`    int i;\n    for(i = 10; i > 0; i--){\n        printf("%d,", i);\n    }\n    return 0;`),
+        expect:{
+          output:'10,9,8,7,6,5,4,3,2,1,',
+          variables:['i = 0'],
+          warningMax:0,
+          stepsInclude:['4～9回目の反復を省略しました', '【10回目】', '【終了判定】'],
+          analysisByLineIncludes:{ '5':['4～9回目の反復を省略しました', '【10回目】'], '6':['4～9回目の反復を省略しました', '【10回目】'] },
+          analysisByLineCounts:{ '5':{ '反復を省略しました':1 }, '6':{ '反復を省略しました':1 } }
+        }
+      },
+      {
+        name:'Stage2更新方式・i += 2を10反復圧縮',
+        code:makeMainCode(`    int i;\n    for(i = 0; i < 20; i += 2){\n        printf("%d,", i);\n    }\n    return 0;`),
+        expect:{
+          output:'0,2,4,6,8,10,12,14,16,18,',
+          variables:['i = 20'],
+          warningMax:0,
+          stepsInclude:['4～9回目の反復を省略しました', '【10回目】'],
+          analysisByLineIncludes:{ '5':['4～9回目の反復を省略しました', '【10回目】'], '6':['4～9回目の反復を省略しました', '【10回目】'] }
+        }
+      },
+      {
+        name:'Stage2更新方式・i -= 2を10反復圧縮',
+        code:makeMainCode(`    int i;\n    for(i = 20; i > 0; i -= 2){\n        printf("%d,", i);\n    }\n    return 0;`),
+        expect:{
+          output:'20,18,16,14,12,10,8,6,4,2,',
+          variables:['i = 0'],
+          warningMax:0,
+          stepsInclude:['4～9回目の反復を省略しました', '【10回目】'],
+          analysisByLineIncludes:{ '5':['4～9回目の反復を省略しました', '【10回目】'], '6':['4～9回目の反復を省略しました', '【10回目】'] }
+        }
+      },
+      {
+        name:'Stage2本体・複数文を同じ反復番号で圧縮',
+        code:makeMainCode(`    int i;\n    int sum = 0;\n    for(i = 0; i < 10; i++){\n        sum = sum + i;\n        printf("%d,", sum);\n    }\n    return 0;`),
+        expect:{
+          output:'0,1,3,6,10,15,21,28,36,45,',
+          variables:['i = 10', 'sum = 45'],
+          warningMax:0,
+          stepCounts:{ '反復を省略しました':1 },
+          analysisByLineIncludes:{
+            '6':['【1回目】', '【2回目】', '【3回目】', '4～9回目の反復を省略しました', '【10回目】'],
+            '7':['【1回目】', '【2回目】', '【3回目】', '4～9回目の反復を省略しました', '【10回目】'],
+            '8':['【1回目】', '【2回目】', '【3回目】', '4～9回目の反復を省略しました', '【10回目】']
+          },
+          analysisByLineExcludes:{ '6':['【4回目】', '【9回目】'], '7':['【4回目】', '【9回目】'], '8':['【4回目】', '【9回目】'] },
+          analysisByLineCounts:{ '6':{ '反復を省略しました':1 }, '7':{ '反復を省略しました':1 }, '8':{ '反復を省略しました':1 } }
+        }
+      },
+      {
+        name:'Stage2本体・空本体でも10反復圧縮',
+        code:makeMainCode(`    int i;\n    for(i = 0; i < 10; i++){\n    }\n    printf("%d", i);\n    return 0;`),
+        expect:{
+          output:'10',
+          variables:['i = 10'],
+          warningMax:0,
+          stepsInclude:['4～9回目の反復を省略しました', '【10回目】', '【終了判定】'],
+          stepCounts:{ 'for文の条件':5, 'for文の更新':4, '反復を省略しました':1 },
+          analysisByLineIncludes:{ '5':['4～9回目の反復を省略しました', '【10回目】', '【終了判定】'] },
+          analysisByLineCounts:{ '5':{ '反復を省略しました':1 } }
+        }
+      },
+      {
+        name:'Stage2本体・ループ変数変更を含む10反復圧縮',
+        code:makeMainCode(`    int i;\n    for(i = 0; i < 30; i++){\n        i += 2;\n    }\n    printf("%d", i);\n    return 0;`),
+        expect:{
+          output:'30',
+          variables:['i = 30'],
+          warningMax:0,
+          stepsInclude:['4～9回目の反復を省略しました', '【10回目】', '【終了判定】'],
+          analysisByLineIncludes:{ '5':['4～9回目の反復を省略しました', '【10回目】'], '6':['4～9回目の反復を省略しました', '【10回目】'] },
+          analysisByLineCounts:{ '5':{ '反復を省略しました':1 }, '6':{ '反復を省略しました':1 } }
+        }
+      },
+      {
+        name:'Stage2複数for・圧縮履歴を独立管理',
+        code:makeMainCode(`    int i;\n    for(i = 0; i < 7; i++){\n        printf("%d", i);\n    }\n    printf("|");\n    for(i = 0; i < 10; i++){\n        printf("%d", i);\n    }\n    return 0;`),
+        expect:{
+          output:'0123456|0123456789',
+          variables:['i = 10'],
+          warningMax:0,
+          stepCounts:{ '反復を省略しました':2, '【for終了】':2 },
+          analysisByLineIncludes:{
+            '5':['4～6回目の反復を省略しました', '【7回目】'],
+            '6':['4～6回目の反復を省略しました', '【7回目】'],
+            '9':['4～9回目の反復を省略しました', '【10回目】'],
+            '10':['4～9回目の反復を省略しました', '【10回目】']
+          },
+          analysisByLineExcludes:{
+            '5':['4～9回目の反復を省略しました', '【10回目】'],
+            '9':['4～6回目の反復を省略しました', '【7回目】']
+          },
+          analysisByLineCounts:{ '5':{ '反復を省略しました':1 }, '6':{ '反復を省略しました':1 }, '9':{ '反復を省略しました':1 }, '10':{ '反復を省略しました':1 } }
+        }
+      },
+      {
+        name:'Stage2安全上限・500回目と501回目条件を保持',
+        code:makeMainCode(`    int i;\n    for(i = 0; i <= 500; i++){\n    }\n    printf("WRONG-STAGE2-LIMIT");\n    return 0;`),
+        expect:{
+          output:'出力はまだありません。',
+          outputExcludes:['WRONG-STAGE2-LIMIT'],
+          variables:['i = 500'],
+          warningMin:1,
+          hintsInclude:['安全上限', '非常に多い反復'],
+          stepsInclude:['4～499回目の反復を省略しました', '【500回目】', '【501回目へ進む条件判定】', '本来は501回目の本体へ進む必要があります', '【安全上限停止】'],
+          stepsExclude:['【501回目】 for文の更新', '【for終了】'],
+          stepsInOrder:['【1回目】', '【2回目】', '【3回目】', '4～499回目の反復を省略しました', '【500回目】', '【501回目へ進む条件判定】', '【安全上限停止】'],
+          stepCounts:{ 'for文の条件':5, 'for文の更新':4, '反復を省略しました':1 },
+          analysisByLineIncludes:{ '5':['4～499回目の反復を省略しました', '【500回目】', '【501回目へ進む条件判定】', '【安全上限停止】'] },
+          analysisByLineExcludes:{ '5':['【501回目】 for文の更新', '【終了判定】'] },
+          analysisByLineCounts:{ '5':{ '反復を省略しました':1 } },
+          executedExcludes:['printf("WRONG-STAGE2-LIMIT']
+        }
+      },
+      {
+        name:'Stage2 return・for本体の途中終了理由を保持',
+        code:makeMainCode(`    int i;\n    for(i = 0; i < 10; i++){\n        printf("START");\n        return 0;\n        printf("WRONG-RETURN-BODY");\n    }\n    printf("WRONG-AFTER-RETURN");`),
+        expect:{
+          output:'START',
+          outputExcludes:['WRONG-RETURN-BODY', 'WRONG-AFTER-RETURN'],
+          variables:['i = 0'],
+          warningMax:0,
+          stepsInclude:['【1回目】', 'プログラムを終了します'],
+          stepsExclude:['for文の更新', '【終了判定】', '【for終了】', '反復を省略しました'],
+          stepsInOrder:['【1回目】', 'プログラムを終了します'],
+          analysisByLineIncludes:{ '5':['【1回目】'], '6':['【1回目】'], '7':['【1回目】'] },
+          analysisByLineExcludes:{ '5':['【終了判定】', '反復を省略しました'] },
+          executedExcludes:['printf("WRONG-RETURN-BODY', 'printf("WRONG-AFTER-RETURN']
+        }
+      },
+      {
+        name:'Stage2 return・7反復圧縮後のmain直下returnを保持',
+        code:makeMainCode(`    int i;\n    for(i = 0; i < 7; i++){\n        printf("%d", i);\n    }\n    return 0;\n    printf("WRONG-AFTER-COMPRESSED-RETURN");`),
+        expect:{
+          output:'0123456',
+          outputExcludes:['WRONG-AFTER-COMPRESSED-RETURN'],
+          variables:['i = 7'],
+          warningMax:0,
+          stepsInclude:['4～6回目の反復を省略しました', '【7回目】', '【終了判定】', '【for終了】', 'プログラムを終了します'],
+          analysisByLineIncludes:{ '5':['4～6回目の反復を省略しました', '【7回目】'], '8':['プログラムを正常に終了'] },
+          executedExcludes:['printf("WRONG-AFTER-COMPRESSED-RETURN']
+        }
+      },
+      {
+        name:'Stage2実行エラー・8回目の停止理由を省略しない',
+        code:makeMainCode(`    int i;\n    int value = 0;\n    for(i = 0; i < 10; i++){\n        value = 100 / (i - 7);\n        printf("%d,", value);\n    }\n    printf("WRONG-AFTER-LATE-ERROR");\n    return 0;`),
+        expect:{
+          output:'-14,-16,-20,-25,-33,-50,-100,',
+          outputExcludes:['WRONG-AFTER-LATE-ERROR'],
+          variables:['i = 7', 'value = -100'],
+          warningMin:1,
+          hintsInclude:['0で割ろうとしています'],
+          stepsInclude:['【1回目】', '【2回目】', '【3回目】', '4～7回目の反復を省略しました', '【8回目】', 'for文の本体で処理を継続できない'],
+          stepsExclude:['【終了判定】', '【for終了】'],
+          stepsInOrder:['【1回目】', '【2回目】', '【3回目】', '4～7回目の反復を省略しました', '【8回目】', 'for文の本体で処理を継続できない'],
+          stepCounts:{ '反復を省略しました':1, 'for文の更新':3 },
+          analysisByLineIncludes:{
+            '6':['4～7回目の反復を省略しました', '【8回目】'],
+            '7':['4～7回目の反復を省略しました', '【8回目】', '式を計算できませんでした'],
+            '8':['4～7回目の反復を省略しました']
+          },
+          analysisByLineExcludes:{ '6':['【終了判定】', '【for終了】'], '7':['【4回目】', '【7回目】'] },
+          analysisByLineCounts:{ '6':{ '反復を省略しました':1 }, '7':{ '反復を省略しました':1 }, '8':{ '反復を省略しました':1 } },
+          executedExcludes:['printf("WRONG-AFTER-LATE-ERROR']
+        }
       }
     ];
 
@@ -1344,6 +1585,13 @@
     }
 
     function snapshotResult(){
+      const analysisByLine = {};
+      for(const card of document.querySelectorAll('#codePreview .code-card')){
+        const lineNo = card.querySelector('.code-line-number')?.textContent.trim();
+        const lineAnalysis = card.querySelector('.line-analysis')?.textContent;
+        if(lineNo) analysisByLine[lineNo] = normalizeText(lineAnalysis);
+      }
+
       return {
         codeInputValue:document.getElementById('codeInput').value,
         scanfInputValue:document.getElementById('scanfInput').value,
@@ -1353,6 +1601,7 @@
         warningCount:document.querySelectorAll('#hintResult .warning-line').length,
         steps:normalizeText(document.getElementById('stepResult').textContent),
         analysis:normalizeText(document.getElementById('codePreview').textContent),
+        analysisByLine,
         executedLines:[...document.querySelectorAll('#codePreview .code-card.executed-line .code-line-text')].map(element => normalizeText(element.textContent)),
         editorSource:document.getElementById('codeHighlight').textContent,
         lineNumbers:document.getElementById('codeLineNumbers').textContent,
@@ -1475,6 +1724,30 @@
 
       for(const text of expected.analysisInclude || []){
         if(!actual.analysis.includes(text)) failures.push(`行説明に「${text}」がない`);
+      }
+
+      for(const [lineNo, texts] of Object.entries(expected.analysisByLineIncludes || {})){
+        const lineAnalysis = actual.analysisByLine[lineNo] || '';
+        for(const text of texts){
+          if(!lineAnalysis.includes(text)) failures.push(`${lineNo}行目の説明に「${text}」がない`);
+        }
+      }
+
+      for(const [lineNo, texts] of Object.entries(expected.analysisByLineExcludes || {})){
+        const lineAnalysis = actual.analysisByLine[lineNo] || '';
+        for(const text of texts){
+          if(lineAnalysis.includes(text)) failures.push(`${lineNo}行目の説明に「${text}」を含めない`);
+        }
+      }
+
+      for(const [lineNo, textCounts] of Object.entries(expected.analysisByLineCounts || {})){
+        const lineAnalysis = actual.analysisByLine[lineNo] || '';
+        for(const [text, expectedCount] of Object.entries(textCounts)){
+          const actualCount = lineAnalysis.split(text).length - 1;
+          if(actualCount !== expectedCount){
+            failures.push(`${lineNo}行目の説明内「${text}」の回数: 期待${expectedCount}回 / 実際${actualCount}回`);
+          }
+        }
       }
 
       for(const text of expected.executedIncludes || []){
