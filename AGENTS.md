@@ -22,10 +22,12 @@ The goal is to help students understand the flow of code, not to reproduce all b
 - Do not require Node.js, npm, bundlers, servers, databases, or build tools.
 - Keep the structure simple.
 - Preserve readable formatting, indentation, and helpful comments.
-- Current main files:
+- Current application files:
   - index.html
   - style.css
   - script.js
+- Regression test page:
+  - tests.html
 
 ## Educational priority
 
@@ -46,9 +48,9 @@ Avoid:
 - adding many features at once
 - changing the core design without reason
 
-## Supported scope for Ver.0.6_0812
+## Supported scope for Ver.0.7_0813
 
-Last updated: 2026-08-12
+Last updated: 2026-08-13
 
 Currently supported:
 
@@ -56,11 +58,13 @@ Currently supported:
 - uninitialized int declarations
 - int initialization
 - assignment
-- integer arithmetic
+- integer arithmetic with `+`, `-`, `*`, `/`, and `%`
+- unary signs and parentheses in supported integer expressions
 - comparison expressions
 - comparison operators `<`, `<=`, `>`, `>=`, `==`, `!=`
 - C-style truth values: `0` is false, nonzero is true
 - simple printf output
+- `return 0;` from main, supported if branches, direct for bodies, and if branches inside for
 - simple integer input with `scanf("%d", &variable);` directly inside main
 - one declared int variable per scanf call
 - one scanf input value per non-empty line in the dedicated input field
@@ -77,14 +81,28 @@ Currently supported:
 - assignments to existing variables inside a nested if or if-else
 - printf inside if and else
 - printf inside a nested if or if-else
+- `return 0;` inside a supported outer or nested if/if-else branch
 - continuation of the outer branch after a nested if
 - propagation of values updated by a nested if to later statements
 - no evaluation of nested conditions in an unselected outer branch
-- inner-body-only stopping when a selected nested condition cannot be evaluated
-- outer-branch-level safe stopping for unsupported nested structures
+- inner-body-only stopping when a selected nested condition in a main-level if cannot be evaluated
+- outer-branch-level safe stopping for unsupported nested structures in a main-level if
 - safe skipping of false or unevaluable if bodies
 - safe branch selection: true executes only if, false executes only else
 - clear warnings for unsupported if structures
+- standalone prefix and postfix `++` and `--`
+- standalone `+=` and `-=` with an integer constant
+- basic for statements directly inside main
+- multiple independent basic for statements directly inside main
+- for initialization by assignment to a previously declared int variable
+- for conditions using the existing expression evaluator
+- for updates using standalone `++`, `--`, integer-constant `+=`, integer-constant `-=`, or an ordinary assignment
+- multiple supported statements and empty bodies inside for
+- changes to the loop variable inside the for body
+- supported if/if-else statements, multiple independent if statements, and up to two if levels inside for
+- complete structural validation of a for body before for initialization
+- compressed for explanations after six iterations without omitting execution, output, or variable updates
+- a per-for safety limit of 500 entered body iterations
 - sequential execution
 - line-by-line explanations
 - variable state display
@@ -134,7 +152,9 @@ Rules:
 - else is optional
 - support both `}else{` and a separate `else{` line after the if closing brace
 - no else if
-- count a direct child of main as level 1 and an if inside its if or else branch as level 2
+- count an if directly inside main or directly inside a for body as level 1
+- count an if inside that if or else branch as level 2
+- do not count the containing for statement as an if nesting level
 - support a maximum depth of 2
 - allow multiple independent level-2 if or if-else statements in one outer branch
 - allow at most one else on a level-2 if
@@ -142,7 +162,9 @@ Rules:
 - the if closing brace may share a line with `else{` or be alone
 - the final closing brace must be alone on its line
 - braces are required
-- only assignment to an existing variable and printf are executed inside an outer or inner branch
+- only ordinary assignment to an existing variable, printf, and `return 0;` are executed inside an outer or inner branch
+- standalone `++`, `--`, `+=`, and `-=` are unsupported inside any if or else branch
+- scanf is unsupported inside any if or else branch
 - declarations inside any branch are unsupported and must not register a variable
 - use the current expression evaluator for all conditions
 - treat `0` as false and every nonzero result as true
@@ -150,6 +172,9 @@ Rules:
 - after a nested if or if-else finishes or its condition evaluation fails, continue with supported later statements in the selected outer branch
 - do not evaluate a nested condition in an unselected outer branch, and do not warn about undeclared or uninitialized values used only there
 - if a selected nested condition cannot be evaluated, skip both its if and else branches
+- preserve the existing non-fatal runtime-error behavior for if/if-else directly inside main
+- when executing an if inside a for, propagate condition and selected-branch runtime errors so the for and program stop
+- propagate `return 0;` from a selected outer or nested branch to the program level
 - treat unsupported structures as safe-stop targets even when they appear in an unselected outer branch
 - if level 3 or deeper, else if, an extra else, or an unsupported control structure appears inside a nested if, do not partially execute the containing outer structure
 - never partially execute an outer if/if-else structure that fails structural validation
@@ -175,22 +200,87 @@ if(outerCondition){
 }
 ```
 
-## Unsupported scope for Ver.0.6_0812
+## Basic for specification
+
+Supported form:
+
+```c
+int i;
+
+for(i = 0; i < 5; i++){
+    printf("%d\n", i);
+}
+```
+
+Rules:
+
+- for must be a direct child statement of main
+- allow multiple independent direct-child for statements
+- require all three header clauses: initialization, condition, and update
+- initialization must assign to a previously declared int variable
+- do not support declarations such as `for(int i = 0; ... )`
+- use the existing expression evaluator for initialization, conditions, ordinary assignment updates, and body assignments
+- treat condition result `0` as false and every nonzero result as true
+- support standalone prefix/postfix `++` and `--` in the update clause
+- support `+=` and `-=` with an integer constant in the update clause
+- support an ordinary assignment such as `i = i + 2` in the update clause
+- require braces and require the opening brace on the for header line
+- allow multiple supported statements and an empty body
+- directly supported body statements are ordinary assignment, standalone updates, printf, and `return 0;`
+- allow supported if/if-else nodes as body items instead of creating for-specific if execution
+- allow multiple independent if statements in one for body
+- allow up to two if levels inside for; the for itself does not count as an if level
+- inside an if/else branch in for, allow only ordinary assignment, printf, and `return 0;`
+- do not support declarations, scanf, nested for, while, break, continue, or other unsupported controls in the for body
+- validate the complete for body before initialization, including unselected if/else branches and a body that will execute zero times
+- never partially execute a for that fails structural validation
+- propagate `return 0;` from the direct body or an if branch to main and stop the whole program
+- propagate runtime errors from initialization, condition, body, selected if branches, and update; never continue to the next iteration after an error
+- keep a separate iteration budget for each independent for statement
+- permit 500 entered body iterations; after the 500th update, evaluate the condition once more
+- if that condition is false, finish normally after 500 iterations
+- if that condition is true, stop before entering or updating the 501st body iteration
+- describe this as a Visualizer safety limit, not a C language restriction
+
+## For explanation display
+
+- show every iteration explanation for 0 through 6 entered body iterations
+- for 7 or more iterations, keep the first 3 iterations, one omission marker, the actual final iteration, and the termination reason
+- retain the final false condition on normal completion
+- retain the actual return, runtime-error, or safety-stop iteration on abnormal completion
+- do not invent a final false condition after return, runtime error, or safety stop
+- compress only analysis entries and step entries
+- never omit actual condition evaluation, body execution, updates, printf output, or final variable state
+- keep explanation histories independent across multiple for statements
+
+## Unsupported scope for Ver.0.7_0813
 
 Do not implement these unless explicitly requested:
 
 - else if
 - if nesting at level 3 or deeper
 - declarations inside any branch
+- standalone `++`, `--`, `+=`, and `-=` inside any if or else branch
 - braceless if
 - split-line opening brace style
 - split-line opening brace style for else
 - logical operators `&&`, `||`, and `!`
-- for
+- for-header declarations
+- omitted for initialization, condition, or update, including `for(;;)`
+- multiple for-header expressions and comma operators
+- variable operands in compound for updates, such as `i += step`
+- braceless for and split-line opening brace style for for
+- nested for and for inside if
+- scanf and declarations inside a for body
+- expressions that use the value or side effects of `++` or `--`
+- break and continue
 - while
+- do while
 - switch
 - arrays
+- float, char, and string variables
 - user-defined functions
+- printf `%%`
 - scanf conversion specifiers other than `%d`, including `%f`, `%lf`, `%c`, and `%s`
 - multiple scanf targets in one call
 - scanf inside if or else branches
@@ -206,7 +296,7 @@ Do not implement these unless explicitly requested:
 
 ## Input rule
 
-In Ver.0.6_0812, assume one C statement per line.
+In Ver.0.7_0813, assume one C statement per line.
 
 If multiple statements are written on one line, show a warning instead of trying to parse them automatically.
 
@@ -220,7 +310,8 @@ Preferred warning message in Japanese:
 - Example: `Ver.0.2_0730`
 - `MMDD` represents the actual update month and day.
 - README or release records should also include the full date in `YYYY-MM-DD` format.
-- Update version strings consistently across `index.html`, `script.js`, `README.md`, and `AGENTS.md` when a version is changed.
+- Update current-version strings consistently across `index.html`, `README.md`, and `AGENTS.md` when a version is changed.
+- Prefer version-neutral wording such as "現在のVisualizerでは" for user-facing messages in `script.js` unless an explicit version is necessary.
 
 ## UI direction
 

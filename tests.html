@@ -178,8 +178,8 @@
         expect:{ output:'もう一度挑戦', variables:['score = 45'], warningMax:0, executedIncludes:['printf("もう一度挑戦'], executedExcludes:['printf("合格です'] }
       },
       {
-        name:'入れ子ifサンプル',
-        code:samples.nestedIf,
+        name:'入れ子ifで選択分岐後も処理を継続',
+        code:`#include <stdio.h>\n\nint main(void){\n    int score = 85;\n\n    if(score >= 60){\n        printf("合格です\\n");\n\n        if(score >= 80){\n            printf("高得点です\\n");\n        }\n    }\n\n    return 0;\n}`,
         expect:{
           output:'合格です\n高得点です',
           variables:['score = 85'],
@@ -189,9 +189,9 @@
         }
       },
       {
-        name:'入れ子if〜elseサンプル',
-        code:samples.nestedIfElse,
-        loadSampleKey:'nestedIfElse',
+        name:'入れ子ifサンプル',
+        code:samples.nestedIf,
+        loadSampleKey:'nestedIf',
         expect:{
           output:'合格です',
           variables:['score = 75'],
@@ -199,6 +199,44 @@
           stepsInOrder:['score >= 60を判定しました', '入れ子のif文の条件 score >= 80 を判定しました', '画面に「合格です', 'プログラムを終了します'],
           executedIncludes:['if(score >= 60){', 'if(score >= 80){', 'printf("合格です', 'return 0;'],
           executedExcludes:['printf("高得点です'],
+          editorScrollTop:0,
+          editorScrollLeft:0
+        }
+      },
+      {
+        name:'for文サンプル・5反復を全説明表示',
+        code:samples.forBasic,
+        loadSampleKey:'forBasic',
+        expect:{
+          output:'0\n1\n2\n3\n4',
+          variables:['i = 5'],
+          warningMax:0,
+          scanfInputValue:'',
+          stepsInclude:['【1回目】', '【5回目】', '【終了判定】', '【for終了】'],
+          stepsExclude:['反復を省略しました'],
+          stepCounts:{ 'for文の条件':6, 'for文の更新':5, '反復を省略しました':0 },
+          executedIncludes:['for(i = 0; i < 5; i++){', 'printf("%d\\n", i);', 'return 0;'],
+          editorScrollTop:0,
+          editorScrollLeft:0
+        }
+      },
+      {
+        name:'for＋ifサンプル・偶数出力と10反復圧縮',
+        code:samples.forIf,
+        loadSampleKey:'forIf',
+        expect:{
+          output:'0\n2\n4\n6\n8',
+          variables:['i = 10'],
+          warningMax:0,
+          scanfInputValue:'',
+          stepsInclude:['4～9回目の反復を省略しました', '【10回目】', '【終了判定】', '【for終了】'],
+          stepCounts:{ 'for文の条件':5, 'for文の更新':4, '反復を省略しました':1 },
+          analysisByLineIncludes:{
+            '6':['4～9回目の反復を省略しました', '【10回目】'],
+            '7':['4～9回目の反復を省略しました', '【10回目】'],
+            '8':['4～9回目の反復を省略しました', '【10回目】']
+          },
+          executedIncludes:['for(i = 0; i < 10; i++){', 'if(i % 2 == 0){', 'printf("%d\\n", i);', 'return 0;'],
           editorScrollTop:0,
           editorScrollLeft:0
         }

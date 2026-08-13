@@ -1,12 +1,12 @@
 const samples = {
   basic: `#include <stdio.h>\n\nint main(void){\n    int a = 3;\n    int b = 5;\n    int c = a + b;\n    printf("%d\\n", c);\n    return 0;\n}`,
-  calcSimple: `#include <stdio.h>\n\nint main(void){\n    int price = 120;\n    int count = 3;\n    int total = price * count;\n    printf("%d円です\\n", total);\n    return 0;\n}`,
   calc: `#include <stdio.h>\n\nint main(void){\n    int price = 120;\n    int count = 4;\n    int total = price * count;\n    int change = 1000 - total;\n    printf("合計:%d円\\n", total);\n    printf("おつり:%d円\\n", change);\n    return 0;\n}`,
   assign: `#include <stdio.h>\n\nint main(void){\n    int score = 60;\n    score = score + 15;\n    printf("%d\\n", score);\n    return 0;\n}`,
   ifSimple: `#include <stdio.h>\n\nint main(void){\n    int score = 78;\n    if(score >= 60){\n        printf("合格です\\n");\n    }\n    return 0;\n}`,
   ifElse: `#include <stdio.h>\n\nint main(void){\n    int score = 45;\n    if(score >= 60){\n        printf("合格です\\n");\n    }else{\n        printf("もう一度挑戦\\n");\n    }\n    return 0;\n}`,
-  nestedIf: `#include <stdio.h>\n\nint main(void){\n    int score = 85;\n\n    if(score >= 60){\n        printf("合格です\\n");\n\n        if(score >= 80){\n            printf("高得点です\\n");\n        }\n    }\n\n    return 0;\n}`,
-  nestedIfElse: `#include <stdio.h>\n\nint main(void){\n    int score = 75;\n\n    if(score >= 60){\n        if(score >= 80){\n            printf("高得点です\\n");\n        }else{\n            printf("合格です\\n");\n        }\n    }\n\n    return 0;\n}`,
+  nestedIf: `#include <stdio.h>\n\nint main(void){\n    int score = 75;\n\n    if(score >= 60){\n        if(score >= 80){\n            printf("高得点です\\n");\n        }else{\n            printf("合格です\\n");\n        }\n    }\n\n    return 0;\n}`,
+  forBasic: `#include <stdio.h>\n\nint main(void){\n    int i;\n\n    for(i = 0; i < 5; i++){\n        printf("%d\\n", i);\n    }\n\n    return 0;\n}`,
+  forIf: `#include <stdio.h>\n\nint main(void){\n    int i;\n\n    for(i = 0; i < 10; i++){\n        if(i % 2 == 0){\n            printf("%d\\n", i);\n        }\n    }\n\n    return 0;\n}`,
   scanfInput: `#include <stdio.h>\n\nint main(void){\n    int score;\n\n    scanf("%d", &score);\n\n    if(score >= 60){\n        printf("合格です\\n");\n    }else{\n        printf("不合格です\\n");\n    }\n\n    return 0;\n}`,
   unsupported: `#include <stdio.h>\n\nint main(void){\n    int count = 0;\n\n    while(count < 3){\n        count = count + 1;\n    }\n\n    return 0;\n}`
 };
@@ -1059,7 +1059,7 @@ function visualizeCode(){
     const hasScanfCall = /^scanf\b/.test(structuralCode) || /\bscanf\s*\(/.test(structuralCode);
     if(insideFor && hasScanfCall){
       addAnalysis(analysis, lineNo, 'for文の本体内でscanfを使う形は現在未対応です。');
-      addHint(hints, lineNo, 'for文内のscanfは未対応', 'Stage1では、scanfはmain直下に置く場合だけ実行できます。');
+      addHint(hints, lineNo, 'for文内のscanfは未対応', '現在のVisualizerでは、scanfはmain直下に置く場合だけ実行できます。');
       warningLines.add(lineNo);
       return 'execution-error';
     }
@@ -1181,8 +1181,8 @@ function visualizeCode(){
     }
 
     if(/^if\s*\(/.test(trimmed) || /^for\s*\(/.test(trimmed) || /^while\s*\(/.test(trimmed)){
-      addAnalysis(analysis, lineNo, 'Ver.0.6_0812では未対応の構文です。今後の拡張対象として扱います。');
-      addHint(hints, lineNo, 'Ver.0.6_0812では未対応', '現在は int、代入、整数の四則演算、比較式、printf、main直下の単純なscanf、単純なif〜else文、最大2階層の単純な入れ子if・if〜elseの処理過程可視化に対応しています。この行は正確には実行シミュレートしていません。');
+      addAnalysis(analysis, lineNo, 'この場所・書き方の制御構文は、現在のVisualizerでは未対応です。');
+      addHint(hints, lineNo, 'この制御構文は現在未対応', 'main直下の基本forと、対応範囲内のif・if〜elseは実行できますが、この場所または書き方は正確に実行シミュレートしていません。');
       warningLines.add(lineNo);
       return;
     }
@@ -1297,9 +1297,9 @@ function visualizeCode(){
       warningLines.add(lineNo);
     }
 
-    addAnalysis(analysis, lineNo, 'Ver.0.6_0812では説明未対応のコードです。');
+    addAnalysis(analysis, lineNo, '現在のVisualizerでは説明未対応のコードです。');
     if(trimmed !== ''){
-      addHint(hints, lineNo, '未対応コード', 'この行は現在の可視化対象外です。まずは int、代入、整数の四則演算、比較式、printf、main直下の単純なscanf、単純なif〜else文、最大2階層の単純な入れ子if・if〜elseの範囲で試してみましょう。');
+      addHint(hints, lineNo, '未対応コード', 'この行は現在の可視化対象外です。まずは int、代入、整数演算、比較、printf、main直下の単純なscanf、対応範囲内のif・if〜else、基本forの範囲で試してみましょう。');
       warningLines.add(lineNo);
     }
     return insideFor ? 'execution-error' : undefined;
@@ -2042,7 +2042,7 @@ function visualizeCode(){
     }
   }
 
-  // for全体を初期化前に検査し、Stage1で安全に実行できる本体だけを受け付けます。
+  // for全体を初期化前に検査し、現在の対応範囲で安全に実行できる本体だけを受け付けます。
   function inspectSupportedFor(startIndex){
     const range = findUnsupportedControlRange(startIndex);
     const safeEndIndex = Math.min(range.endIndex, Math.max(startIndex, executionEndIndex - 1));
@@ -2145,22 +2145,22 @@ function visualizeCode(){
         return failure('for文の本体に1行で複数の文が書かれています。本体を部分実行せず、この地点で停止します。', 'for文本体の改行を確認');
       }
       if(/^scanf\b/.test(structuralBodyCode) || /\bscanf\s*\(/.test(structuralBodyCode)){
-        return failure('for文の本体内にscanfがあります。Stage1ではfor内scanfに対応していないため、for文全体を実行しません。', 'for文内のscanfは未対応');
+        return failure('for文の本体内にscanfがあります。現在のVisualizerではfor内scanfに対応していないため、for文全体を実行しません。', 'for文内のscanfは未対応');
       }
       const nestedControl = unsupportedControlInfo(structuralBodyCode);
       if(nestedControl){
-        return failure(`for文の本体内に${nestedControl.label}があります。Stage1では制御構造の入れ子に対応していないため、for文全体を実行しません。`, 'for文内の制御構造は未対応');
+        return failure(`for文の本体内に${nestedControl.label}があります。現在のVisualizerでは、入れ子forやwhile等の制御構造に対応していないため、for文全体を実行しません。`, 'for文内の制御構造は未対応');
       }
       if(/^do\b|^else\b/.test(structuralBodyCode) || bracesOutsideString(executableLines[index]).length > 0){
-        return failure('for文の本体内に、Stage1では実行できないブロック構造があります。for文全体を実行しません。', 'for文内のブロックは未対応');
+        return failure('for文の本体内に、現在のVisualizerでは実行できないブロック構造があります。for文全体を実行しません。', 'for文内のブロックは未対応');
       }
       if(/^int\b/.test(structuralBodyCode)){
-        return failure('for文の本体内で変数を宣言する形はStage1では未対応です。for文全体を実行しません。', 'for文内の変数宣言は未対応');
+        return failure('for文の本体内で変数を宣言する形は現在未対応です。for文全体を実行しません。', 'for文内の変数宣言は未対応');
       }
 
       const variableUpdate = parseVariableUpdate(structuralBodyCode, true);
       if(/\+\+|--/.test(structuralBodyCode) && variableUpdate === null){
-        return failure('for文の本体に、式中で副作用を利用する++ / --があります。Stage1では単独更新文だけに対応しているため、for文全体を実行しません。', '式中の++・--は未対応');
+        return failure('for文の本体に、式中で副作用を利用する++ / --があります。現在のVisualizerでは単独更新文だけに対応しているため、for文全体を実行しません。', '式中の++・--は未対応');
       }
 
       const looksLikePrintf = /^printf\b/.test(structuralBodyCode);
@@ -2175,7 +2175,7 @@ function visualizeCode(){
         /^[A-Za-z_]\w*\s*=\s*.+;$/.test(structuralBodyCode) ||
         printfMatch !== null;
       if(!supportedSimpleStatement){
-        return failure('for文の本体に、Stage1では実行できない文があります。本体を部分実行せず、この地点で停止します。', 'for文本体の文は未対応');
+        return failure('for文の本体に、現在のVisualizerでは実行できない文があります。本体を部分実行せず、この地点で停止します。', 'for文本体の文は未対応');
       }
       bodyItems.push({ type:'simple', index });
     }
