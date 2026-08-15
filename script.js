@@ -187,6 +187,36 @@ function syncCodeEditorScroll(){
   lineNumbers.style.transform = `translateY(${-input.scrollTop}px)`;
 }
 
+// 入力内容に合わせて親エディタを伸縮し、行番号・色分け表示も同じ高さへ追従させます。
+function resizeCodeEditor(){
+  const editor = document.getElementById('codeEditor');
+  const input = document.getElementById('codeInput');
+  if(!editor || !input) return;
+
+  const scrollLeft = input.scrollLeft;
+  editor.style.height = '';
+
+  const baseHeight = editor.offsetHeight;
+  const editorFrameHeight = Math.max(0, editor.offsetHeight - input.offsetHeight);
+  const horizontalScrollbarHeight = Math.max(0, input.offsetHeight - input.clientHeight);
+  const contentHeight = input.scrollHeight + editorFrameHeight + horizontalScrollbarHeight;
+
+  editor.style.height = `${Math.ceil(Math.max(baseHeight, contentHeight))}px`;
+  input.scrollTop = 0;
+  input.scrollLeft = scrollLeft;
+}
+
+function resizeScanfInput(){
+  const input = document.getElementById('scanfInput');
+  if(!input) return;
+
+  input.style.height = 'auto';
+  const styles = window.getComputedStyle(input);
+  const minHeight = Number.parseFloat(styles.minHeight) || 0;
+  const borderHeight = input.offsetHeight - input.clientHeight;
+  input.style.height = `${Math.ceil(Math.max(minHeight, input.scrollHeight + borderHeight))}px`;
+}
+
 function updateCodeEditor(){
   const input = document.getElementById('codeInput');
   const highlight = document.getElementById('codeHighlight');
@@ -197,6 +227,7 @@ function updateCodeEditor(){
   const lineCount = code.split('\n').length;
   highlight.innerHTML = highlightCCode(code);
   lineNumbers.textContent = Array.from({ length:lineCount }, (_, index) => index + 1).join('\n');
+  resizeCodeEditor();
   syncCodeEditorScroll();
 }
 
@@ -211,13 +242,82 @@ function initializeCodeEditor(){
   updateCodeEditor();
 }
 
+function initializeScanfInput(){
+  const input = document.getElementById('scanfInput');
+  if(!input) return;
+
+  input.addEventListener('input', resizeScanfInput);
+  resizeScanfInput();
+}
+
+function setScopeAccordionExpanded(accordion, expanded){
+  const toggle = accordion?.querySelector('.scope-toggle');
+  const summary = accordion?.querySelector('.scope-summary');
+  const details = accordion?.querySelector('.scope-details');
+  const label = toggle?.querySelector('.scope-toggle-label');
+  const icon = toggle?.querySelector('.scope-toggle-icon');
+  if(!toggle || !summary || !details || !label || !icon) return;
+
+  accordion.classList.toggle('is-expanded', expanded);
+  toggle.setAttribute('aria-expanded', String(expanded));
+  summary.setAttribute('aria-hidden', String(expanded));
+  details.setAttribute('aria-hidden', String(!expanded));
+  label.textContent = expanded ? '閉じる' : '詳しく見る';
+  icon.textContent = expanded ? '▲' : '▼';
+}
+
+function initializeScopeAccordion(){
+  const accordion = document.getElementById('scopeAccordion');
+  const toggle = document.getElementById('scopeToggle');
+  if(!accordion || !toggle) return;
+
+  setScopeAccordionExpanded(accordion, false);
+  toggle.addEventListener('click', () => {
+    const expanded = toggle.getAttribute('aria-expanded') === 'true';
+    setScopeAccordionExpanded(accordion, !expanded);
+  });
+}
+
+function initializeBackToTop(){
+  const button = document.getElementById('backToTop');
+  if(!button) return;
+
+  const updateVisibility = () => {
+    const scrollTop = window.scrollY || document.documentElement.scrollTop;
+    const visible = scrollTop > 480;
+    button.classList.toggle('is-visible', visible);
+    button.setAttribute('aria-hidden', String(!visible));
+    button.tabIndex = visible ? 0 : -1;
+  };
+
+  window.addEventListener('scroll', updateVisibility, { passive:true });
+  button.addEventListener('click', () => {
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+    window.scrollTo({ top:0, behavior:reduceMotion ? 'auto' : 'smooth' });
+  });
+  updateVisibility();
+}
+
+function initializeResponsiveAutoGrow(){
+  const resizeInputs = () => {
+    resizeCodeEditor();
+    resizeScanfInput();
+  };
+
+  window.addEventListener('resize', resizeInputs);
+  window.addEventListener('load', resizeInputs);
+}
+
 function resetCode(){
   const codeInput = document.getElementById('codeInput');
   const scanfInput = document.getElementById('scanfInput');
   codeInput.value = '';
   codeInput.scrollTop = 0;
   codeInput.scrollLeft = 0;
-  if(scanfInput) scanfInput.value = '';
+  if(scanfInput){
+    scanfInput.value = '';
+    resizeScanfInput();
+  }
   document.getElementById('outputResult').textContent = '';
   document.getElementById('variableState').innerHTML = '';
   document.getElementById('stepResult').innerHTML = '';
@@ -232,7 +332,10 @@ function loadSample(type){
   codeInput.value = samples[type] || '';
   codeInput.scrollTop = 0;
   codeInput.scrollLeft = 0;
-  if(scanfInput) scanfInput.value = sampleScanfInputs[type] || '';
+  if(scanfInput){
+    scanfInput.value = sampleScanfInputs[type] || '';
+    resizeScanfInput();
+  }
   visualizeCode();
 }
 
@@ -2679,4 +2782,8 @@ function visualizeCode(){
 }
 
 initializeCodeEditor();
+initializeScanfInput();
+initializeScopeAccordion();
+initializeBackToTop();
+initializeResponsiveAutoGrow();
 visualizeCode();
