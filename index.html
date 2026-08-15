@@ -13,7 +13,7 @@
 <div class="container">
   <header class="page-header">
     <h1 class="page-title">c<span class="subtitle"> code visualizer</span></h1>
-    <div class="page-subtitle">情報技術検定2級程度を対象に、処理の流れ・変数の変化・条件分岐・出力結果を見える化する初心者向け学習支援ツールです。単純なscanfによる整数入力にも対応しています（Ver.0.6_0812）。完全なC実行環境ではありません。</div>
+    <div class="page-subtitle">情報技術検定2級程度を対象に、変数の変化・入力・条件分岐・反復・出力結果を処理順に見える化する、初心者向け学習支援ツールです（Ver.0.7_0813）。完全なC実行環境ではありません。</div>
   </header>
 
   <div class="tool-grid">
@@ -55,18 +55,18 @@ int main(void){
       </div>
       <div class="sample-row">
         <button class="sample-btn" onclick="loadSample('basic')"><i class="fa fa-code" aria-hidden="true"></i><span>基本</span></button>
-        <button class="sample-btn" onclick="loadSample('calcSimple')"><i class="fa fa-code" aria-hidden="true"></i><span>かけ算</span></button>
         <button class="sample-btn" onclick="loadSample('calc')"><i class="fa fa-code" aria-hidden="true"></i><span>金額計算</span></button>
         <button class="sample-btn" onclick="loadSample('assign')"><i class="fa fa-code" aria-hidden="true"></i><span>再代入</span></button>
         <button class="sample-btn" onclick="loadSample('ifSimple')"><i class="fa fa-code" aria-hidden="true"></i><span>if文</span></button>
         <button class="sample-btn" onclick="loadSample('ifElse')"><i class="fa fa-code" aria-hidden="true"></i><span>if〜else</span></button>
         <button class="sample-btn" onclick="loadSample('nestedIf')"><i class="fa fa-code" aria-hidden="true"></i><span>入れ子if</span></button>
-        <button class="sample-btn" onclick="loadSample('nestedIfElse')"><i class="fa fa-code" aria-hidden="true"></i><span>入れ子if〜else</span></button>
+        <button class="sample-btn" onclick="loadSample('forBasic')"><i class="fa fa-code" aria-hidden="true"></i><span>for文</span></button>
+        <button class="sample-btn" onclick="loadSample('forIf')"><i class="fa fa-code" aria-hidden="true"></i><span>for＋if</span></button>
         <button class="sample-btn" onclick="loadSample('scanfInput')"><i class="fa fa-code" aria-hidden="true"></i><span>scanf入力</span></button>
         <button class="sample-btn" onclick="loadSample('unsupported')"><i class="fa fa-code" aria-hidden="true"></i><span>未対応</span></button>
       </div>
       <div class="legend-box">
-        <span class="highlight">Ver.0.6_0812</span>では、int型の変数宣言・代入、整数の四則演算、比較式、printf、main直下のscanfによる整数入力（%d・1変数）、単純なif・if〜else、最大2階層の単純な入れ子if・if〜elseに対応しています。<br>scanfで使う値は専用入力欄へ1行ずつ入力します。宣言済みのint型変数だけを対象とし、複数ある場合は上から順に使用します。<br>scanfの%d以外、複数変数の同時入力、分岐内scanf、float・char・文字列・配列の入力、scanf戻り値、一般的なポインタ処理には対応していません。<br>else if、3階層以上、分岐内での新しい変数宣言、波かっこなし、論理演算子、for、while、switch、配列、ユーザー定義関数にも対応していません。開き波かっこはif・elseと同じ行に書き、1つの文ごとに改行してください。
+        <span class="highlight">Ver.0.7_0813</span>では、int変数、代入・再代入、整数の <code>+ - * / %</code>、比較、printf、main直下の単純なscanf、if・if〜else、<code>return 0;</code>、main直下やforで使う単独の <code>++ / -- / += / -=</code>、基本的なforに対応しています。for本体ではif・if〜elseも使用でき、ifは最大2階層まで扱えます。<br>forでは宣言済みのint変数を使い、初期化・条件・更新を書いて、本体を波かっこで囲んでください。forヘッダ内の変数宣言・省略形・複数式、入れ子for、for内scanfは現在未対応です。<br>7反復以上では教材用の説明表示だけを一部省略します。実際の処理・printf出力・変数更新はすべて行います。また、1つのforにつき500反復をVisualizer独自の安全上限としています。これはC言語自体の制限ではありません。<br>else if、3階層以上のif、波かっこ省略、次行に開き波かっこを書く形式、while、switch、配列、ユーザー定義関数などは現在未対応です。開き波かっこはif・else・forと同じ行に書き、1つの文ごとに改行してください。
       </div>
     </section>
 
