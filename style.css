@@ -101,15 +101,15 @@ textarea{
 
 /* コード入力欄：入力文字の上に色分け表示を重ね、左側に行番号を表示します。 */
 .code-editor{
+  --code-editor-base-height:320px;
   display:grid;
   grid-template-columns:48px minmax(0, 1fr);
   position:relative;
   width:100%;
-  height:320px;
+  height:var(--code-editor-base-height);
   min-height:220px;
-  max-height:70vh;
   overflow:hidden;
-  resize:vertical;
+  resize:none;
   background:#101010;
   border:1px solid #3a3a3a;
   border-radius:10px;
@@ -182,7 +182,8 @@ textarea{
   height:100%;
   min-height:0;
   padding:10px 12px;
-  overflow:auto;
+  overflow-x:auto;
+  overflow-y:hidden;
   resize:none;
   color:transparent;
   caret-color:#f5f7fa;
@@ -234,10 +235,11 @@ textarea{
 #scanfInput{
   display:block;
   width:100%;
-  height:90px;
-  min-height:80px;
+  height:auto;
+  min-height:90px;
   max-width:100%;
-  resize:vertical;
+  overflow-y:hidden;
+  resize:none;
   white-space:pre-wrap;
   font-family:"Fira Code", Consolas, Monaco, "Courier New", monospace;
   line-height:1.5;
@@ -493,6 +495,110 @@ button:hover{
   font-size:0.92rem;
 }
 
+/* 対応範囲は普段は要約だけを見せ、必要なときに全文を開きます。 */
+.scope-summary{
+  max-height:6em;
+  overflow:hidden;
+  opacity:1;
+  visibility:visible;
+  transition:max-height 0.2s ease, opacity 0.05s ease 0.15s, visibility 0s linear 0.15s;
+}
+
+.scope-details{
+  display:grid;
+  grid-template-rows:0fr;
+  opacity:0;
+  visibility:hidden;
+  transition:grid-template-rows 0.2s ease, opacity 0.15s ease, visibility 0s linear 0.2s;
+}
+
+.scope-details-inner{
+  min-height:0;
+  overflow:hidden;
+}
+
+.scope-accordion.is-expanded .scope-summary{
+  max-height:0;
+  opacity:0;
+  visibility:hidden;
+  transition:max-height 0.2s ease, opacity 0.05s ease, visibility 0s;
+}
+
+.scope-accordion.is-expanded .scope-details{
+  grid-template-rows:1fr;
+  opacity:1;
+  visibility:visible;
+  transition:grid-template-rows 0.2s ease, opacity 0.15s ease, visibility 0s;
+}
+
+.scope-toggle{
+  display:inline-flex;
+  align-items:center;
+  gap:0.45em;
+  margin-top:6px;
+  padding:4px 2px;
+  color:#8ecfe9;
+  background:transparent;
+  border-radius:4px;
+  font-size:0.82rem;
+}
+
+.scope-toggle:hover{
+  color:#c7ecff;
+  background:transparent;
+  transform:none;
+}
+
+.scope-toggle:focus-visible{
+  outline:2px solid #4fc3f7;
+  outline-offset:3px;
+}
+
+.scope-toggle-icon{
+  font-size:0.75em;
+}
+
+/* 長いページを読み終えた利用者だけが使う、控えめな補助操作です。 */
+.back-to-top{
+  position:fixed;
+  right:24px;
+  bottom:24px;
+  bottom:calc(24px + env(safe-area-inset-bottom));
+  z-index:10;
+  display:grid;
+  place-items:center;
+  width:40px;
+  height:40px;
+  padding:0;
+  color:#c8d1d8;
+  background:rgba(28, 31, 34, 0.88);
+  border:1px solid rgba(142, 207, 233, 0.32);
+  border-radius:50%;
+  box-shadow:0 5px 16px rgba(0, 0, 0, 0.28);
+  opacity:0;
+  pointer-events:none;
+  transform:translateY(8px);
+  transition:opacity 0.18s ease, transform 0.18s ease, background 0.18s ease;
+}
+
+.back-to-top.is-visible{
+  opacity:0.78;
+  pointer-events:auto;
+  transform:translateY(0);
+}
+
+.back-to-top:hover{
+  background:rgba(42, 47, 51, 0.96);
+  opacity:1;
+  transform:translateY(-1px);
+}
+
+.back-to-top:focus-visible{
+  outline:2px solid #4fc3f7;
+  outline-offset:3px;
+  opacity:1;
+}
+
 ul{list-style:none;padding:0;margin:0;}
 hr{height:1px;border:0;border-top:1px solid #bdbdbd7d;}
 
@@ -520,8 +626,8 @@ hr{height:1px;border:0;border-top:1px solid #bdbdbd7d;}
   .control-row button:not(.reset-btn){flex:1 1 auto;}
   textarea{min-height:260px;}
   .code-editor{
+    --code-editor-base-height:260px;
     grid-template-columns:42px minmax(0, 1fr);
-    height:260px;
     min-height:200px;
   }
   .code-line-numbers{padding-right:8px;}
@@ -529,4 +635,19 @@ hr{height:1px;border:0;border-top:1px solid #bdbdbd7d;}
   .code-line-number{flex:0 0 22px;}
   .line-analysis{padding:10px 12px 12px;}
   .execution-summary{grid-template-columns:1fr;}
+  .back-to-top{
+    right:16px;
+    bottom:18px;
+    bottom:calc(18px + env(safe-area-inset-bottom));
+    width:38px;
+    height:38px;
+  }
+}
+
+@media (prefers-reduced-motion:reduce){
+  .scope-summary,
+  .scope-details,
+  .back-to-top{
+    transition:none;
+  }
 }
