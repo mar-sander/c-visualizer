@@ -22,6 +22,9 @@ const UNINITIALIZED = Symbol('uninitialized');
 // ブラウザ停止を防ぐため、1つのfor文で本体へ入れる回数を制限します。
 const MAX_FOR_ITERATIONS = 500;
 
+// for文は直接入れ子にする形だけ、最大3階層まで扱います。
+const MAX_FOR_NESTING_DEPTH = 3;
+
 // for文の説明は6反復まで全件を表示し、それ以上は先頭3反復と最終反復へ圧縮します。
 const MAX_FULL_FOR_EXPLANATION_ITERATIONS = 6;
 const LEADING_FOR_EXPLANATION_ITERATIONS = 3;
@@ -1046,6 +1049,8 @@ function visualizeCode(){
   const variables = {};
   const variableOrder = [];
   const steps = [];
+  // 同じソース上のfor文が親ループから複数回呼ばれても、本体進入回数を累積します。
+  const forEnteredIterationTotals = new Map();
   let output = '';
   let braceBalance = 0;
   let hasMain = mainRange !== null;
@@ -1769,6 +1774,7 @@ function visualizeCode(){
         addStep(lineNo, `${nested ? '入れ子の' : ''}if文の条件を評価できないため、プログラムの実行を停止します。`);
         return {
           status:'execution-stopped',
+          stopKind:'runtime-error',
           stopIndex:node.startIndex,
           reason:'for文内のif文で実行を停止したため、この行は実行されませんでした。'
         };
@@ -1884,6 +1890,7 @@ function visualizeCode(){
       if(simpleResult === 'execution-error' || simpleResult === 'scanf-error'){
         return {
           status:'execution-stopped',
+          stopKind:'runtime-error',
           stopIndex:index,
           reason:'for文内のif文で実行を停止したため、この行は実行されませんでした。'
         };
@@ -2146,9 +2153,15 @@ function visualizeCode(){
   }
 
   // for全体を初期化前に検査し、現在の対応範囲で安全に実行できる本体だけを受け付けます。
-  function inspectSupportedFor(startIndex){
+  function inspectSupportedFor(startIndex, options = {}){
+    const forDepth = options.forDepth ?? 1;
+    const containerEndIndex = Math.min(
+      options.containerEndIndex ?? Math.max(startIndex, executionEndIndex - 1),
+      Math.max(startIndex, executionEndIndex - 1)
+    );
     const range = findUnsupportedControlRange(startIndex);
-    const safeEndIndex = Math.min(range.endIndex, Math.max(startIndex, executionEndIndex - 1));
+    const rangeExceedsContainer = range.endIndex > containerEndIndex;
+    const safeEndIndex = Math.min(range.endIndex, containerEndIndex);
     const structuralCode = codeOutsideStringAndLineComment(executableLines[startIndex]).trim();
     const header = parseForHeader(structuralCode);
     const bodyItems = [];
@@ -2166,8 +2179,20 @@ function visualizeCode(){
     if(!header.ok){
       return failure(`${header.error} C言語として正しい形であっても、現在のVisualizerの対応範囲外である場合は実行しません。`);
     }
+    if(forDepth > MAX_FOR_NESTING_DEPTH){
+      return failure(
+        `for文の入れ子は最大${MAX_FOR_NESTING_DEPTH}階層まで対応しています。外側のfor文全体を初期化前に停止します。`,
+        `for文の入れ子は最大${MAX_FOR_NESTING_DEPTH}階層まで対応`
+      );
+    }
     if(!range.closed){
       return failure('for文を閉じる波かっこを確認できないため、初期化を含めて実行しません。', 'for文の終わりを確認');
+    }
+    if(rangeExceedsContainer){
+      return failure(
+        '子for文の終わりを親for文の本体内で確認できません。外側のfor文全体を初期化前に停止します。',
+        '入れ子forの閉じ波かっこを確認'
+      );
     }
 
     function validateIfSimpleStatement(index, structuralBodyCode){
@@ -2244,6 +2269,32 @@ function visualizeCode(){
         continue;
       }
 
+      if(/^for\b/.test(structuralBodyCode)){
+        if(forDepth >= MAX_FOR_NESTING_DEPTH){
+          return failure(
+            `for文の入れ子は最大${MAX_FOR_NESTING_DEPTH}階層まで対応しています。4階層目以降を含む外側のfor文全体は実行しません。`,
+            `for文の入れ子は最大${MAX_FOR_NESTING_DEPTH}階層まで対応`
+          );
+        }
+
+        const nestedForNode = inspectSupportedFor(index, {
+          forDepth:forDepth + 1,
+          containerEndIndex:Math.max(index, safeEndIndex - 1)
+        });
+        if(!nestedForNode.ok){
+          return failure(nestedForNode.message, nestedForNode.title);
+        }
+        if(nestedForNode.endIndex >= safeEndIndex){
+          return failure(
+            '子for文の終わりを親for文の本体内で確認できません。外側のfor文全体を実行しません。',
+            '入れ子forの閉じ波かっこを確認'
+          );
+        }
+        bodyItems.push({ type:'for', node:nestedForNode });
+        index = nestedForNode.endIndex;
+        continue;
+      }
+
       if(hasMultipleStatementsOnOneLine(trimmed)){
         return failure('for文の本体に1行で複数の文が書かれています。本体を部分実行せず、この地点で停止します。', 'for文本体の改行を確認');
       }
@@ -2252,7 +2303,7 @@ function visualizeCode(){
       }
       const nestedControl = unsupportedControlInfo(structuralBodyCode);
       if(nestedControl){
-        return failure(`for文の本体内に${nestedControl.label}があります。現在のVisualizerでは、入れ子forやwhile等の制御構造に対応していないため、for文全体を実行しません。`, 'for文内の制御構造は未対応');
+        return failure(`for文の本体内に${nestedControl.label}があります。現在のVisualizerでは、この制御構造をfor文内で実行できないため、for文全体を実行しません。`, 'for文内の制御構造は未対応');
       }
       if(/^do\b|^else\b/.test(structuralBodyCode) || bracesOutsideString(executableLines[index]).length > 0){
         return failure('for文の本体内に、現在のVisualizerでは実行できないブロック構造があります。for文全体を実行しません。', 'for文内のブロックは未対応');
@@ -2286,6 +2337,7 @@ function visualizeCode(){
     return {
       ok:true,
       ...header,
+      forDepth,
       startIndex,
       bodyStartIndex:startIndex + 1,
       bodyEndIndex:safeEndIndex,
@@ -2445,6 +2497,7 @@ function visualizeCode(){
       addStep(lineNo, 'for文の初期化を実行できないため、プログラムの実行を停止します。');
       return {
         status:'execution-stopped',
+        stopKind:'runtime-error',
         stopIndex:node.startIndex,
         reason:'for文の初期化で実行を停止したため、この行は実行されませんでした。'
       };
@@ -2462,6 +2515,7 @@ function visualizeCode(){
         explanationHistory.finalize();
         return {
           status:'execution-stopped',
+          stopKind:'runtime-error',
           stopIndex:node.startIndex,
           reason:'for文の条件評価で実行を停止したため、この行は実行されませんでした。'
         };
@@ -2471,16 +2525,18 @@ function visualizeCode(){
       const conditionExplanation = conditionResult.comparison
         ? describeComparison(conditionResult)
         : `${escapeHtml(conditionResult.readable)} を計算した結果は ${conditionResult.value} です。C言語では0以外を条件成立、0を条件不成立として扱います。`;
-      const reachesSafetyLimit = conditionMet && iterationCount >= MAX_FOR_ITERATIONS;
+      const enteredIterationTotal = forEnteredIterationTotals.get(node.startIndex) || 0;
+      const nextEnteredIteration = enteredIterationTotal + 1;
+      const reachesSafetyLimit = conditionMet && enteredIterationTotal >= MAX_FOR_ITERATIONS;
       const nextAction = reachesSafetyLimit
-        ? `条件が成立したため、本来は${iterationCount + 1}回目の本体へ進む必要があります。`
+        ? `条件が成立したため、本来は${nextEnteredIteration}回目の本体へ進む必要があります。`
         : (conditionMet
           ? '条件が成立したため、for文の本体へ進みます。'
           : '条件が成立しなかったため、for文を終了します。');
       const conditionDisplayPrefix = !conditionMet
         ? `<strong>【${iterationCount === 0 ? '最初の条件判定／終了判定' : '終了判定'}】</strong> `
         : (reachesSafetyLimit
-          ? `<strong>【${iterationCount + 1}回目へ進む条件判定】</strong> `
+          ? `<strong>【${nextEnteredIteration}回目へ進む条件判定】</strong> `
           : '');
       addAnalysis(analysis, lineNo, `${conditionDisplayPrefix}<strong>for文の条件：</strong> ${conditionExplanation}${nextAction}`);
       addStep(lineNo, `${conditionDisplayPrefix}for文の条件 ${escapeHtml(node.condition)} を判定しました。<br>${nextAction}`);
@@ -2503,12 +2559,14 @@ function visualizeCode(){
         explanationHistory.finalize();
         return {
           status:'execution-stopped',
+          stopKind:'safety-limit',
           stopIndex:node.endIndex,
           reason:'for文が安全上限で停止したため、この行は実行されませんでした。'
         };
       }
 
       iterationCount++;
+      forEnteredIterationTotals.set(node.startIndex, enteredIterationTotal + 1);
       for(const bodyItem of node.bodyItems){
         if(bodyItem.type === 'simple'){
           const index = bodyItem.index;
@@ -2527,9 +2585,20 @@ function visualizeCode(){
             explanationHistory.finalize();
             return {
               status:'execution-stopped',
+              stopKind:'runtime-error',
               stopIndex:index,
               reason:'for文の本体で実行を停止したため、この行は実行されませんでした。'
             };
+          }
+          continue;
+        }
+
+        if(bodyItem.type === 'for'){
+          const nestedForResult = executeFor(bodyItem.node);
+          if(nestedForResult.status !== 'normal'){
+            explanationHistory.finishIteration(activeIteration);
+            explanationHistory.finalize();
+            return nestedForResult;
           }
           continue;
         }
@@ -2549,6 +2618,7 @@ function visualizeCode(){
           explanationHistory.finalize();
           return {
             status:'execution-stopped',
+            stopKind:ifResult.stopKind || 'runtime-error',
             stopIndex:ifResult.stopIndex,
             reason:ifResult.reason
           };
@@ -2573,6 +2643,7 @@ function visualizeCode(){
         explanationHistory.finalize();
         return {
           status:'execution-stopped',
+          stopKind:'runtime-error',
           stopIndex:node.endIndex,
           reason:'for文の更新で実行を停止したため、この行は実行されませんでした。'
         };
@@ -2620,6 +2691,7 @@ function visualizeCode(){
         warnUnsupportedFor(index, forNode);
         executionStop = {
           index:forNode.endIndex,
+          stopKind:'structural-rejection',
           reason:'未対応のfor文で実行を停止したため、この行は実行されませんでした。'
         };
         break;
@@ -2633,6 +2705,7 @@ function visualizeCode(){
       if(forResult.status === 'execution-stopped'){
         executionStop = {
           index:forResult.stopIndex,
+          stopKind:forResult.stopKind,
           reason:forResult.reason
         };
         break;
