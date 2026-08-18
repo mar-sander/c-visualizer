@@ -1486,6 +1486,108 @@
         expect:{ output:'1000', variables:['i = 1', 'j = 500', 'k = 500', 'count = 1000'], warningMax:0, hintsExclude:['安全上限'] }
       },
       {
+        name:'Stage2A 単独for 3回は従来表示',
+        code:makeMainCode(`    int i;\n    for(i = 0; i < 3; i++){\n        printf("%d", i);\n    }\n    return 0;`),
+        expect:{
+          output:'012',
+          variables:['i = 3'],
+          warningMax:0,
+          stepsInclude:['【1回目】', '【終了判定】', '【for終了】'],
+          stepsExclude:['外側for', '内側for', '最奥for']
+        }
+      },
+      {
+        name:'Stage2A 2重forに外側・内側ラベルを表示',
+        code:makeMainCode(`    int i;\n    int j;\n    for(i = 0; i < 2; i++){\n        for(j = 0; j < 3; j++){\n            printf("%d%d", i, j);\n        }\n    }\n    return 0;`),
+        expect:{
+          output:'000102101112',
+          variables:['i = 2', 'j = 3'],
+          warningMax:0,
+          stepsInclude:['【外側for・1回目】', '【内側for・1回目】', '【内側for・終了判定】', '【内側for・終了】', '【外側for・終了判定】', '【外側for・終了】'],
+          stepsExclude:['最奥for']
+        }
+      },
+      {
+        name:'Stage2A 3重forに外側・内側・最奥ラベルを表示',
+        code:makeMainCode(`    int i;\n    int j;\n    int k;\n    for(i = 0; i < 2; i++){\n        for(j = 0; j < 2; j++){\n            for(k = 0; k < 2; k++){\n                printf("%d%d%d", i, j, k);\n            }\n        }\n    }\n    return 0;`),
+        expect:{
+          output:'000001010011100101110111',
+          variables:['i = 2', 'j = 2', 'k = 2'],
+          warningMax:0,
+          stepsInclude:['【外側for・1回目】', '【内側for・1回目】', '【最奥for・1回目】', '【最奥for・終了判定】', '【最奥for・終了】']
+        }
+      },
+      {
+        name:'Stage2A 内側forの表示反復番号は親反復ごとに再開始',
+        code:makeMainCode(`    int i;\n    int j;\n    for(i = 0; i < 2; i++){\n        for(j = 0; j < 3; j++){\n            printf("%d%d", i, j);\n        }\n    }\n    return 0;`),
+        expect:{
+          output:'000102101112',
+          variables:['i = 2', 'j = 3'],
+          warningMax:0,
+          stepsInOrder:['【外側for・1回目】', '【内側for・1回目】', '【内側for・2回目】', '【内側for・3回目】', '【外側for・2回目】', '【内側for・1回目】', '【内側for・2回目】', '【内側for・3回目】']
+        }
+      },
+      {
+        name:'Stage2A 内側for 0反復は初回条件と終了だけを表示',
+        code:makeMainCode(`    int i;\n    int j = 9;\n    for(i = 0; i < 1; i++){\n        for(j = 0; j < 0; j++){\n            printf("WRONG-INNER-ZERO");\n        }\n    }\n    return 0;`),
+        expect:{
+          output:'出力はまだありません。',
+          outputExcludes:['WRONG-INNER-ZERO'],
+          variables:['i = 1', 'j = 0'],
+          warningMax:0,
+          stepsInclude:['【内側for・最初の条件判定／終了判定】', '【内側for・終了】'],
+          stepsExclude:['【内側for・1回目】'],
+          executedExcludes:['printf("WRONG-INNER-ZERO']
+        }
+      },
+      {
+        name:'Stage2A 外側for 0反復でもソース構造のラベルを表示',
+        code:makeMainCode(`    int i = 9;\n    int j = 8;\n    for(i = 0; i < 0; i++){\n        for(j = 0; j < 2; j++){\n            printf("WRONG-OUTER-ZERO");\n        }\n    }\n    return 0;`),
+        expect:{
+          output:'出力はまだありません。',
+          outputExcludes:['WRONG-OUTER-ZERO'],
+          variables:['i = 0', 'j = 8'],
+          warningMax:0,
+          stepsInclude:['【外側for・最初の条件判定／終了判定】', '【外側for・終了】'],
+          stepsExclude:['【外側for・1回目】', '内側for・1回目'],
+          executedExcludes:['printf("WRONG-OUTER-ZERO']
+        }
+      },
+      {
+        name:'Stage2A 単独forと入れ子forの表示判定は独立',
+        code:makeMainCode(`    int i;\n    int j;\n    for(i = 0; i < 1; i++){\n        printf("S");\n    }\n    for(i = 0; i < 1; i++){\n        for(j = 0; j < 1; j++){\n            printf("N");\n        }\n    }\n    return 0;`),
+        expect:{
+          output:'SN',
+          variables:['i = 1', 'j = 1'],
+          warningMax:0,
+          analysisByLineIncludes:{ '6':['【1回目】', '【終了判定】'], '9':['【外側for・1回目】'], '10':['【内側for・1回目】'] },
+          analysisByLineExcludes:{ '6':['外側for', '内側for', '最奥for'] }
+        }
+      },
+      {
+        name:'Stage2A 独立した2本の入れ子forで階層状態を引き継がない',
+        code:makeMainCode(`    int i;\n    int j;\n    int k;\n    int a;\n    int b;\n    for(i = 0; i < 1; i++){\n        for(j = 0; j < 1; j++){\n            for(k = 0; k < 1; k++){\n                printf("X");\n            }\n        }\n    }\n    for(a = 0; a < 1; a++){\n        for(b = 0; b < 2; b++){\n            printf("Y");\n        }\n    }\n    return 0;`),
+        expect:{
+          output:'XYY',
+          variables:['i = 1', 'j = 1', 'k = 1', 'a = 1', 'b = 2'],
+          warningMax:0,
+          analysisByLineIncludes:{ '9':['【外側for・1回目】'], '10':['【内側for・1回目】'], '11':['【最奥for・1回目】'], '16':['【外側for・1回目】'], '17':['【内側for・1回目】'] },
+          analysisByLineExcludes:{ '17':['最奥for'] }
+        }
+      },
+      {
+        name:'Stage2A 入れ子forの同一説明にprefixを二重付与しない',
+        code:makeMainCode(`    int i;\n    int j;\n    for(i = 0; i < 1; i++){\n        for(j = 0; j < 1; j++){\n            printf("N");\n        }\n    }\n    return 0;`),
+        expect:{
+          output:'N',
+          variables:['i = 1', 'j = 1'],
+          warningMax:0,
+          analysisByLineIncludes:{ '7':['【内側for・1回目】'], '8':['【内側for・1回目】'] },
+          analysisByLineExcludes:{ '7':['【外側for・1回目】', '【1回目】'], '8':['【外側for・1回目】', '【1回目】'] },
+          stepsExclude:['【外側for・1回目】 【内側for・1回目】', '【内側for・1回目】 【1回目】']
+        }
+      },
+      {
         name:'for本体のscanfを事前検証して入力を消費しない',
         input:'7',
         code:makeMainCode(`    int n;\n    int i = 9;\n    for(i = 0; i < 2; i++){\n        scanf("%d", &n);\n    }\n    scanf("%d", &n);\n    printf("WRONG-AFTER-FOR-SCANF");\n    return 0;`),

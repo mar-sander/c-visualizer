@@ -24,6 +24,7 @@ const MAX_FOR_ITERATIONS = 500;
 
 // for文は直接入れ子にする形だけ、最大3階層まで扱います。
 const MAX_FOR_NESTING_DEPTH = 3;
+const FOR_NESTING_LABELS = [null, '外側for', '内側for', '最奥for'];
 
 // for文の説明は6反復まで全件を表示し、それ以上は先頭3反復と最終反復へ圧縮します。
 const MAX_FULL_FOR_EXPLANATION_ITERATIONS = 6;
@@ -2364,12 +2365,48 @@ function visualizeCode(){
     }
   }
 
+  // 単独forは従来表示のままとし、入れ子forツリーだけにソース深度の表示名を付けます。
+  function assignForExplanationLabels(rootNode){
+    const hasNestedFor = rootNode.bodyItems.some(item => item.type === 'for');
+    if(!hasNestedFor) return;
+
+    function assign(node){
+      node.explanationLabel = FOR_NESTING_LABELS[node.forDepth];
+      for(const bodyItem of node.bodyItems){
+        if(bodyItem.type === 'for') assign(bodyItem.node);
+      }
+    }
+
+    assign(rootNode);
+  }
+
+  function forExplanationPrefix(node, label){
+    const hierarchyLabel = node.explanationLabel ? `${node.explanationLabel}・` : '';
+    return `<strong>【${hierarchyLabel}${label}】</strong> `;
+  }
+
   // for文の実行中に生成された説明の範囲だけを記録し、実行後に表示用履歴を整えます。
   // 出力・変数・条件評価・本体実行・更新には触れず、説明配列とSTEP配列だけを編集します。
   function createForExplanationHistory(node){
     const iterationRecords = [];
     const firstLineNo = node.startIndex + 1;
     const lastLineNo = node.endIndex + 1;
+    const nestedForRanges = node.bodyItems
+      .filter(item => item.type === 'for')
+      .map(item => ({
+        firstLineNo:item.node.startIndex + 1,
+        lastLineNo:item.node.endIndex + 1
+      }));
+
+    function belongsToNestedFor(lineNo){
+      return nestedForRanges.some(range =>
+        lineNo >= range.firstLineNo && lineNo <= range.lastLineNo
+      );
+    }
+
+    function hasForHierarchyPrefix(text){
+      return /^<strong>【(?:外側for|内側for|最奥for)・/.test(String(text));
+    }
 
     function snapshot(){
       const analysisLengths = {};
@@ -2392,7 +2429,7 @@ function visualizeCode(){
     }
 
     function iterationPrefix(iterationNumber){
-      return `<strong>【${iterationNumber}回目】</strong> `;
+      return forExplanationPrefix(node, `${iterationNumber}回目`);
     }
 
     function omissionText(firstOmitted, lastOmitted){
@@ -2434,7 +2471,9 @@ function visualizeCode(){
             rangeStart,
             rangeEnd,
             record.iterationNumber,
-            (entry, prefix) => `${prefix}${entry}`
+            (entry, prefix) => belongsToNestedFor(lineNo) || hasForHierarchyPrefix(entry)
+              ? entry
+              : `${prefix}${entry}`
           ));
 
           if(shouldCompress && recordIndex === LEADING_FOR_EXPLANATION_ITERATIONS - 1){
@@ -2465,7 +2504,12 @@ function visualizeCode(){
           record.before.stepLength,
           record.after.stepLength,
           record.iterationNumber,
-          (item, prefix) => ({ ...item, text:`${prefix}${item.text}` })
+          (item, prefix) => ({
+            ...item,
+            text:belongsToNestedFor(item.lineNo) || hasForHierarchyPrefix(item.text)
+              ? item.text
+              : `${prefix}${item.text}`
+          })
         ));
 
         if(shouldCompress && recordIndex === LEADING_FOR_EXPLANATION_ITERATIONS - 1){
@@ -2534,7 +2578,7 @@ function visualizeCode(){
           ? '条件が成立したため、for文の本体へ進みます。'
           : '条件が成立しなかったため、for文を終了します。');
       const conditionDisplayPrefix = !conditionMet
-        ? `<strong>【${iterationCount === 0 ? '最初の条件判定／終了判定' : '終了判定'}】</strong> `
+        ? forExplanationPrefix(node, iterationCount === 0 ? '最初の条件判定／終了判定' : '終了判定')
         : (reachesSafetyLimit
           ? `<strong>【${nextEnteredIteration}回目へ進む条件判定】</strong> `
           : '');
@@ -2542,8 +2586,12 @@ function visualizeCode(){
       addStep(lineNo, `${conditionDisplayPrefix}for文の条件 ${escapeHtml(node.condition)} を判定しました。<br>${nextAction}`);
 
       if(!conditionMet){
-        addAnalysis(analysis, node.endIndex + 1, '<strong>【for終了】</strong> 最終条件が成立しなかったため、for文の処理を終えて後続の処理へ進みます。');
-        addStep(lineNo, '<strong>【for終了】</strong> for文の最終条件が成立しなかったため、for文を終了します。');
+        const endDisplayPrefix = forExplanationPrefix(
+          node,
+          node.explanationLabel ? '終了' : 'for終了'
+        );
+        addAnalysis(analysis, node.endIndex + 1, `${endDisplayPrefix}最終条件が成立しなかったため、for文の処理を終えて後続の処理へ進みます。`);
+        addStep(lineNo, `${endDisplayPrefix}for文の最終条件が成立しなかったため、for文を終了します。`);
         explanationHistory.finalize();
         return { status:'normal' };
       }
@@ -2697,6 +2745,7 @@ function visualizeCode(){
         break;
       }
 
+      assignForExplanationLabels(forNode);
       const forResult = executeFor(forNode);
       if(forResult.status === 'program-ended'){
         programEndIndex = forResult.stopIndex;
