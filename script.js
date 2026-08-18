@@ -2433,7 +2433,8 @@ function visualizeCode(){
     }
 
     function omissionText(firstOmitted, lastOmitted){
-      return `<span class="dim">…… ${firstOmitted}～${lastOmitted}回目の反復を省略しました ……</span>`;
+      const hierarchyLabel = node.explanationLabel ? `${node.explanationLabel}の` : '';
+      return `<span class="dim">…… ${hierarchyLabel}${firstOmitted}～${lastOmitted}回目の反復を省略しました ……</span>`;
     }
 
     function labeledSlice(items, startIndex, endIndex, iterationNumber, mapItem){

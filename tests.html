@@ -1588,6 +1588,124 @@
         }
       },
       {
+        name:'Stage2B 2×7は内側forの各呼び出しだけを圧縮',
+        code:makeMainCode(`    int i;\n    int j;\n    int count = 0;\n    for(i = 0; i < 2; i++){\n        for(j = 0; j < 7; j++){\n            count++;\n        }\n    }\n    printf("%d", count);\n    return 0;`),
+        expect:{
+          output:'14',
+          variables:['i = 2', 'j = 7', 'count = 14'],
+          warningMax:0,
+          stepsInclude:['【外側for・1回目】', '内側forの4～6回目の反復を省略しました', '【内側for・7回目】'],
+          stepsExclude:['外側forの4～', '最奥forの4～'],
+          stepCounts:{ '内側forの4～6回目の反復を省略しました':2, '【内側for・終了】':2 },
+          analysisByLineCounts:{ '8':{ '内側forの4～6回目の反復を省略しました':2 }, '9':{ '内側forの4～6回目の反復を省略しました':2 } }
+        }
+      },
+      {
+        name:'Stage2B 7×2は外側forだけを圧縮し子説明を同時に省略',
+        code:makeMainCode(`    int i;\n    int j;\n    int count = 0;\n    for(i = 0; i < 7; i++){\n        for(j = 0; j < 2; j++){\n            count++;\n        }\n    }\n    printf("%d", count);\n    return 0;`),
+        expect:{
+          output:'14',
+          variables:['i = 7', 'j = 2', 'count = 14'],
+          warningMax:0,
+          stepsInclude:['外側forの4～6回目の反復を省略しました', '【外側for・7回目】'],
+          stepsExclude:['内側forの4～', '最奥forの4～'],
+          stepCounts:{ '外側forの4～6回目の反復を省略しました':1, '【内側for・終了】':4, 'for文の初期化':5, 'for文の条件':17, 'for文の更新':12 },
+          analysisByLineCounts:{ '7':{ '外側forの4～6回目の反復を省略しました':1 }, '10':{ '【内側for・終了】':4 } }
+        }
+      },
+      {
+        name:'Stage2B 10×10は保持された外側反復内で内側forを独立圧縮',
+        code:makeMainCode(`    int i;\n    int j;\n    int count = 0;\n    for(i = 0; i < 10; i++){\n        for(j = 0; j < 10; j++){\n            count++;\n        }\n    }\n    printf("%d", count);\n    return 0;`),
+        expect:{
+          output:'100',
+          variables:['i = 10', 'j = 10', 'count = 100'],
+          warningMax:0,
+          stepsInclude:['外側forの4～9回目の反復を省略しました', '内側forの4～9回目の反復を省略しました', '【外側for・10回目】', '【内側for・10回目】'],
+          stepsExclude:['最奥forの4～'],
+          stepCounts:{ '外側forの4～9回目の反復を省略しました':1, '内側forの4～9回目の反復を省略しました':4, '【内側for・終了】':4, 'for文の初期化':5, 'for文の条件':25, 'for文の更新':20 },
+          analysisByLineCounts:{ '7':{ '外側forの4～9回目の反復を省略しました':1 }, '8':{ '外側forの4～9回目の反復を省略しました':1, '内側forの4～9回目の反復を省略しました':4 } }
+        }
+      },
+      {
+        name:'Stage2B 保持された親反復で前処理・子for・後処理の順序を維持',
+        code:makeMainCode(`    int i;\n    int j;\n    for(i = 0; i < 7; i++){\n        printf("A");\n        for(j = 0; j < 7; j++){\n            printf("I");\n        }\n        printf("B");\n    }\n    return 0;`),
+        expect:{
+          output:'AIIIIIIIBAIIIIIIIBAIIIIIIIBAIIIIIIIBAIIIIIIIBAIIIIIIIBAIIIIIIIB',
+          variables:['i = 7', 'j = 7'],
+          warningMax:0,
+          stepsInOrder:['【外側for・1回目】', '画面に「A', '【内側for・1回目】', '内側forの4～6回目の反復を省略しました', '【内側for・7回目】', '画面に「B', '外側forの4～6回目の反復を省略しました', '【外側for・7回目】', '画面に「A', '画面に「B'],
+          stepCounts:{ '画面に「A':4, '画面に「B':4, '内側forの4～6回目の反復を省略しました':4 }
+        }
+      },
+      {
+        name:'Stage2B 2×2×7は最奥forの各呼び出しだけを圧縮',
+        code:makeMainCode(`    int i;\n    int j;\n    int k;\n    int count = 0;\n    for(i = 0; i < 2; i++){\n        for(j = 0; j < 2; j++){\n            for(k = 0; k < 7; k++){\n                count++;\n            }\n        }\n    }\n    printf("%d", count);\n    return 0;`),
+        expect:{
+          output:'28',
+          variables:['i = 2', 'j = 2', 'k = 7', 'count = 28'],
+          warningMax:0,
+          stepsExclude:['外側forの4～', '内側forの4～'],
+          stepCounts:{ '最奥forの4～6回目の反復を省略しました':4, '【最奥for・終了】':4 },
+          analysisByLineCounts:{ '10':{ '最奥forの4～6回目の反復を省略しました':4 } }
+        }
+      },
+      {
+        name:'Stage2B 2×7×2は内側forだけを圧縮し孫説明を同時に省略',
+        code:makeMainCode(`    int i;\n    int j;\n    int k;\n    int count = 0;\n    for(i = 0; i < 2; i++){\n        for(j = 0; j < 7; j++){\n            for(k = 0; k < 2; k++){\n                count++;\n            }\n        }\n    }\n    printf("%d", count);\n    return 0;`),
+        expect:{
+          output:'28',
+          variables:['i = 2', 'j = 7', 'k = 2', 'count = 28'],
+          warningMax:0,
+          stepsExclude:['外側forの4～', '最奥forの4～'],
+          stepCounts:{ '内側forの4～6回目の反復を省略しました':2, '【最奥for・終了】':8 },
+          analysisByLineCounts:{ '9':{ '内側forの4～6回目の反復を省略しました':2 }, '12':{ '【最奥for・終了】':8 } }
+        }
+      },
+      {
+        name:'Stage2B 7×2×2は外側forだけを圧縮し子・孫説明を同時に省略',
+        code:makeMainCode(`    int i;\n    int j;\n    int k;\n    int count = 0;\n    for(i = 0; i < 7; i++){\n        for(j = 0; j < 2; j++){\n            for(k = 0; k < 2; k++){\n                count++;\n            }\n        }\n    }\n    printf("%d", count);\n    return 0;`),
+        expect:{
+          output:'28',
+          variables:['i = 7', 'j = 2', 'k = 2', 'count = 28'],
+          warningMax:0,
+          stepsExclude:['内側forの4～', '最奥forの4～'],
+          stepCounts:{ '外側forの4～6回目の反復を省略しました':1, '【内側for・終了】':4, '【最奥for・終了】':8 },
+          analysisByLineCounts:{ '8':{ '外側forの4～6回目の反復を省略しました':1 }, '13':{ '【内側for・終了】':4 }, '12':{ '【最奥for・終了】':8 } }
+        }
+      },
+      {
+        name:'Stage2B 代表正常系7×7×7は3階層すべてを再帰圧縮',
+        code:makeMainCode(`    int i;\n    int j;\n    int k;\n    int count = 0;\n    for(i = 0; i < 7; i++){\n        for(j = 0; j < 7; j++){\n            for(k = 0; k < 7; k++){\n                count++;\n            }\n        }\n    }\n    printf("%d", count);\n    return 0;`),
+        expect:{
+          output:'343',
+          variables:['i = 7', 'j = 7', 'k = 7', 'count = 343'],
+          warningMax:0,
+          hintsExclude:['安全上限'],
+          stepCounts:{ '外側forの4～6回目の反復を省略しました':1, '内側forの4～6回目の反復を省略しました':4, '最奥forの4～6回目の反復を省略しました':16, '【外側for・終了】':1, '【内側for・終了】':4, '【最奥for・終了】':16, 'for文の初期化':21, 'for文の条件':105, 'for文の更新':84 },
+          analysisByLineCounts:{ '8':{ '外側forの4～6回目の反復を省略しました':1 }, '9':{ '内側forの4～6回目の反復を省略しました':4 }, '10':{ '最奥forの4～6回目の反復を省略しました':16 } }
+        }
+      },
+      {
+        name:'Stage2B 同一親内の兄弟子forは省略範囲を独立管理',
+        code:makeMainCode(`    int i;\n    int j;\n    int k;\n    int count = 0;\n    for(i = 0; i < 1; i++){\n        for(j = 0; j < 7; j++){\n            count++;\n        }\n        for(k = 0; k < 10; k++){\n            count++;\n        }\n    }\n    printf("%d", count);\n    return 0;`),
+        expect:{
+          output:'17',
+          variables:['i = 1', 'j = 7', 'k = 10', 'count = 17'],
+          warningMax:0,
+          stepCounts:{ '内側forの4～6回目の反復を省略しました':1, '内側forの4～9回目の反復を省略しました':1, '【内側for・終了】':2 }
+        }
+      },
+      {
+        name:'Stage2B 独立した入れ子forツリー間で圧縮履歴を共有しない',
+        code:makeMainCode(`    int i;\n    int j;\n    int a;\n    int b;\n    int count = 0;\n    for(i = 0; i < 2; i++){\n        for(j = 0; j < 7; j++){\n            count++;\n        }\n    }\n    for(a = 0; a < 7; a++){\n        for(b = 0; b < 2; b++){\n            count++;\n        }\n    }\n    printf("%d", count);\n    return 0;`),
+        expect:{
+          output:'28',
+          variables:['i = 2', 'j = 7', 'a = 7', 'b = 2', 'count = 28'],
+          warningMax:0,
+          stepCounts:{ '外側forの4～6回目の反復を省略しました':1, '内側forの4～6回目の反復を省略しました':2, '【内側for・終了】':6 }
+        }
+      },
+      {
         name:'for本体のscanfを事前検証して入力を消費しない',
         input:'7',
         code:makeMainCode(`    int n;\n    int i = 9;\n    for(i = 0; i < 2; i++){\n        scanf("%d", &n);\n    }\n    scanf("%d", &n);\n    printf("WRONG-AFTER-FOR-SCANF");\n    return 0;`),
