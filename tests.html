@@ -242,6 +242,21 @@
         }
       },
       {
+        name:'Stage3 入れ子forサンプル・段階的な星を表示',
+        code:samples.nestedFor,
+        loadSampleKey:'nestedFor',
+        expect:{
+          output:'*\n**\n***\n****\n*****',
+          variables:['i = 6', 'j = 6'],
+          warningMax:0,
+          scanfInputValue:'',
+          stepsInclude:['【外側for・1回目】', '【内側for・1回目】', '【外側for・終了】'],
+          executedIncludes:['for(i = 1; i <= 5; i++){', 'for(j = 1; j <= i; j++){', 'printf("*");', 'printf("\\n");', 'return 0;'],
+          editorScrollTop:0,
+          editorScrollLeft:0
+        }
+      },
+      {
         name:'scanf正式サンプル・75を入力して合格',
         code:samples.scanfInput,
         loadSampleKey:'scanfInput',

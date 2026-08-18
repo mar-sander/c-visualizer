@@ -48,9 +48,9 @@ Avoid:
 - adding many features at once
 - changing the core design without reason
 
-## Supported scope for Ver.0.7_0813
+## Supported scope for Ver.0.8_0818
 
-Last updated: 2026-08-13
+Last updated: 2026-08-18
 
 Currently supported:
 
@@ -64,7 +64,7 @@ Currently supported:
 - comparison operators `<`, `<=`, `>`, `>=`, `==`, `!=`
 - C-style truth values: `0` is false, nonzero is true
 - simple printf output
-- `return 0;` from main, supported if branches, direct for bodies, and if branches inside for
+- `return 0;` from main, supported if branches, direct or nested for bodies, and if branches inside for
 - simple integer input with `scanf("%d", &variable);` directly inside main
 - one declared int variable per scanf call
 - one scanf input value per non-empty line in the dedicated input field
@@ -94,15 +94,20 @@ Currently supported:
 - standalone `+=` and `-=` with an integer constant
 - basic for statements directly inside main
 - multiple independent basic for statements directly inside main
+- direct nested for statements up to source depth 3, including sibling nested for statements
 - for initialization by assignment to a previously declared int variable
 - for conditions using the existing expression evaluator
 - for updates using standalone `++`, `--`, integer-constant `+=`, integer-constant `-=`, or an ordinary assignment
 - multiple supported statements and empty bodies inside for
 - changes to the loop variable inside the for body
 - supported if/if-else statements, multiple independent if statements, and up to two if levels inside for
-- complete structural validation of a for body before for initialization
-- compressed for explanations after six iterations without omitting execution, output, or variable updates
-- a per-for safety limit of 500 entered body iterations
+- recursive structural validation of the complete nested-for tree before the outermost for initialization
+- source-based fixed labels for outer, inner, and deepest for nodes
+- local iteration numbering that restarts for each child-for invocation
+- recursive explanation compression after six local iterations without omitting execution, output, or variable updates
+- removal of nested explanations when their parent iteration is omitted
+- preservation of the complete outer-to-inner path when return, runtime error, or safety stop occurs
+- an independent cumulative 500-entry safety budget for each source-level for statement across one visualization run
 - sequential execution
 - line-by-line explanations
 - variable state display
@@ -214,8 +219,12 @@ for(i = 0; i < 5; i++){
 
 Rules:
 
-- for must be a direct child statement of main
-- allow multiple independent direct-child for statements
+- count a for directly inside main as depth 1
+- count a for directly inside a depth-1 for body as depth 2
+- count a for directly inside a depth-2 for body as depth 3
+- support direct for nesting only through depth 3; depth 4 or deeper is unsupported
+- allow multiple independent direct-child for statements and multiple sibling child-for statements
+- keep the source nesting depth fixed; do not infer labels from the runtime path
 - require all three header clauses: initialization, condition, and update
 - initialization must assign to a previously declared int variable
 - do not support declarations such as `for(int i = 0; ... )`
@@ -227,33 +236,48 @@ Rules:
 - require braces and require the opening brace on the for header line
 - allow multiple supported statements and an empty body
 - directly supported body statements are ordinary assignment, standalone updates, printf, and `return 0;`
+- allow a direct child for node as a body item through source depth 3
 - allow supported if/if-else nodes as body items instead of creating for-specific if execution
 - allow multiple independent if statements in one for body
 - allow up to two if levels inside for; the for itself does not count as an if level
 - inside an if/else branch in for, allow only ordinary assignment, printf, and `return 0;`
-- do not support declarations, scanf, nested for, while, break, continue, or other unsupported controls in the for body
-- validate the complete for body before initialization, including unselected if/else branches and a body that will execute zero times
+- do not support a for inside any if/else branch, including `for -> if -> for`
+- do not support declarations, scanf, while, break, continue, or other unsupported controls in the for body
+- validate the complete nested-for tree before the outermost initialization, including unselected if/else branches and bodies that will execute zero times
+- reject a tree containing a depth-4 for before the outermost for initialization
 - never partially execute a for that fails structural validation
+- ignore for text and braces inside comments or string literals when determining structure and depth
 - propagate `return 0;` from the direct body or an if branch to main and stop the whole program
 - propagate runtime errors from initialization, condition, body, selected if branches, and update; never continue to the next iteration after an error
-- keep a separate iteration budget for each independent for statement
-- permit 500 entered body iterations; after the 500th update, evaluate the condition once more
+- keep an independent cumulative entered-body counter for each source-level for statement during one visualization run
+- when the same child for is invoked by multiple parent iterations, accumulate all entered-body iterations for that same source-level for
+- do not share the counter with sibling or otherwise distinct for statements
+- permit 500 cumulative entered body iterations; after the 500th update, evaluate the condition once more
 - if that condition is false, finish normally after 500 iterations
 - if that condition is true, stop before entering or updating the 501st body iteration
 - describe this as a Visualizer safety limit, not a C language restriction
 
 ## For explanation display
 
-- show every iteration explanation for 0 through 6 entered body iterations
-- for 7 or more iterations, keep the first 3 iterations, one omission marker, the actual final iteration, and the termination reason
+- keep the existing standalone-for labels when a for has no nested-for tree
+- label a depth-1 for as outer, depth-2 as inner, and depth-3 as deepest; the Japanese UI labels are `外側for`, `内側for`, and `最奥for`
+- restart a child for's local display iteration number at 1 for every invocation
+- decide compression independently for each invocation of each for node
+- show every local iteration explanation for 0 through 6 entered body iterations
+- for 7 or more local iterations, keep the first 3 iterations, one omission marker, the actual final iteration, and the termination reason
+- when a parent iteration is omitted, also omit all child and grandchild explanations inside that parent iteration
+- within a retained parent iteration, compress child and grandchild for explanations recursively by their own local iteration counts
 - retain the final false condition on normal completion
-- retain the actual return, runtime-error, or safety-stop iteration on abnormal completion
+- retain the actual return, runtime-error, condition-error, update-error, or safety-stop iteration on abnormal completion
+- preserve every retained parent and child iteration on the path to an abnormal stop
 - do not invent a final false condition after return, runtime error, or safety stop
+- do not duplicate the same stop reason at every parent level
+- keep cumulative safety counts separate from local display iteration numbers
 - compress only analysis entries and step entries
 - never omit actual condition evaluation, body execution, updates, printf output, or final variable state
-- keep explanation histories independent across multiple for statements
+- keep explanation histories independent across sibling for statements and independent for trees
 
-## Unsupported scope for Ver.0.7_0813
+## Unsupported scope for Ver.0.8_0818
 
 Do not implement these unless explicitly requested:
 
@@ -270,7 +294,9 @@ Do not implement these unless explicitly requested:
 - multiple for-header expressions and comma operators
 - variable operands in compound for updates, such as `i += step`
 - braceless for and split-line opening brace style for for
-- nested for and for inside if
+- for nesting at depth 4 or deeper
+- for inside any if or else branch
+- for inside an if/else branch inside a for (`for -> if -> for`)
 - scanf and declarations inside a for body
 - expressions that use the value or side effects of `++` or `--`
 - break and continue
@@ -296,7 +322,7 @@ Do not implement these unless explicitly requested:
 
 ## Input rule
 
-In Ver.0.7_0813, assume one C statement per line.
+In Ver.0.8_0818, assume one C statement per line.
 
 If multiple statements are written on one line, show a warning instead of trying to parse them automatically.
 

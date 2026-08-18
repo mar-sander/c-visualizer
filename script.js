@@ -1,12 +1,12 @@
 const samples = {
   basic: `#include <stdio.h>\n\nint main(void){\n    int a = 3;\n    int b = 5;\n    int c = a + b;\n    printf("%d\\n", c);\n    return 0;\n}`,
-  calc: `#include <stdio.h>\n\nint main(void){\n    int price = 120;\n    int count = 4;\n    int total = price * count;\n    int change = 1000 - total;\n    printf("合計:%d円\\n", total);\n    printf("おつり:%d円\\n", change);\n    return 0;\n}`,
   assign: `#include <stdio.h>\n\nint main(void){\n    int score = 60;\n    score = score + 15;\n    printf("%d\\n", score);\n    return 0;\n}`,
   ifSimple: `#include <stdio.h>\n\nint main(void){\n    int score = 78;\n    if(score >= 60){\n        printf("合格です\\n");\n    }\n    return 0;\n}`,
   ifElse: `#include <stdio.h>\n\nint main(void){\n    int score = 45;\n    if(score >= 60){\n        printf("合格です\\n");\n    }else{\n        printf("もう一度挑戦\\n");\n    }\n    return 0;\n}`,
   nestedIf: `#include <stdio.h>\n\nint main(void){\n    int score = 75;\n\n    if(score >= 60){\n        if(score >= 80){\n            printf("高得点です\\n");\n        }else{\n            printf("合格です\\n");\n        }\n    }\n\n    return 0;\n}`,
   forBasic: `#include <stdio.h>\n\nint main(void){\n    int i;\n\n    for(i = 0; i < 5; i++){\n        printf("%d\\n", i);\n    }\n\n    return 0;\n}`,
   forIf: `#include <stdio.h>\n\nint main(void){\n    int i;\n\n    for(i = 0; i < 10; i++){\n        if(i % 2 == 0){\n            printf("%d\\n", i);\n        }\n    }\n\n    return 0;\n}`,
+  nestedFor: `#include <stdio.h>\n\nint main(void){\n    int i;\n    int j;\n\n    for(i = 1; i <= 5; i++){\n        for(j = 1; j <= i; j++){\n            printf("*");\n        }\n        printf("\\n");\n    }\n\n    return 0;\n}`,
   scanfInput: `#include <stdio.h>\n\nint main(void){\n    int score;\n\n    scanf("%d", &score);\n\n    if(score >= 60){\n        printf("合格です\\n");\n    }else{\n        printf("不合格です\\n");\n    }\n\n    return 0;\n}`,
   unsupported: `#include <stdio.h>\n\nint main(void){\n    int count = 0;\n\n    while(count < 3){\n        count = count + 1;\n    }\n\n    return 0;\n}`
 };
@@ -19,7 +19,7 @@ const sampleScanfInputs = {
 // 数値の 0 と区別して、まだ値が入っていない状態を表します。
 const UNINITIALIZED = Symbol('uninitialized');
 
-// ブラウザ停止を防ぐため、1つのfor文で本体へ入れる回数を制限します。
+// ブラウザ停止を防ぐため、ソース上の各for文で本体へ入れる累計回数を制限します。
 const MAX_FOR_ITERATIONS = 500;
 
 // for文は直接入れ子にする形だけ、最大3階層まで扱います。
@@ -1291,7 +1291,7 @@ function visualizeCode(){
 
     if(/^if\s*\(/.test(trimmed) || /^for\s*\(/.test(trimmed) || /^while\s*\(/.test(trimmed)){
       addAnalysis(analysis, lineNo, 'この場所・書き方の制御構文は、現在のVisualizerでは未対応です。');
-      addHint(hints, lineNo, 'この制御構文は現在未対応', 'main直下の基本forと、対応範囲内のif・if〜elseは実行できますが、この場所または書き方は正確に実行シミュレートしていません。');
+      addHint(hints, lineNo, 'この制御構文は現在未対応', 'main直下のfor、最大3階層までの直接的な入れ子for、対応範囲内のif・if〜elseは実行できますが、この場所または書き方は正確に実行シミュレートしていません。');
       warningLines.add(lineNo);
       return;
     }
@@ -1408,7 +1408,7 @@ function visualizeCode(){
 
     addAnalysis(analysis, lineNo, '現在のVisualizerでは説明未対応のコードです。');
     if(trimmed !== ''){
-      addHint(hints, lineNo, '未対応コード', 'この行は現在の可視化対象外です。まずは int、代入、整数演算、比較、printf、main直下の単純なscanf、対応範囲内のif・if〜else、基本forの範囲で試してみましょう。');
+      addHint(hints, lineNo, '未対応コード', 'この行は現在の可視化対象外です。まずは int、代入、整数演算、比較、printf、main直下の単純なscanf、対応範囲内のif・if〜else、最大3階層までの直接的な入れ子forの範囲で試してみましょう。');
       warningLines.add(lineNo);
     }
     return insideFor ? 'execution-error' : undefined;
