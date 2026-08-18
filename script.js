@@ -2553,10 +2553,11 @@ function visualizeCode(){
       const activeIteration = explanationHistory.beginIteration(iterationCount + 1);
       const conditionResult = evaluateExpression(node.condition, variables);
       if(!conditionResult.ok){
-        addAnalysis(analysis, lineNo, `<strong>【条件判定エラー】</strong> for文の条件 <code>${escapeHtml(node.condition)}</code> を評価できませんでした。`);
+        const conditionErrorPrefix = forExplanationPrefix(node, '条件判定エラー');
+        addAnalysis(analysis, lineNo, `${conditionErrorPrefix}for文の条件 <code>${escapeHtml(node.condition)}</code> を評価できませんでした。`);
         addHint(hints, lineNo, 'for文の条件を評価できません', escapeHtml(conditionResult.error));
         warningLines.add(lineNo);
-        addStep(lineNo, '<strong>【条件判定エラー】</strong> for文の条件を評価できないため、プログラムの実行を停止します。');
+        addStep(lineNo, `${conditionErrorPrefix}for文の条件を評価できないため、プログラムの実行を停止します。`);
         explanationHistory.finalize();
         return {
           status:'execution-stopped',
@@ -2572,16 +2573,22 @@ function visualizeCode(){
         : `${escapeHtml(conditionResult.readable)} を計算した結果は ${conditionResult.value} です。C言語では0以外を条件成立、0を条件不成立として扱います。`;
       const enteredIterationTotal = forEnteredIterationTotals.get(node.startIndex) || 0;
       const nextEnteredIteration = enteredIterationTotal + 1;
+      const nextLocalIteration = iterationCount + 1;
       const reachesSafetyLimit = conditionMet && enteredIterationTotal >= MAX_FOR_ITERATIONS;
       const nextAction = reachesSafetyLimit
-        ? `条件が成立したため、本来は${nextEnteredIteration}回目の本体へ進む必要があります。`
+        ? (node.explanationLabel
+          ? `条件が成立したため、本来は今回の呼び出しの${nextLocalIteration}回目（可視化全体では累計${nextEnteredIteration}回目）の本体へ進む必要があります。`
+          : `条件が成立したため、本来は${nextEnteredIteration}回目の本体へ進む必要があります。`)
         : (conditionMet
           ? '条件が成立したため、for文の本体へ進みます。'
           : '条件が成立しなかったため、for文を終了します。');
       const conditionDisplayPrefix = !conditionMet
         ? forExplanationPrefix(node, iterationCount === 0 ? '最初の条件判定／終了判定' : '終了判定')
         : (reachesSafetyLimit
-          ? `<strong>【${nextEnteredIteration}回目へ進む条件判定】</strong> `
+          ? forExplanationPrefix(
+            node,
+            `${node.explanationLabel ? nextLocalIteration : nextEnteredIteration}回目へ進む条件判定`
+          )
           : '');
       addAnalysis(analysis, lineNo, `${conditionDisplayPrefix}<strong>for文の条件：</strong> ${conditionExplanation}${nextAction}`);
       addStep(lineNo, `${conditionDisplayPrefix}for文の条件 ${escapeHtml(node.condition)} を判定しました。<br>${nextAction}`);
@@ -2599,12 +2606,22 @@ function visualizeCode(){
 
       // 500回目までは実行し、501回目の本体へ入る直前に停止します。
       if(reachesSafetyLimit){
-        const safetyMessage = '無限ループ、または非常に多い反復の可能性があります。安全のため実行を停止しました。for文の「条件」と「更新式」を確認してみましょう。<strong>変数の値は、終了条件へ近づいていますか？</strong>';
-        addAnalysis(analysis, lineNo, `<strong>【安全上限停止】</strong> 繰り返し回数が安全上限の ${MAX_FOR_ITERATIONS} 回に達したため、次の本体へ入らず停止しました。`);
+        const safetyPrefix = forExplanationPrefix(node, '安全上限停止');
+        const safetyMessage = node.explanationLabel
+          ? `このfor文は可視化全体で本体を累計 ${MAX_FOR_ITERATIONS} 回実行済みです。次の本体へ入ると累計 ${nextEnteredIteration} 回目になるため、C Code Visualizerが安全のため停止しました。これはC言語自体の制限ではありません。for文の「条件」と「更新式」を確認してみましょう。<strong>変数の値は、終了条件へ近づいていますか？</strong>`
+          : '無限ループ、または非常に多い反復の可能性があります。安全のため実行を停止しました。for文の「条件」と「更新式」を確認してみましょう。<strong>変数の値は、終了条件へ近づいていますか？</strong>';
+        const safetyAnalysis = node.explanationLabel
+          ? `このfor文は本体を可視化全体で累計 ${MAX_FOR_ITERATIONS} 回実行済みです。条件が成立し、次の本体へ入ると累計 ${nextEnteredIteration} 回目になるため、C Code Visualizerの安全上限として本体へ入る前に停止しました。500回はC言語自体の制限ではありません。`
+          : `繰り返し回数が安全上限の ${MAX_FOR_ITERATIONS} 回に達したため、次の本体へ入らず停止しました。`;
+        addAnalysis(analysis, lineNo, `${safetyPrefix}${safetyAnalysis}`);
         addHint(hints, lineNo, '繰り返し回数が安全上限に達しました', safetyMessage);
         warningLines.add(lineNo);
-        addStep(lineNo, `<strong>【安全上限停止】</strong> for文は ${MAX_FOR_ITERATIONS} 回反復しました。その本体へ入る前に、安全のためプログラムの実行を停止します。`);
-        addAnalysis(analysis, node.endIndex + 1, '<strong>【安全上限停止】</strong> for文が安全上限で停止したため、後続の処理へは進みません。');
+        const safetyStep = node.explanationLabel
+          ? `このfor文は本体を可視化全体で累計 ${MAX_FOR_ITERATIONS} 回実行済みです。次の本体へ入ると累計 ${nextEnteredIteration} 回目になるため、C Code Visualizerの安全上限により、本体へ入る前にプログラム全体を停止します。`
+          : `for文は ${MAX_FOR_ITERATIONS} 回反復しました。その本体へ入る前に、安全のためプログラムの実行を停止します。`;
+        addStep(lineNo, `${safetyPrefix}${safetyStep}`);
+        const safetyEndPrefix = node.explanationLabel ? '' : safetyPrefix;
+        addAnalysis(analysis, node.endIndex + 1, `${safetyEndPrefix}for文が安全上限で停止したため、ここでは通常の終了処理を行いません。`);
         explanationHistory.finalize();
         return {
           status:'execution-stopped',
@@ -2629,7 +2646,13 @@ function visualizeCode(){
             return { status:'program-ended', stopIndex:index };
           }
           if(bodyResult === 'execution-error' || bodyResult === 'scanf-error'){
-            addStep(index + 1, 'for文の本体で処理を継続できないため、プログラムの実行を停止します。');
+            const runtimeErrorPrefix = node.explanationLabel
+              ? forExplanationPrefix(node, '実行時エラー')
+              : '';
+            if(runtimeErrorPrefix){
+              addAnalysis(analysis, index + 1, `${runtimeErrorPrefix}for文の本体で実行時エラーが発生したため、プログラム全体を停止します。`);
+            }
+            addStep(index + 1, `${runtimeErrorPrefix}for文の本体で処理を継続できないため、プログラムの実行を停止します。`);
             explanationHistory.finishIteration(activeIteration);
             explanationHistory.finalize();
             return {
@@ -2686,7 +2709,13 @@ function visualizeCode(){
         );
       }
       if(!updateResult.ok){
-        addStep(lineNo, 'for文の更新を実行できないため、プログラムの実行を停止します。');
+        const updateErrorPrefix = node.explanationLabel
+          ? forExplanationPrefix(node, '更新エラー')
+          : '';
+        if(updateErrorPrefix){
+          addAnalysis(analysis, lineNo, `${updateErrorPrefix}for文の更新式を評価できないため、プログラム全体を停止します。`);
+        }
+        addStep(lineNo, `${updateErrorPrefix}for文の更新を実行できないため、プログラムの実行を停止します。`);
         addAnalysis(analysis, node.endIndex + 1, 'for文の更新で実行を停止したため、後続の処理へは進みません。');
         explanationHistory.finishIteration(activeIteration);
         explanationHistory.finalize();

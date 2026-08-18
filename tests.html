@@ -1463,7 +1463,7 @@
       {
         name:'Stage1 2重for安全上限・21×25は内側累計501回目直前で停止',
         code:makeMainCode(`    int i;\n    int j;\n    int count = 0;\n    for(i = 0; i < 21; i++){\n        for(j = 0; j < 25; j++){\n            count++;\n        }\n    }\n    printf("WRONG-AFTER-2D-LIMIT");\n    return 0;`),
-        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG'], variables:['count = 500', 'i = 20', 'j = 0'], warningMin:1, hintsInclude:['安全上限'], stepsInclude:['501回目へ進む条件判定'], executedExcludes:['printf("WRONG-AFTER-2D-LIMIT'] }
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG'], variables:['count = 500', 'i = 20', 'j = 0'], warningMin:1, hintsInclude:['安全上限'], stepsInclude:['【内側for・1回目へ進む条件判定】'], stepsExclude:['【内側for・501回目】'], executedExcludes:['printf("WRONG-AFTER-2D-LIMIT'] }
       },
       {
         name:'Stage1 3重for安全上限・5×5×20の最奥累計500回は正常終了',
@@ -1473,7 +1473,7 @@
       {
         name:'Stage1 3重for安全上限・5×5×21は最奥累計501回目直前で停止',
         code:makeMainCode(`    int i;\n    int j;\n    int k;\n    int count = 0;\n    for(i = 0; i < 5; i++){\n        for(j = 0; j < 5; j++){\n            for(k = 0; k < 21; k++){\n                count++;\n            }\n        }\n    }\n    printf("WRONG-AFTER-3D-LIMIT");\n    return 0;`),
-        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG'], variables:['count = 500', 'i = 4', 'j = 3', 'k = 17'], warningMin:1, hintsInclude:['安全上限'], stepsInclude:['501回目へ進む条件判定'], executedExcludes:['printf("WRONG-AFTER-3D-LIMIT'] }
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG'], variables:['count = 500', 'i = 4', 'j = 3', 'k = 17'], warningMin:1, hintsInclude:['安全上限'], stepsInclude:['【最奥for・18回目へ進む条件判定】'], stepsExclude:['【最奥for・501回目】'], executedExcludes:['printf("WRONG-AFTER-3D-LIMIT'] }
       },
       {
         name:'Stage1 累計500回到達後も次回条件偽なら正常終了',
@@ -1703,6 +1703,141 @@
           variables:['i = 2', 'j = 7', 'a = 7', 'b = 2', 'count = 28'],
           warningMax:0,
           stepCounts:{ '外側forの4～6回目の反復を省略しました':1, '内側forの4～6回目の反復を省略しました':2, '【内側for・終了】':6 }
+        }
+      },
+      {
+        name:'Stage2C 内側forの8回目returnを停止反復として保持',
+        code:makeMainCode(`    int i;\n    int j;\n    int count = 0;\n    for(i = 0; i < 1; i++){\n        for(j = 0; j < 10; j++){\n            count++;\n            if(j == 7){\n                return 0;\n            }\n        }\n        printf("WRONG-PARENT");\n    }\n    printf("WRONG-MAIN");`),
+        expect:{
+          output:'出力はまだありません。',
+          outputExcludes:['WRONG'],
+          variables:['i = 0', 'j = 7', 'count = 8'],
+          warningMax:0,
+          stepsInOrder:['【外側for・1回目】', '【内側for・1回目】', '【内側for・2回目】', '【内側for・3回目】', '内側forの4～7回目の反復を省略しました', '【内側for・8回目】', 'プログラムを終了します。'],
+          stepsExclude:['【内側for・9回目】', '【内側for・終了判定】', '【内側for・終了】', '【外側for・終了判定】', '【外側for・終了】'],
+          stepCounts:{ 'プログラムを終了します。':1 },
+          analysisByLineCounts:{ '8':{ '【内側for・8回目】':1 } },
+          executedExcludes:['printf("WRONG-PARENT', 'printf("WRONG-MAIN']
+        }
+      },
+      {
+        name:'Stage2C 3重for深部returnで外側8回目までの経路を保持',
+        code:makeMainCode(`    int i;\n    int j;\n    int k;\n    int count = 0;\n    for(i = 0; i < 10; i++){\n        for(j = 0; j < 5; j++){\n            for(k = 0; k < 1; k++){\n                count++;\n                if(i * 100 + j * 10 + k == 740){\n                    return 0;\n                }\n            }\n        }\n    }\n    printf("WRONG-MAIN");`),
+        expect:{
+          output:'出力はまだありません。',
+          outputExcludes:['WRONG'],
+          variables:['i = 7', 'j = 4', 'k = 0', 'count = 40'],
+          warningMax:0,
+          stepsInOrder:['【外側for・1回目】', '【外側for・2回目】', '【外側for・3回目】', '外側forの4～7回目の反復を省略しました', '【外側for・8回目】', '【内側for・5回目】', '【最奥for・1回目】', 'プログラムを終了します。'],
+          stepCounts:{ '外側forの4～7回目の反復を省略しました':1, 'プログラムを終了します。':1, '【外側for・終了】':0, '【内側for・終了】':3, '【最奥for・終了】':19 },
+          analysisByLineIncludes:{ '8':['【外側for・8回目】'], '9':['【内側for・5回目】'], '10':['【最奥for・1回目】'], '13':['【最奥for・1回目】'] },
+          executedExcludes:['printf("WRONG-MAIN']
+        }
+      },
+      {
+        name:'Stage2C 内側forの8回目実行時エラーを保持',
+        code:makeMainCode(`    int i;\n    int j;\n    int value = 0;\n    for(i = 0; i < 1; i++){\n        for(j = 0; j < 10; j++){\n            printf("%d", j);\n            value = 10 / (7 - j);\n        }\n    }\n    printf("WRONG-MAIN");\n    return 0;`),
+        expect:{
+          output:'01234567',
+          outputExcludes:['WRONG'],
+          variables:['i = 0', 'j = 7', 'value = 10'],
+          warningMin:1,
+          hintsInclude:['0で割ろうとしています'],
+          stepsInOrder:['【外側for・1回目】', '【内側for・1回目】', '【内側for・2回目】', '【内側for・3回目】', '内側forの4～7回目の反復を省略しました', '【内側for・8回目】', '【内側for・実行時エラー】'],
+          stepsExclude:['【内側for・終了判定】', '【内側for・終了】', '【外側for・終了】'],
+          stepCounts:{ '【内側for・実行時エラー】':1 },
+          analysisByLineCounts:{ '8':{ '【内側for・8回目】':1 }, '10':{ '【内側for・実行時エラー】':1 } },
+          executedExcludes:['printf("WRONG-MAIN']
+        }
+      },
+      {
+        name:'Stage2C 内側for条件評価エラーの階層と直前反復を保持',
+        code:makeMainCode(`    int i;\n    int j;\n    int count = 0;\n    for(i = 0; i < 1; i++){\n        for(j = 0; 10 / (7 - j) > 0; j++){\n            count++;\n        }\n    }\n    printf("WRONG-MAIN");\n    return 0;`),
+        expect:{
+          output:'出力はまだありません。',
+          outputExcludes:['WRONG'],
+          variables:['i = 0', 'j = 7', 'count = 7'],
+          warningMin:1,
+          hintsInclude:['0で割ろうとしています'],
+          stepsInOrder:['【内側for・1回目】', '【内側for・2回目】', '【内側for・3回目】', '内側forの4～6回目の反復を省略しました', '【内側for・7回目】', '【内側for・条件判定エラー】'],
+          stepsExclude:['【内側for・8回目】', '【内側for・終了判定】', '【内側for・終了】', '【外側for・終了】'],
+          stepCounts:{ '【内側for・条件判定エラー】':1 },
+          analysisByLineCounts:{ '8':{ '【内側for・条件判定エラー】':1 } },
+          executedExcludes:['printf("WRONG-MAIN']
+        }
+      },
+      {
+        name:'Stage2C 内側forの8回目更新評価エラーを保持',
+        code:makeMainCode(`    int i;\n    int j;\n    int count = 0;\n    for(i = 0; i < 1; i++){\n        for(j = 0; j < 10; j = j + 1 + 0 / (7 - j)){\n            count++;\n        }\n    }\n    printf("WRONG-MAIN");\n    return 0;`),
+        expect:{
+          output:'出力はまだありません。',
+          outputExcludes:['WRONG'],
+          variables:['i = 0', 'j = 7', 'count = 8'],
+          warningMin:1,
+          hintsInclude:['0で割ろうとしています'],
+          stepsInOrder:['【内側for・1回目】', '【内側for・2回目】', '【内側for・3回目】', '内側forの4～7回目の反復を省略しました', '【内側for・8回目】', '【内側for・更新エラー】'],
+          stepsExclude:['【内側for・終了判定】', '【内側for・終了】', '【外側for・終了】'],
+          stepCounts:{ '【内側for・更新エラー】':1 },
+          analysisByLineCounts:{ '8':{ '【内側for・更新エラー】':1 } },
+          executedExcludes:['printf("WRONG-MAIN']
+        }
+      },
+      {
+        name:'Stage2C 入れ子for累計500回で条件偽なら正常終了',
+        code:makeMainCode(`    int i;\n    int j;\n    int count = 0;\n    for(i = 0; i < 20; i++){\n        for(j = 0; j < 25; j++){\n            count++;\n        }\n    }\n    printf("%d", count);\n    return 0;`),
+        expect:{
+          output:'500',
+          variables:['i = 20', 'j = 25', 'count = 500'],
+          warningMax:0,
+          hintsExclude:['安全上限'],
+          stepsInclude:['【内側for・25回目】', '【内側for・終了】', '【外側for・終了】'],
+          stepsExclude:['安全上限停止', '501回目へ進む条件判定', '内側for・501回目']
+        }
+      },
+      {
+        name:'Stage2C 30×17の累計500→501は内側局所8回目条件で停止',
+        code:makeMainCode(`    int i;\n    int j;\n    int count = 0;\n    for(i = 0; i < 30; i++){\n        for(j = 0; j < 17; j++){\n            count++;\n        }\n    }\n    printf("WRONG-MAIN");\n    return 0;`),
+        expect:{
+          output:'出力はまだありません。',
+          outputExcludes:['WRONG'],
+          variables:['i = 29', 'j = 7', 'count = 500'],
+          warningMin:1,
+          hintsInclude:['累計 500 回実行済み', '累計 501 回目', 'C言語自体の制限ではありません'],
+          stepsInOrder:['【外側for・1回目】', '【外側for・2回目】', '【外側for・3回目】', '外側forの4～29回目の反復を省略しました', '【外側for・30回目】', '【内側for・1回目】', '【内側for・2回目】', '【内側for・3回目】', '内側forの4～6回目の反復を省略しました', '【内側for・7回目】', '【内側for・8回目へ進む条件判定】', '【内側for・安全上限停止】'],
+          stepsExclude:['【内側for・501回目】', '【501回目へ進む条件判定】', '【外側for・終了】'],
+          stepCounts:{ '【内側for・安全上限停止】':1, '【内側for・終了】':3 },
+          analysisByLineCounts:{ '8':{ '【内側for・8回目へ進む条件判定】':1, '【内側for・安全上限停止】':1 } },
+          executedExcludes:['printf("WRONG-MAIN']
+        }
+      },
+      {
+        name:'Stage2C 累計500回後の次回子forが0反復なら正常終了',
+        code:makeMainCode(`    int i;\n    int j;\n    int count = 0;\n    for(i = 0; i < 2; i++){\n        for(j = 0; j < 500 - i * 500; j++){\n            count++;\n        }\n    }\n    printf("%d", count);\n    return 0;`),
+        expect:{
+          output:'500',
+          variables:['i = 2', 'j = 0', 'count = 500'],
+          warningMax:0,
+          hintsExclude:['安全上限'],
+          stepsInclude:['【内側for・500回目】', '【内側for・最初の条件判定／終了判定】', '【外側for・終了】'],
+          stepsExclude:['内側for・安全上限停止', '内側for・501回目'],
+          stepCounts:{ '【内側for・終了】':2 }
+        }
+      },
+      {
+        name:'Stage2C 3重for深部安全停止で外側8・内側7・最奥5条件の経路を保持',
+        code:makeMainCode(`    int i;\n    int j;\n    int k;\n    int count = 0;\n    for(i = 0; i < 8; i++){\n        for(j = 0; j < 8; j++){\n            for(k = 0; k < 8; k++){\n                count++;\n            }\n        }\n    }\n    printf("WRONG-MAIN");\n    return 0;`),
+        expect:{
+          output:'出力はまだありません。',
+          outputExcludes:['WRONG'],
+          variables:['i = 7', 'j = 6', 'k = 4', 'count = 500'],
+          warningMin:1,
+          hintsInclude:['累計 500 回実行済み', '累計 501 回目', 'C言語自体の制限ではありません'],
+          stepsInOrder:['【外側for・1回目】', '【外側for・2回目】', '【外側for・3回目】', '外側forの4～7回目の反復を省略しました', '【外側for・8回目】', '【内側for・1回目】', '【内側for・2回目】', '【内側for・3回目】', '内側forの4～6回目の反復を省略しました', '【内側for・7回目】', '【最奥for・4回目】', '【最奥for・5回目へ進む条件判定】', '【最奥for・安全上限停止】'],
+          stepsExclude:['【最奥for・501回目】', '【501回目へ進む条件判定】', '【外側for・終了】'],
+          stepCounts:{ '【最奥for・安全上限停止】':1, '【外側for・終了】':0, '【内側for・終了】':3, '【最奥for・終了】':15 },
+          analysisByLineIncludes:{ '8':['【外側for・8回目】'], '9':['【内側for・7回目】'], '10':['【最奥for・5回目へ進む条件判定】'] },
+          analysisByLineCounts:{ '10':{ '【最奥for・安全上限停止】':1 } },
+          executedExcludes:['printf("WRONG-MAIN']
         }
       },
       {
