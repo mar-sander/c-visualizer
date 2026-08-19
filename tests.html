@@ -242,6 +242,22 @@
         }
       },
       {
+        name:'Stage3 入れ子forサンプル・段階的な星を表示',
+        code:samples.nestedFor,
+        loadSampleKey:'nestedFor',
+        expect:{
+          output:'*\n**\n***',
+          variables:['i = 4', 'j = 4'],
+          warningMax:0,
+          scanfInputValue:'',
+          stepsInclude:['【外側for：1回目】', '【外側for：1回目｜内側for：1周目】', '【外側for：終了】'],
+          stepsExclude:['【内側for：1周目】', '外側for・', '内側for・', '最奥for・'],
+          executedIncludes:['for(i = 1; i <= 3; i++){', 'for(j = 1; j <= i; j++){', 'printf("*");', 'printf("\\n");', 'return 0;'],
+          editorScrollTop:0,
+          editorScrollLeft:0
+        }
+      },
+      {
         name:'scanf正式サンプル・75を入力して合格',
         code:samples.scanfInput,
         loadSampleKey:'scanfInput',
@@ -1310,9 +1326,577 @@
         expect:{ output:'WRONG-LATE-IFWRONG-LATE-IFWRONG-AFTER-IF', variables:['i = 2', 'value = 3'], warningMax:0, stepCounts:{ 'for文の初期化':1, 'for文の更新':2 }, executedIncludes:['value = 1;', 'value = 2;', 'value = 3;', 'printf("WRONG-LATE-IF', 'printf("WRONG-AFTER-IF'] }
       },
       {
-        name:'入れ子forを事前検証して外側も実行しない',
-        code:makeMainCode(`    int i = 9;\n    int j = 8;\n    for(i = 0; i < 2; i++){\n        for(j = 0; j < 2; j++){\n            printf("WRONG-NESTED-FOR");\n        }\n    }\n    printf("WRONG-AFTER-NESTED-FOR");\n    return 0;`),
-        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG-NESTED-FOR', 'WRONG-AFTER-NESTED-FOR'], variables:['i = 9', 'j = 8'], warningMin:1, hintsInclude:['for文内の制御構造は未対応'], stepCounts:{ 'for文の初期化':0 }, executedExcludes:['printf("WRONG-NESTED-FOR', 'printf("WRONG-AFTER-NESTED-FOR'] }
+        name:'Stage1 基本2重for・2×3を順番に実行',
+        code:makeMainCode(`    int i;\n    int j;\n    for(i = 0; i < 2; i++){\n        for(j = 0; j < 3; j++){\n            printf("%d%d\\n", i, j);\n        }\n    }\n    return 0;`),
+        expect:{ output:'00\n01\n02\n10\n11\n12', variables:['i = 2', 'j = 3'], warningMax:0 }
+      },
+      {
+        name:'Stage1 基本3重for・2×2×2を順番に実行',
+        code:makeMainCode(`    int i;\n    int j;\n    int k;\n    for(i = 0; i < 2; i++){\n        for(j = 0; j < 2; j++){\n            for(k = 0; k < 2; k++){\n                printf("%d%d%d", i, j, k);\n            }\n        }\n    }\n    return 0;`),
+        expect:{ output:'000001010011100101110111', variables:['i = 2', 'j = 2', 'k = 2'], warningMax:0 }
+      },
+      {
+        name:'Stage1 子forは親の各反復で再初期化',
+        code:makeMainCode(`    int i;\n    int j = 9;\n    for(i = 0; i < 2; i++){\n        for(j = 0; j < 2; j++){\n            printf("%d", j);\n        }\n    }\n    return 0;`),
+        expect:{ output:'0101', variables:['i = 2', 'j = 2'], warningMax:0, stepCounts:{ 'for文の初期化':3 } }
+      },
+      {
+        name:'Stage1 内側for条件から外側変数を参照',
+        code:makeMainCode(`    int i;\n    int j;\n    for(i = 1; i <= 3; i++){\n        for(j = 0; j < i; j++){\n            printf("%d%d", i, j);\n        }\n    }\n    return 0;`),
+        expect:{ output:'102021303132', variables:['i = 4', 'j = 3'], warningMax:0 }
+      },
+      {
+        name:'Stage1 内側forが0反復でも初期化と初回条件判定を実行',
+        code:makeMainCode(`    int i;\n    int j = 9;\n    for(i = 0; i < 2; i++){\n        for(j = 0; j < 0; j++){\n            printf("WRONG-INNER-ZERO");\n        }\n    }\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG-INNER-ZERO'], variables:['i = 2', 'j = 0'], warningMax:0, stepCounts:{ 'for文の初期化':3 }, executedExcludes:['printf("WRONG-INNER-ZERO'] }
+      },
+      {
+        name:'Stage1 最外側forが0反復なら子forを実行しない',
+        code:makeMainCode(`    int i = 9;\n    int j = 8;\n    for(i = 0; i < 0; i++){\n        for(j = 0; j < 2; j++){\n            printf("WRONG-OUTER-ZERO");\n        }\n    }\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG-OUTER-ZERO'], variables:['i = 0', 'j = 8'], warningMax:0, stepCounts:{ 'for文の初期化':1 }, executedExcludes:['printf("WRONG-OUTER-ZERO'] }
+      },
+      {
+        name:'Stage1 同一親内の兄弟forを両方実行',
+        code:makeMainCode(`    int i;\n    int j;\n    int k;\n    for(i = 0; i < 2; i++){\n        for(j = 0; j < 2; j++){\n            printf("A%d%d", i, j);\n        }\n        for(k = 0; k < 2; k++){\n            printf("B%d%d", i, k);\n        }\n    }\n    return 0;`),
+        expect:{ output:'A00A01B00B01A10A11B10B11', variables:['i = 2', 'j = 2', 'k = 2'], warningMax:0 }
+      },
+      {
+        name:'Stage1 子for前後の単純文を順番に実行',
+        code:makeMainCode(`    int i;\n    int j;\n    for(i = 0; i < 1; i++){\n        printf("before");\n        for(j = 0; j < 2; j++){\n            printf("inner");\n        }\n        printf("after");\n    }\n    return 0;`),
+        expect:{ output:'beforeinnerinnerafter', variables:['i = 1', 'j = 2'], warningMax:0, stepsInOrder:['画面に「before', '画面に「inner', '画面に「after'] }
+      },
+      {
+        name:'Stage1 空の内側for',
+        code:makeMainCode(`    int i;\n    int j;\n    for(i = 0; i < 2; i++){\n        for(j = 0; j < 3; j++){\n        }\n    }\n    return 0;`),
+        expect:{ output:'出力はまだありません。', variables:['i = 2', 'j = 3'], warningMax:0 }
+      },
+      {
+        name:'Stage1 空の最奥for',
+        code:makeMainCode(`    int i;\n    int j;\n    int k;\n    for(i = 0; i < 2; i++){\n        for(j = 0; j < 2; j++){\n            for(k = 0; k < 2; k++){\n            }\n        }\n    }\n    return 0;`),
+        expect:{ output:'出力はまだありません。', variables:['i = 2', 'j = 2', 'k = 2'], warningMax:0 }
+      },
+      {
+        name:'Stage1 最奥for内のif',
+        code:makeMainCode(`    int i;\n    int j;\n    int k;\n    for(i = 0; i < 1; i++){\n        for(j = 0; j < 2; j++){\n            for(k = 0; k < 2; k++){\n                if(j == k){\n                    printf("%d%d", j, k);\n                }\n            }\n        }\n    }\n    return 0;`),
+        expect:{ output:'0011', variables:['i = 1', 'j = 2', 'k = 2'], warningMax:0 }
+      },
+      {
+        name:'Stage1 最奥for内の2階層if',
+        code:makeMainCode(`    int i;\n    int j;\n    int k;\n    for(i = 0; i < 1; i++){\n        for(j = 0; j < 2; j++){\n            for(k = 0; k < 2; k++){\n                if(j == 1){\n                    if(k == 1){\n                        printf("NESTED");\n                    }\n                }\n            }\n        }\n    }\n    return 0;`),
+        expect:{ output:'NESTED', variables:['i = 1', 'j = 2', 'k = 2'], warningMax:0 }
+      },
+      {
+        name:'Stage1 子forから親ループ変数を変更',
+        code:makeMainCode(`    int i;\n    int j;\n    for(i = 0; i < 5; i++){\n        for(j = 0; j < 1; j++){\n            i = i + 2;\n        }\n        printf("%d", i);\n    }\n    return 0;`),
+        expect:{ output:'25', variables:['i = 6', 'j = 1'], warningMax:0 }
+      },
+      {
+        name:'Stage1 親子forで同じループ変数を独自禁止しない',
+        code:makeMainCode(`    int i;\n    int count = 0;\n    for(i = 0; i < 2; i++){\n        for(i = 0; i < 2; i++){\n            count++;\n        }\n    }\n    printf("%d", count);\n    return 0;`),
+        expect:{ output:'2', variables:['i = 3', 'count = 2'], warningMax:0 }
+      },
+      {
+        name:'Stage1 4階層forは最外側初期化前に拒否',
+        code:makeMainCode(`    int i = 9;\n    int j = 8;\n    int k = 7;\n    int m = 6;\n    for(i = 0; i < 1; i++){\n        for(j = 0; j < 1; j++){\n            for(k = 0; k < 1; k++){\n                for(m = 0; m < 1; m++){\n                    printf("WRONG-DEPTH4");\n                }\n            }\n        }\n    }\n    printf("WRONG-AFTER-DEPTH4");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG'], variables:['i = 9', 'j = 8', 'k = 7', 'm = 6'], warningMin:1, hintsInclude:['for文の入れ子は最大3階層まで対応'], stepCounts:{ 'for文の初期化':0 }, executedExcludes:['printf("WRONG-DEPTH4', 'printf("WRONG-AFTER-DEPTH4'] }
+      },
+      {
+        name:'Stage1 0反復の最外側内にある4階層forも事前拒否',
+        code:makeMainCode(`    int i = 9;\n    int j = 8;\n    int k = 7;\n    int m = 6;\n    for(i = 0; i < 0; i++){\n        for(j = 0; j < 1; j++){\n            for(k = 0; k < 1; k++){\n                for(m = 0; m < 1; m++){\n                }\n            }\n        }\n    }\n    return 0;`),
+        expect:{ output:'出力はまだありません。', variables:['i = 9', 'j = 8', 'k = 7', 'm = 6'], warningMin:1, hintsInclude:['for文の入れ子は最大3階層まで対応'], stepCounts:{ 'for文の初期化':0 } }
+      },
+      {
+        name:'Stage1 ifからforへ入る構造は未対応のまま',
+        code:makeMainCode(`    int i = 9;\n    if(1){\n        for(i = 0; i < 1; i++){\n            printf("WRONG-IF-FOR");\n        }\n    }\n    printf("AFTER");\n    return 0;`),
+        expect:{ output:'AFTER', outputExcludes:['WRONG-IF-FOR'], variables:['i = 9'], warningMin:1, hintsInclude:['入れ子のブロックは未対応'], executedExcludes:['printf("WRONG-IF-FOR'] }
+      },
+      {
+        name:'Stage1 子for内scanfは最外側初期化前に拒否',
+        input:'7',
+        code:makeMainCode(`    int i = 9;\n    int j = 8;\n    int value;\n    for(i = 0; i < 1; i++){\n        for(j = 0; j < 1; j++){\n            scanf("%d", &value);\n        }\n    }\n    return 0;`),
+        expect:{ output:'出力はまだありません。', variables:['i = 9', 'j = 8', 'value = 未初期化'], warningMin:1, hintsInclude:['for文内のscanfは未対応'], scanfInputValue:'7', stepCounts:{ 'for文の初期化':0 } }
+      },
+      {
+        name:'Stage1 子for内変数宣言は最外側初期化前に拒否',
+        code:makeMainCode(`    int i = 9;\n    int j = 8;\n    for(i = 0; i < 1; i++){\n        for(j = 0; j < 1; j++){\n            int local = 1;\n        }\n    }\n    return 0;`),
+        expect:{ output:'出力はまだありません。', variables:['i = 9', 'j = 8'], variablesExclude:['local ='], warningMin:1, hintsInclude:['for文内の変数宣言は未対応'], stepCounts:{ 'for文の初期化':0 } }
+      },
+      {
+        name:'Stage1 子for内whileは最外側初期化前に拒否',
+        code:makeMainCode(`    int i = 9;\n    int j = 8;\n    for(i = 0; i < 1; i++){\n        for(j = 0; j < 1; j++){\n            while(j < 2){\n                j++;\n            }\n        }\n    }\n    return 0;`),
+        expect:{ output:'出力はまだありません。', variables:['i = 9', 'j = 8'], warningMin:1, hintsInclude:['for文内の制御構造は未対応'], stepCounts:{ 'for文の初期化':0 } }
+      },
+      {
+        name:'Stage1 子forヘッダ内宣言は最外側初期化前に拒否',
+        code:makeMainCode(`    int i = 9;\n    int j = 8;\n    for(i = 0; i < 1; i++){\n        for(int j = 0; j < 1; j++){\n            printf("WRONG-HEADER-DECL");\n        }\n    }\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG'], variables:['i = 9', 'j = 8'], warningMin:1, hintsInclude:['forヘッダ内の変数宣言'], stepCounts:{ 'for文の初期化':0 } }
+      },
+      {
+        name:'Stage1 子forの全省略ヘッダは最外側初期化前に拒否',
+        code:makeMainCode(`    int i = 9;\n    for(i = 0; i < 1; i++){\n        for(;;){\n            printf("WRONG-EMPTY-HEADER");\n        }\n    }\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG'], variables:['i = 9'], warningMin:1, hintsInclude:['初期化・条件・更新を省略したfor文は現在未対応'], stepCounts:{ 'for文の初期化':0 } }
+      },
+      {
+        name:'Stage1 子for内ifの未選択側も再帰的に事前検証',
+        code:makeMainCode(`    int i = 9;\n    int j = 8;\n    for(i = 0; i < 1; i++){\n        for(j = 0; j < 1; j++){\n            if(1){\n                printf("WRONG-EARLY");\n            }else{\n                while(j < 2){\n                    j++;\n                }\n            }\n        }\n    }\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG'], variables:['i = 9', 'j = 8'], warningMin:1, hintsInclude:['入れ子のブロックは未対応'], stepCounts:{ 'for文の初期化':0 } }
+      },
+      {
+        name:'Stage1 最外側0反復では内側の未宣言条件を評価しない',
+        code:makeMainCode(`    int i = 9;\n    int j = 8;\n    for(i = 0; i < 0; i++){\n        for(j = 0; j < missing; j++){\n            printf("WRONG-MISSING");\n        }\n    }\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG'], variables:['i = 0', 'j = 8'], warningMax:0, hintsExclude:['missing', 'for文の条件を評価できません'], stepCounts:{ 'for文の初期化':1 } }
+      },
+      {
+        name:'Stage1 入れ子for構造でコメントと文字列内のfor・braceを無視',
+        code:makeMainCode(`    int i;\n    int j;\n    for(i = 0; i < 1; i++){\n        // for(j = 0; j < 9; j++){ }\n        for(j = 0; j < 2; j++){ /* for { } */\n            printf("for { } %d", j);\n        }\n    }\n    return 0;`),
+        expect:{ output:'for { } 0for { } 1', variables:['i = 1', 'j = 2'], warningMax:0 }
+      },
+      {
+        name:'Stage1 壊れた子forの波かっこで親外へ解析を拡張しない',
+        code:makeMainCode(`    int i = 9;\n    int j = 8;\n    for(i = 0; i < 1; i++){\n        for(j = 0; j < 1; j++){\n            printf("WRONG-BROKEN-CHILD");\n    }\n    printf("WRONG-AFTER-BROKEN");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG'], variablesExclude:['i =', 'j ='], warningMin:1, hintsInclude:['main関数の終わりを確認', '波かっこの数を確認'], stepCounts:{ 'for文の初期化':0 } }
+      },
+      {
+        name:'Stage1 2階層目forのreturnをmainまで伝播',
+        code:makeMainCode(`    int i;\n    int j;\n    for(i = 0; i < 2; i++){\n        printf("A");\n        for(j = 0; j < 2; j++){\n            printf("B");\n            return 0;\n            printf("WRONG-INNER");\n        }\n        printf("WRONG-PARENT");\n    }\n    printf("WRONG-MAIN");`),
+        expect:{ output:'AB', outputExcludes:['WRONG'], variables:['i = 0', 'j = 0'], warningMax:0, executedExcludes:['printf("WRONG-INNER', 'printf("WRONG-PARENT', 'printf("WRONG-MAIN'] }
+      },
+      {
+        name:'Stage1 3階層目forのreturnをmainまで伝播',
+        code:makeMainCode(`    int i;\n    int j;\n    int k;\n    for(i = 0; i < 2; i++){\n        for(j = 0; j < 2; j++){\n            for(k = 0; k < 2; k++){\n                printf("C");\n                return 0;\n                printf("WRONG-DEEPEST");\n            }\n            printf("WRONG-MIDDLE");\n        }\n        printf("WRONG-OUTER");\n    }\n    printf("WRONG-MAIN");`),
+        expect:{ output:'C', outputExcludes:['WRONG'], variables:['i = 0', 'j = 0', 'k = 0'], warningMax:0, executedExcludes:['printf("WRONG-DEEPEST', 'printf("WRONG-MIDDLE', 'printf("WRONG-OUTER', 'printf("WRONG-MAIN'] }
+      },
+      {
+        name:'Stage1 子forの実行時エラーをmainまで伝播',
+        code:makeMainCode(`    int i;\n    int j;\n    int value = 5;\n    for(i = 0; i < 2; i++){\n        for(j = 0; j < 2; j++){\n            value = 10 / (j - j);\n            printf("WRONG-INNER-ERROR");\n        }\n        printf("WRONG-PARENT-ERROR");\n    }\n    printf("WRONG-MAIN-ERROR");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG'], variables:['i = 0', 'j = 0', 'value = 5'], warningMin:1, hintsInclude:['0で割ろうとしています'], executedExcludes:['printf("WRONG-INNER-ERROR', 'printf("WRONG-PARENT-ERROR', 'printf("WRONG-MAIN-ERROR'] }
+      },
+      {
+        name:'Stage1 2重for安全上限・20×25の累計500回は正常終了',
+        code:makeMainCode(`    int i;\n    int j;\n    int count = 0;\n    for(i = 0; i < 20; i++){\n        for(j = 0; j < 25; j++){\n            count++;\n        }\n    }\n    printf("%d", count);\n    return 0;`),
+        expect:{ output:'500', variables:['i = 20', 'j = 25', 'count = 500'], warningMax:0, hintsExclude:['安全上限'] }
+      },
+      {
+        name:'Stage1 2重for安全上限・21×25は内側累計501回目直前で停止',
+        code:makeMainCode(`    int i;\n    int j;\n    int count = 0;\n    for(i = 0; i < 21; i++){\n        for(j = 0; j < 25; j++){\n            count++;\n        }\n    }\n    printf("WRONG-AFTER-2D-LIMIT");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG'], variables:['count = 500', 'i = 20', 'j = 0'], warningMin:1, hintsInclude:['安全上限'], stepsInclude:['【外側for：21回目｜内側for：1周目へ進む条件判定】'], stepsExclude:['内側for：501周目'], executedExcludes:['printf("WRONG-AFTER-2D-LIMIT'] }
+      },
+      {
+        name:'Stage1 3重for安全上限・5×5×20の最奥累計500回は正常終了',
+        code:makeMainCode(`    int i;\n    int j;\n    int k;\n    int count = 0;\n    for(i = 0; i < 5; i++){\n        for(j = 0; j < 5; j++){\n            for(k = 0; k < 20; k++){\n                count++;\n            }\n        }\n    }\n    printf("%d", count);\n    return 0;`),
+        expect:{ output:'500', variables:['i = 5', 'j = 5', 'k = 20', 'count = 500'], warningMax:0, hintsExclude:['安全上限'] }
+      },
+      {
+        name:'Stage1 3重for安全上限・5×5×21は最奥累計501回目直前で停止',
+        code:makeMainCode(`    int i;\n    int j;\n    int k;\n    int count = 0;\n    for(i = 0; i < 5; i++){\n        for(j = 0; j < 5; j++){\n            for(k = 0; k < 21; k++){\n                count++;\n            }\n        }\n    }\n    printf("WRONG-AFTER-3D-LIMIT");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG'], variables:['count = 500', 'i = 4', 'j = 3', 'k = 17'], warningMin:1, hintsInclude:['安全上限'], stepsInclude:['【外側for：5回目｜内側for：4周目｜最奥for：18周目へ進む条件判定】'], stepsExclude:['最奥for：501周目'], executedExcludes:['printf("WRONG-AFTER-3D-LIMIT'] }
+      },
+      {
+        name:'Stage1 累計500回到達後も次回条件偽なら正常終了',
+        code:makeMainCode(`    int i;\n    int j;\n    int count = 0;\n    for(i = 0; i < 2; i++){\n        for(j = 0; j < 500 - i * 500; j++){\n            count++;\n        }\n    }\n    printf("%d", count);\n    return 0;`),
+        expect:{ output:'500', variables:['i = 2', 'j = 0', 'count = 500'], warningMax:0, hintsExclude:['安全上限'] }
+      },
+      {
+        name:'Stage1 兄弟forの累計500回安全上限は独立',
+        code:makeMainCode(`    int i;\n    int j;\n    int k;\n    int count = 0;\n    for(i = 0; i < 1; i++){\n        for(j = 0; j < 500; j++){\n            count++;\n        }\n        for(k = 0; k < 500; k++){\n            count++;\n        }\n    }\n    printf("%d", count);\n    return 0;`),
+        expect:{ output:'1000', variables:['i = 1', 'j = 500', 'k = 500', 'count = 1000'], warningMax:0, hintsExclude:['安全上限'] }
+      },
+      {
+        name:'Stage2A 単独for 3回は従来表示',
+        code:makeMainCode(`    int i;\n    for(i = 0; i < 3; i++){\n        printf("%d", i);\n    }\n    return 0;`),
+        expect:{
+          output:'012',
+          variables:['i = 3'],
+          warningMax:0,
+          stepsInclude:['【1回目】', '【終了判定】', '【for終了】'],
+          stepsExclude:['外側for', '内側for', '最奥for']
+        }
+      },
+      {
+        name:'Stage2A 2重forに外側・内側ラベルを表示',
+        code:makeMainCode(`    int i;\n    int j;\n    for(i = 0; i < 2; i++){\n        for(j = 0; j < 3; j++){\n            printf("%d%d", i, j);\n        }\n    }\n    return 0;`),
+        expect:{
+          output:'000102101112',
+          variables:['i = 2', 'j = 3'],
+          warningMax:0,
+          stepsInclude:['【外側for：1回目】', '【外側for：1回目｜内側for：1周目】', '【外側for：2回目｜内側for：終了判定】', '【外側for：2回目｜内側for：終了】', '【外側for：終了判定】', '【外側for：終了】', '内側forの繰り返しはここで終了します。外側forの2回目の続きに戻ります。'],
+          stepsExclude:['最奥for']
+        }
+      },
+      {
+        name:'Stage2A 3重forに外側・内側・最奥ラベルを表示',
+        code:makeMainCode(`    int i;\n    int j;\n    int k;\n    for(i = 0; i < 2; i++){\n        for(j = 0; j < 2; j++){\n            for(k = 0; k < 2; k++){\n                printf("%d%d%d", i, j, k);\n            }\n        }\n    }\n    return 0;`),
+        expect:{
+          output:'000001010011100101110111',
+          variables:['i = 2', 'j = 2', 'k = 2'],
+          warningMax:0,
+          stepsInclude:['【外側for：1回目】', '【外側for：1回目｜内側for：1周目】', '【外側for：1回目｜内側for：1周目｜最奥for：1周目】', '【外側for：2回目｜内側for：2周目｜最奥for：終了判定】', '【外側for：2回目｜内側for：2周目｜最奥for：終了】', '最奥forの繰り返しはここで終了します。内側forの2周目の続きに戻ります。']
+        }
+      },
+      {
+        name:'Stage2A 内側forの表示反復番号は親反復ごとに再開始',
+        code:makeMainCode(`    int i;\n    int j;\n    for(i = 0; i < 2; i++){\n        for(j = 0; j < 3; j++){\n            printf("%d%d", i, j);\n        }\n    }\n    return 0;`),
+        expect:{
+          output:'000102101112',
+          variables:['i = 2', 'j = 3'],
+          warningMax:0,
+          stepsInOrder:['【外側for：1回目】', '【外側for：1回目｜内側for：1周目】', '【外側for：1回目｜内側for：2周目】', '【外側for：1回目｜内側for：3周目】', '【外側for：2回目】', '【外側for：2回目｜内側for：1周目】', '【外側for：2回目｜内側for：2周目】', '【外側for：2回目｜内側for：3周目】']
+        }
+      },
+      {
+        name:'Stage2A 内側for 0反復は初回条件と終了だけを表示',
+        code:makeMainCode(`    int i;\n    int j = 9;\n    for(i = 0; i < 1; i++){\n        for(j = 0; j < 0; j++){\n            printf("WRONG-INNER-ZERO");\n        }\n    }\n    return 0;`),
+        expect:{
+          output:'出力はまだありません。',
+          outputExcludes:['WRONG-INNER-ZERO'],
+          variables:['i = 1', 'j = 0'],
+          warningMax:0,
+          stepsInclude:['【外側for：1回目｜内側for：最初の条件判定／終了判定】', '【外側for：1回目｜内側for：終了】', '内側forの繰り返しはここで終了します。外側forの1回目の続きに戻ります。'],
+          stepsExclude:['内側for：1周目'],
+          executedExcludes:['printf("WRONG-INNER-ZERO']
+        }
+      },
+      {
+        name:'Stage2A 外側for 0反復でもソース構造のラベルを表示',
+        code:makeMainCode(`    int i = 9;\n    int j = 8;\n    for(i = 0; i < 0; i++){\n        for(j = 0; j < 2; j++){\n            printf("WRONG-OUTER-ZERO");\n        }\n    }\n    return 0;`),
+        expect:{
+          output:'出力はまだありません。',
+          outputExcludes:['WRONG-OUTER-ZERO'],
+          variables:['i = 0', 'j = 8'],
+          warningMax:0,
+          stepsInclude:['【外側for：最初の条件判定／終了判定】', '【外側for：終了】'],
+          stepsExclude:['【外側for：1回目】', '内側for：1周目', '続きに戻ります'],
+          executedExcludes:['printf("WRONG-OUTER-ZERO']
+        }
+      },
+      {
+        name:'Stage2A 単独forと入れ子forの表示判定は独立',
+        code:makeMainCode(`    int i;\n    int j;\n    for(i = 0; i < 1; i++){\n        printf("S");\n    }\n    for(i = 0; i < 1; i++){\n        for(j = 0; j < 1; j++){\n            printf("N");\n        }\n    }\n    return 0;`),
+        expect:{
+          output:'SN',
+          variables:['i = 1', 'j = 1'],
+          warningMax:0,
+          analysisByLineIncludes:{ '6':['【1回目】', '【終了判定】'], '9':['【外側for：1回目】'], '10':['【外側for：1回目｜内側for：1周目】'] },
+          analysisByLineExcludes:{ '6':['外側for', '内側for', '最奥for'] }
+        }
+      },
+      {
+        name:'Stage2A 独立した2本の入れ子forで階層状態を引き継がない',
+        code:makeMainCode(`    int i;\n    int j;\n    int k;\n    int a;\n    int b;\n    for(i = 0; i < 1; i++){\n        for(j = 0; j < 1; j++){\n            for(k = 0; k < 1; k++){\n                printf("X");\n            }\n        }\n    }\n    for(a = 0; a < 1; a++){\n        for(b = 0; b < 2; b++){\n            printf("Y");\n        }\n    }\n    return 0;`),
+        expect:{
+          output:'XYY',
+          variables:['i = 1', 'j = 1', 'k = 1', 'a = 1', 'b = 2'],
+          warningMax:0,
+          analysisByLineIncludes:{ '9':['【外側for：1回目】'], '10':['【外側for：1回目｜内側for：1周目】'], '11':['【外側for：1回目｜内側for：1周目｜最奥for：1周目】'], '16':['【外側for：1回目】'], '17':['【外側for：1回目｜内側for：1周目】'] },
+          analysisByLineExcludes:{ '17':['最奥for'] }
+        }
+      },
+      {
+        name:'Stage2A 入れ子forの同一説明にprefixを二重付与しない',
+        code:makeMainCode(`    int i;\n    int j;\n    for(i = 0; i < 1; i++){\n        for(j = 0; j < 1; j++){\n            printf("N");\n        }\n    }\n    return 0;`),
+        expect:{
+          output:'N',
+          variables:['i = 1', 'j = 1'],
+          warningMax:0,
+          analysisByLineIncludes:{ '7':['【外側for：1回目｜内側for：1周目】'], '8':['【外側for：1回目｜内側for：1周目】'] },
+          analysisByLineExcludes:{ '7':['【内側for：1周目】', '【1回目】'], '8':['【内側for：1周目】', '【1回目】'] },
+          stepsExclude:['【内側for：1周目】', '外側for・', '内側for・', '最奥for・']
+        }
+      },
+      {
+        name:'Stage2B 2×7は内側forの各呼び出しだけを圧縮',
+        code:makeMainCode(`    int i;\n    int j;\n    int count = 0;\n    for(i = 0; i < 2; i++){\n        for(j = 0; j < 7; j++){\n            count++;\n        }\n    }\n    printf("%d", count);\n    return 0;`),
+        expect:{
+          output:'14',
+          variables:['i = 2', 'j = 7', 'count = 14'],
+          warningMax:0,
+          stepsInclude:['【外側for：1回目】', '【外側for：1回目｜内側for：省略】', '4～6周目の反復を省略しました', '【外側for：1回目｜内側for：7周目】'],
+          stepsExclude:['外側for：省略', '最奥for：省略'],
+          stepCounts:{ '内側for：省略】':2, '内側for：終了】':2 },
+          analysisByLineCounts:{ '8':{ '内側for：省略】':2 }, '9':{ '内側for：省略】':2 } }
+        }
+      },
+      {
+        name:'Stage2B 7×2は外側forだけを圧縮し子説明を同時に省略',
+        code:makeMainCode(`    int i;\n    int j;\n    int count = 0;\n    for(i = 0; i < 7; i++){\n        for(j = 0; j < 2; j++){\n            count++;\n        }\n    }\n    printf("%d", count);\n    return 0;`),
+        expect:{
+          output:'14',
+          variables:['i = 7', 'j = 2', 'count = 14'],
+          warningMax:0,
+          stepsInclude:['【外側for：省略】', '4～6回目の反復を省略しました', '【外側for：7回目】'],
+          stepsExclude:['内側for：省略', '最奥for：省略'],
+          stepCounts:{ '【外側for：省略】':1, '内側for：終了】':4, 'for文の初期化':5, 'for文の条件':17, 'for文の更新':12 },
+          analysisByLineCounts:{ '7':{ '【外側for：省略】':1 }, '10':{ '内側for：終了】':4 } }
+        }
+      },
+      {
+        name:'Stage2B 10×10は保持された外側反復内で内側forを独立圧縮',
+        code:makeMainCode(`    int i;\n    int j;\n    int count = 0;\n    for(i = 0; i < 10; i++){\n        for(j = 0; j < 10; j++){\n            count++;\n        }\n    }\n    printf("%d", count);\n    return 0;`),
+        expect:{
+          output:'100',
+          variables:['i = 10', 'j = 10', 'count = 100'],
+          warningMax:0,
+          stepsInclude:['【外側for：省略】', '4～9回目の反復を省略しました', '内側for：省略】', '4～9周目の反復を省略しました', '【外側for：10回目】', '外側for：10回目｜内側for：10周目】'],
+          stepsExclude:['最奥for：省略'],
+          stepCounts:{ '【外側for：省略】':1, '内側for：省略】':4, '内側for：終了】':4, 'for文の初期化':5, 'for文の条件':25, 'for文の更新':20 },
+          analysisByLineCounts:{ '7':{ '【外側for：省略】':1 }, '8':{ '【外側for：省略】':1, '内側for：省略】':4 } }
+        }
+      },
+      {
+        name:'Stage2B 保持された親反復で前処理・子for・後処理の順序を維持',
+        code:makeMainCode(`    int i;\n    int j;\n    for(i = 0; i < 7; i++){\n        printf("A");\n        for(j = 0; j < 7; j++){\n            printf("I");\n        }\n        printf("B");\n    }\n    return 0;`),
+        expect:{
+          output:'AIIIIIIIBAIIIIIIIBAIIIIIIIBAIIIIIIIBAIIIIIIIBAIIIIIIIBAIIIIIIIB',
+          variables:['i = 7', 'j = 7'],
+          warningMax:0,
+          stepsInOrder:['【外側for：1回目】', '画面に「A', '【外側for：1回目｜内側for：1周目】', '【外側for：1回目｜内側for：省略】', '4～6周目の反復を省略しました', '【外側for：1回目｜内側for：7周目】', '画面に「B', '【外側for：省略】', '4～6回目の反復を省略しました', '【外側for：7回目】', '画面に「A', '画面に「B'],
+          stepCounts:{ '画面に「A':4, '画面に「B':4, '内側for：省略】':4 }
+        }
+      },
+      {
+        name:'Stage2B 2×2×7は最奥forの各呼び出しだけを圧縮',
+        code:makeMainCode(`    int i;\n    int j;\n    int k;\n    int count = 0;\n    for(i = 0; i < 2; i++){\n        for(j = 0; j < 2; j++){\n            for(k = 0; k < 7; k++){\n                count++;\n            }\n        }\n    }\n    printf("%d", count);\n    return 0;`),
+        expect:{
+          output:'28',
+          variables:['i = 2', 'j = 2', 'k = 7', 'count = 28'],
+          warningMax:0,
+          stepsExclude:['外側for：省略', '内側for：省略'],
+          stepCounts:{ '最奥for：省略】':4, '最奥for：終了】':4 },
+          analysisByLineCounts:{ '10':{ '最奥for：省略】':4 } }
+        }
+      },
+      {
+        name:'Stage2B 2×7×2は内側forだけを圧縮し孫説明を同時に省略',
+        code:makeMainCode(`    int i;\n    int j;\n    int k;\n    int count = 0;\n    for(i = 0; i < 2; i++){\n        for(j = 0; j < 7; j++){\n            for(k = 0; k < 2; k++){\n                count++;\n            }\n        }\n    }\n    printf("%d", count);\n    return 0;`),
+        expect:{
+          output:'28',
+          variables:['i = 2', 'j = 7', 'k = 2', 'count = 28'],
+          warningMax:0,
+          stepsExclude:['外側for：省略', '最奥for：省略'],
+          stepCounts:{ '内側for：省略】':2, '最奥for：終了】':8 },
+          analysisByLineCounts:{ '9':{ '内側for：省略】':2 }, '12':{ '最奥for：終了】':8 } }
+        }
+      },
+      {
+        name:'Stage2B 7×2×2は外側forだけを圧縮し子・孫説明を同時に省略',
+        code:makeMainCode(`    int i;\n    int j;\n    int k;\n    int count = 0;\n    for(i = 0; i < 7; i++){\n        for(j = 0; j < 2; j++){\n            for(k = 0; k < 2; k++){\n                count++;\n            }\n        }\n    }\n    printf("%d", count);\n    return 0;`),
+        expect:{
+          output:'28',
+          variables:['i = 7', 'j = 2', 'k = 2', 'count = 28'],
+          warningMax:0,
+          stepsExclude:['内側for：省略', '最奥for：省略'],
+          stepCounts:{ '【外側for：省略】':1, '内側for：終了】':4, '最奥for：終了】':8 },
+          analysisByLineCounts:{ '8':{ '【外側for：省略】':1 }, '13':{ '内側for：終了】':4 }, '12':{ '最奥for：終了】':8 } }
+        }
+      },
+      {
+        name:'Stage2B 代表正常系7×7×7は3階層すべてを再帰圧縮',
+        code:makeMainCode(`    int i;\n    int j;\n    int k;\n    int count = 0;\n    for(i = 0; i < 7; i++){\n        for(j = 0; j < 7; j++){\n            for(k = 0; k < 7; k++){\n                count++;\n            }\n        }\n    }\n    printf("%d", count);\n    return 0;`),
+        expect:{
+          output:'343',
+          variables:['i = 7', 'j = 7', 'k = 7', 'count = 343'],
+          warningMax:0,
+          hintsExclude:['安全上限'],
+          stepCounts:{ '【外側for：省略】':1, '内側for：省略】':4, '最奥for：省略】':16, '【外側for：終了】':1, '内側for：終了】':4, '最奥for：終了】':16, 'for文の初期化':21, 'for文の条件':105, 'for文の更新':84 },
+          analysisByLineCounts:{ '8':{ '【外側for：省略】':1 }, '9':{ '内側for：省略】':4 }, '10':{ '最奥for：省略】':16 } }
+        }
+      },
+      {
+        name:'Stage2B 同一親内の兄弟子forは省略範囲を独立管理',
+        code:makeMainCode(`    int i;\n    int j;\n    int k;\n    int count = 0;\n    for(i = 0; i < 1; i++){\n        for(j = 0; j < 7; j++){\n            count++;\n        }\n        for(k = 0; k < 10; k++){\n            count++;\n        }\n    }\n    printf("%d", count);\n    return 0;`),
+        expect:{
+          output:'17',
+          variables:['i = 1', 'j = 7', 'k = 10', 'count = 17'],
+          warningMax:0,
+          stepCounts:{ '内側for：省略】':2, '4～6周目の反復を省略しました':1, '4～9周目の反復を省略しました':1, '内側for：終了】':2 }
+        }
+      },
+      {
+        name:'Stage2B 独立した入れ子forツリー間で圧縮履歴を共有しない',
+        code:makeMainCode(`    int i;\n    int j;\n    int a;\n    int b;\n    int count = 0;\n    for(i = 0; i < 2; i++){\n        for(j = 0; j < 7; j++){\n            count++;\n        }\n    }\n    for(a = 0; a < 7; a++){\n        for(b = 0; b < 2; b++){\n            count++;\n        }\n    }\n    printf("%d", count);\n    return 0;`),
+        expect:{
+          output:'28',
+          variables:['i = 2', 'j = 7', 'a = 7', 'b = 2', 'count = 28'],
+          warningMax:0,
+          stepCounts:{ '【外側for：省略】':1, '内側for：省略】':2, '内側for：終了】':6 }
+        }
+      },
+      {
+        name:'Stage2C 内側forの8回目returnを停止反復として保持',
+        code:makeMainCode(`    int i;\n    int j;\n    int count = 0;\n    for(i = 0; i < 1; i++){\n        for(j = 0; j < 10; j++){\n            count++;\n            if(j == 7){\n                return 0;\n            }\n        }\n        printf("WRONG-PARENT");\n    }\n    printf("WRONG-MAIN");`),
+        expect:{
+          output:'出力はまだありません。',
+          outputExcludes:['WRONG'],
+          variables:['i = 0', 'j = 7', 'count = 8'],
+          warningMax:0,
+          stepsInOrder:['【外側for：1回目】', '【外側for：1回目｜内側for：1周目】', '【外側for：1回目｜内側for：2周目】', '【外側for：1回目｜内側for：3周目】', '【外側for：1回目｜内側for：省略】', '4～7周目の反復を省略しました', '【外側for：1回目｜内側for：8周目】', 'プログラムを終了します。'],
+          stepsExclude:['内側for：9周目', '内側for：終了判定', '内側for：終了', '外側for：終了判定', '外側for：終了', '続きに戻ります'],
+          stepCounts:{ 'プログラムを終了します。':1 },
+          analysisByLineCounts:{ '8':{ '【外側for：1回目｜内側for：8周目】':1 } },
+          executedExcludes:['printf("WRONG-PARENT', 'printf("WRONG-MAIN']
+        }
+      },
+      {
+        name:'Stage2C 3重for深部returnで外側8回目までの経路を保持',
+        code:makeMainCode(`    int i;\n    int j;\n    int k;\n    int count = 0;\n    for(i = 0; i < 10; i++){\n        for(j = 0; j < 5; j++){\n            for(k = 0; k < 1; k++){\n                count++;\n                if(i * 100 + j * 10 + k == 740){\n                    return 0;\n                }\n            }\n        }\n    }\n    printf("WRONG-MAIN");`),
+        expect:{
+          output:'出力はまだありません。',
+          outputExcludes:['WRONG'],
+          variables:['i = 7', 'j = 4', 'k = 0', 'count = 40'],
+          warningMax:0,
+          stepsInOrder:['【外側for：1回目】', '【外側for：2回目】', '【外側for：3回目】', '【外側for：省略】', '4～7回目の反復を省略しました', '【外側for：8回目】', '【外側for：8回目｜内側for：5周目】', '【外側for：8回目｜内側for：5周目｜最奥for：1周目】', 'プログラムを終了します。'],
+          stepsExclude:['続きに戻ります。プログラムを終了します。'],
+          stepCounts:{ '【外側for：省略】':1, 'プログラムを終了します。':1, '【外側for：終了】':0, '内側for：終了】':3, '最奥for：終了】':19 },
+          analysisByLineIncludes:{ '8':['【外側for：8回目】'], '9':['【外側for：8回目｜内側for：5周目】'], '10':['【外側for：8回目｜内側for：5周目｜最奥for：1周目】'], '13':['【外側for：8回目｜内側for：5周目｜最奥for：1周目】'] },
+          executedExcludes:['printf("WRONG-MAIN']
+        }
+      },
+      {
+        name:'Stage2C 内側forの8回目実行時エラーを保持',
+        code:makeMainCode(`    int i;\n    int j;\n    int value = 0;\n    for(i = 0; i < 1; i++){\n        for(j = 0; j < 10; j++){\n            printf("%d", j);\n            value = 10 / (7 - j);\n        }\n    }\n    printf("WRONG-MAIN");\n    return 0;`),
+        expect:{
+          output:'01234567',
+          outputExcludes:['WRONG'],
+          variables:['i = 0', 'j = 7', 'value = 10'],
+          warningMin:1,
+          hintsInclude:['0で割ろうとしています'],
+          stepsInOrder:['【外側for：1回目】', '【外側for：1回目｜内側for：1周目】', '【外側for：1回目｜内側for：2周目】', '【外側for：1回目｜内側for：3周目】', '【外側for：1回目｜内側for：省略】', '4～7周目の反復を省略しました', '【外側for：1回目｜内側for：8周目】', '【外側for：1回目｜内側for：実行時エラー】'],
+          stepsExclude:['内側for：終了判定', '内側for：終了', '外側for：終了', '続きに戻ります'],
+          stepCounts:{ '内側for：実行時エラー】':1 },
+          analysisByLineCounts:{ '8':{ '【外側for：1回目｜内側for：8周目】':1 }, '10':{ '内側for：実行時エラー】':1 } },
+          executedExcludes:['printf("WRONG-MAIN']
+        }
+      },
+      {
+        name:'Stage2C 内側for条件評価エラーの階層と直前反復を保持',
+        code:makeMainCode(`    int i;\n    int j;\n    int count = 0;\n    for(i = 0; i < 1; i++){\n        for(j = 0; 10 / (7 - j) > 0; j++){\n            count++;\n        }\n    }\n    printf("WRONG-MAIN");\n    return 0;`),
+        expect:{
+          output:'出力はまだありません。',
+          outputExcludes:['WRONG'],
+          variables:['i = 0', 'j = 7', 'count = 7'],
+          warningMin:1,
+          hintsInclude:['0で割ろうとしています'],
+          stepsInOrder:['【外側for：1回目｜内側for：1周目】', '【外側for：1回目｜内側for：2周目】', '【外側for：1回目｜内側for：3周目】', '【外側for：1回目｜内側for：省略】', '4～6周目の反復を省略しました', '【外側for：1回目｜内側for：7周目】', '【外側for：1回目｜内側for：条件判定エラー】'],
+          stepsExclude:['内側for：8周目', '内側for：終了判定', '内側for：終了', '外側for：終了', '続きに戻ります'],
+          stepCounts:{ '内側for：条件判定エラー】':1 },
+          analysisByLineCounts:{ '8':{ '内側for：条件判定エラー】':1 } },
+          executedExcludes:['printf("WRONG-MAIN']
+        }
+      },
+      {
+        name:'Stage2C 内側forの8回目更新評価エラーを保持',
+        code:makeMainCode(`    int i;\n    int j;\n    int count = 0;\n    for(i = 0; i < 1; i++){\n        for(j = 0; j < 10; j = j + 1 + 0 / (7 - j)){\n            count++;\n        }\n    }\n    printf("WRONG-MAIN");\n    return 0;`),
+        expect:{
+          output:'出力はまだありません。',
+          outputExcludes:['WRONG'],
+          variables:['i = 0', 'j = 7', 'count = 8'],
+          warningMin:1,
+          hintsInclude:['0で割ろうとしています'],
+          stepsInOrder:['【外側for：1回目｜内側for：1周目】', '【外側for：1回目｜内側for：2周目】', '【外側for：1回目｜内側for：3周目】', '【外側for：1回目｜内側for：省略】', '4～7周目の反復を省略しました', '【外側for：1回目｜内側for：8周目】', '【外側for：1回目｜内側for：更新エラー】'],
+          stepsExclude:['内側for：終了判定', '内側for：終了', '外側for：終了', '続きに戻ります'],
+          stepCounts:{ '内側for：更新エラー】':1 },
+          analysisByLineCounts:{ '8':{ '内側for：更新エラー】':1 } },
+          executedExcludes:['printf("WRONG-MAIN']
+        }
+      },
+      {
+        name:'Stage2C 入れ子for累計500回で条件偽なら正常終了',
+        code:makeMainCode(`    int i;\n    int j;\n    int count = 0;\n    for(i = 0; i < 20; i++){\n        for(j = 0; j < 25; j++){\n            count++;\n        }\n    }\n    printf("%d", count);\n    return 0;`),
+        expect:{
+          output:'500',
+          variables:['i = 20', 'j = 25', 'count = 500'],
+          warningMax:0,
+          hintsExclude:['安全上限'],
+          stepsInclude:['内側for：25周目】', '内側for：終了】', '【外側for：終了】'],
+          stepsExclude:['安全上限停止', '501周目へ進む条件判定', '内側for：501周目']
+        }
+      },
+      {
+        name:'Stage2C 30×17の累計500→501は内側局所8回目条件で停止',
+        code:makeMainCode(`    int i;\n    int j;\n    int count = 0;\n    for(i = 0; i < 30; i++){\n        for(j = 0; j < 17; j++){\n            count++;\n        }\n    }\n    printf("WRONG-MAIN");\n    return 0;`),
+        expect:{
+          output:'出力はまだありません。',
+          outputExcludes:['WRONG'],
+          variables:['i = 29', 'j = 7', 'count = 500'],
+          warningMin:1,
+          hintsInclude:['累計 500 回実行済み', '累計 501 回目', 'C言語自体の制限ではありません'],
+          stepsInOrder:['【外側for：1回目】', '【外側for：2回目】', '【外側for：3回目】', '【外側for：省略】', '4～29回目の反復を省略しました', '【外側for：30回目】', '【外側for：30回目｜内側for：1周目】', '【外側for：30回目｜内側for：2周目】', '【外側for：30回目｜内側for：3周目】', '【外側for：30回目｜内側for：省略】', '4～6周目の反復を省略しました', '【外側for：30回目｜内側for：7周目】', '【外側for：30回目｜内側for：8周目へ進む条件判定】', '【外側for：30回目｜内側for：安全上限停止】'],
+          stepsExclude:['内側for：501周目', '【501回目へ進む条件判定】', '【外側for：終了】'],
+          stepCounts:{ '内側for：安全上限停止】':1, '内側for：終了】':3 },
+          analysisByLineCounts:{ '8':{ '内側for：8周目へ進む条件判定】':1, '内側for：安全上限停止】':1 } },
+          executedExcludes:['printf("WRONG-MAIN']
+        }
+      },
+      {
+        name:'Stage2C 累計500回後の次回子forが0反復なら正常終了',
+        code:makeMainCode(`    int i;\n    int j;\n    int count = 0;\n    for(i = 0; i < 2; i++){\n        for(j = 0; j < 500 - i * 500; j++){\n            count++;\n        }\n    }\n    printf("%d", count);\n    return 0;`),
+        expect:{
+          output:'500',
+          variables:['i = 2', 'j = 0', 'count = 500'],
+          warningMax:0,
+          hintsExclude:['安全上限'],
+          stepsInclude:['【外側for：1回目｜内側for：500周目】', '【外側for：2回目｜内側for：最初の条件判定／終了判定】', '【外側for：終了】', '内側forの繰り返しはここで終了します。外側forの2回目の続きに戻ります。'],
+          stepsExclude:['内側for：安全上限停止', '内側for：501周目'],
+          stepCounts:{ '内側for：終了】':2 }
+        }
+      },
+      {
+        name:'Stage2C 3重for深部安全停止で外側8・内側7・最奥5条件の経路を保持',
+        code:makeMainCode(`    int i;\n    int j;\n    int k;\n    int count = 0;\n    for(i = 0; i < 8; i++){\n        for(j = 0; j < 8; j++){\n            for(k = 0; k < 8; k++){\n                count++;\n            }\n        }\n    }\n    printf("WRONG-MAIN");\n    return 0;`),
+        expect:{
+          output:'出力はまだありません。',
+          outputExcludes:['WRONG'],
+          variables:['i = 7', 'j = 6', 'k = 4', 'count = 500'],
+          warningMin:1,
+          hintsInclude:['累計 500 回実行済み', '累計 501 回目', 'C言語自体の制限ではありません'],
+          stepsInOrder:['【外側for：1回目】', '【外側for：2回目】', '【外側for：3回目】', '【外側for：省略】', '4～7回目の反復を省略しました', '【外側for：8回目】', '【外側for：8回目｜内側for：1周目】', '【外側for：8回目｜内側for：2周目】', '【外側for：8回目｜内側for：3周目】', '【外側for：8回目｜内側for：省略】', '4～6周目の反復を省略しました', '【外側for：8回目｜内側for：7周目】', '【外側for：8回目｜内側for：7周目｜最奥for：4周目】', '【外側for：8回目｜内側for：7周目｜最奥for：5周目へ進む条件判定】', '【外側for：8回目｜内側for：7周目｜最奥for：安全上限停止】'],
+          stepsExclude:['最奥for：501周目', '【501回目へ進む条件判定】', '【外側for：終了】'],
+          stepCounts:{ '最奥for：安全上限停止】':1, '【外側for：終了】':0, '内側for：終了】':3, '最奥for：終了】':15 },
+          analysisByLineIncludes:{ '8':['【外側for：8回目】'], '9':['【外側for：8回目｜内側for：7周目】'], '10':['【外側for：8回目｜内側for：7周目｜最奥for：5周目へ進む条件判定】'] },
+          analysisByLineCounts:{ '10':{ '最奥for：安全上限停止】':1 } },
+          executedExcludes:['printf("WRONG-MAIN']
+        }
+      },
+      {
+        name:'Ver.0.8 UX 2重forの現在地と親反復への復帰を両表示で案内',
+        code:makeMainCode(`    int i;
+    int j;
+    for(i = 0; i < 2; i++){
+        for(j = 0; j < 2; j++){
+            printf("%d%d", i, j);
+        }
+    }
+    return 0;`),
+        expect:{
+          output:'00011011',
+          variables:['i = 2', 'j = 2'],
+          warningMax:0,
+          stepsInclude:['【外側for：2回目｜内側for：1周目】', '【外側for：2回目｜内側for：2周目】', '【外側for：2回目｜内側for：終了判定】', '【外側for：2回目｜内側for：終了】', '内側forの繰り返しはここで終了します。外側forの2回目の続きに戻ります。'],
+          stepsExclude:['【内側for：1周目】', '外側for・', '内側for・', '最奥for・'],
+          analysisByLineIncludes:{ '7':['【外側for：2回目｜内側for：終了判定】'], '9':['【外側for：2回目｜内側for：終了】', '外側forの2回目の続きに戻ります。'] }
+        }
+      },
+      {
+        name:'Ver.0.8 UX 3重forの最奥まで現在地と直近親への復帰を案内',
+        code:makeMainCode(`    int i;
+    int j;
+    int k;
+    for(i = 0; i < 2; i++){
+        for(j = 0; j < 2; j++){
+            for(k = 0; k < 2; k++){
+                printf("%d%d%d", i, j, k);
+            }
+        }
+    }
+    return 0;`),
+        expect:{
+          output:'000001010011100101110111',
+          variables:['i = 2', 'j = 2', 'k = 2'],
+          warningMax:0,
+          stepsInclude:['【外側for：2回目｜内側for：1周目｜最奥for：1周目】', '【外側for：2回目｜内側for：1周目｜最奥for：2周目】', '【外側for：2回目｜内側for：1周目｜最奥for：終了判定】', '【外側for：2回目｜内側for：1周目｜最奥for：終了】', '最奥forの繰り返しはここで終了します。内側forの1周目の続きに戻ります。'],
+          stepsExclude:['【最奥for：1周目】', '外側for・', '内側for・', '最奥for・'],
+          analysisByLineIncludes:{ '9':['【外側for：2回目｜内側for：1周目｜最奥for：終了判定】'], '11':['【外側for：2回目｜内側for：1周目｜最奥for：終了】', '内側forの1周目の続きに戻ります。'] }
+        }
       },
       {
         name:'for本体のscanfを事前検証して入力を消費しない',

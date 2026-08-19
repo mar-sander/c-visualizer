@@ -1,12 +1,12 @@
 const samples = {
   basic: `#include <stdio.h>\n\nint main(void){\n    int a = 3;\n    int b = 5;\n    int c = a + b;\n    printf("%d\\n", c);\n    return 0;\n}`,
-  calc: `#include <stdio.h>\n\nint main(void){\n    int price = 120;\n    int count = 4;\n    int total = price * count;\n    int change = 1000 - total;\n    printf("合計:%d円\\n", total);\n    printf("おつり:%d円\\n", change);\n    return 0;\n}`,
   assign: `#include <stdio.h>\n\nint main(void){\n    int score = 60;\n    score = score + 15;\n    printf("%d\\n", score);\n    return 0;\n}`,
   ifSimple: `#include <stdio.h>\n\nint main(void){\n    int score = 78;\n    if(score >= 60){\n        printf("合格です\\n");\n    }\n    return 0;\n}`,
   ifElse: `#include <stdio.h>\n\nint main(void){\n    int score = 45;\n    if(score >= 60){\n        printf("合格です\\n");\n    }else{\n        printf("もう一度挑戦\\n");\n    }\n    return 0;\n}`,
   nestedIf: `#include <stdio.h>\n\nint main(void){\n    int score = 75;\n\n    if(score >= 60){\n        if(score >= 80){\n            printf("高得点です\\n");\n        }else{\n            printf("合格です\\n");\n        }\n    }\n\n    return 0;\n}`,
   forBasic: `#include <stdio.h>\n\nint main(void){\n    int i;\n\n    for(i = 0; i < 5; i++){\n        printf("%d\\n", i);\n    }\n\n    return 0;\n}`,
   forIf: `#include <stdio.h>\n\nint main(void){\n    int i;\n\n    for(i = 0; i < 10; i++){\n        if(i % 2 == 0){\n            printf("%d\\n", i);\n        }\n    }\n\n    return 0;\n}`,
+  nestedFor: `#include <stdio.h>\n\nint main(void){\n    int i;\n    int j;\n\n    for(i = 1; i <= 3; i++){\n        for(j = 1; j <= i; j++){\n            printf("*");\n        }\n        printf("\\n");\n    }\n\n    return 0;\n}`,
   scanfInput: `#include <stdio.h>\n\nint main(void){\n    int score;\n\n    scanf("%d", &score);\n\n    if(score >= 60){\n        printf("合格です\\n");\n    }else{\n        printf("不合格です\\n");\n    }\n\n    return 0;\n}`,
   unsupported: `#include <stdio.h>\n\nint main(void){\n    int count = 0;\n\n    while(count < 3){\n        count = count + 1;\n    }\n\n    return 0;\n}`
 };
@@ -19,8 +19,12 @@ const sampleScanfInputs = {
 // 数値の 0 と区別して、まだ値が入っていない状態を表します。
 const UNINITIALIZED = Symbol('uninitialized');
 
-// ブラウザ停止を防ぐため、1つのfor文で本体へ入れる回数を制限します。
+// ブラウザ停止を防ぐため、ソース上の各for文で本体へ入れる累計回数を制限します。
 const MAX_FOR_ITERATIONS = 500;
+
+// for文は直接入れ子にする形だけ、最大3階層まで扱います。
+const MAX_FOR_NESTING_DEPTH = 3;
+const FOR_NESTING_LABELS = [null, '外側for', '内側for', '最奥for'];
 
 // for文の説明は6反復まで全件を表示し、それ以上は先頭3反復と最終反復へ圧縮します。
 const MAX_FULL_FOR_EXPLANATION_ITERATIONS = 6;
@@ -1046,6 +1050,8 @@ function visualizeCode(){
   const variables = {};
   const variableOrder = [];
   const steps = [];
+  // 同じソース上のfor文が親ループから複数回呼ばれても、本体進入回数を累積します。
+  const forEnteredIterationTotals = new Map();
   let output = '';
   let braceBalance = 0;
   let hasMain = mainRange !== null;
@@ -1285,7 +1291,7 @@ function visualizeCode(){
 
     if(/^if\s*\(/.test(trimmed) || /^for\s*\(/.test(trimmed) || /^while\s*\(/.test(trimmed)){
       addAnalysis(analysis, lineNo, 'この場所・書き方の制御構文は、現在のVisualizerでは未対応です。');
-      addHint(hints, lineNo, 'この制御構文は現在未対応', 'main直下の基本forと、対応範囲内のif・if〜elseは実行できますが、この場所または書き方は正確に実行シミュレートしていません。');
+      addHint(hints, lineNo, 'この制御構文は現在未対応', 'main直下のfor、最大3階層までの直接的な入れ子for、対応範囲内のif・if〜elseは実行できますが、この場所または書き方は正確に実行シミュレートしていません。');
       warningLines.add(lineNo);
       return;
     }
@@ -1402,7 +1408,7 @@ function visualizeCode(){
 
     addAnalysis(analysis, lineNo, '現在のVisualizerでは説明未対応のコードです。');
     if(trimmed !== ''){
-      addHint(hints, lineNo, '未対応コード', 'この行は現在の可視化対象外です。まずは int、代入、整数演算、比較、printf、main直下の単純なscanf、対応範囲内のif・if〜else、基本forの範囲で試してみましょう。');
+      addHint(hints, lineNo, '未対応コード', 'この行は現在の可視化対象外です。まずは int、代入、整数演算、比較、printf、main直下の単純なscanf、対応範囲内のif・if〜else、最大3階層までの直接的な入れ子forの範囲で試してみましょう。');
       warningLines.add(lineNo);
     }
     return insideFor ? 'execution-error' : undefined;
@@ -1769,6 +1775,7 @@ function visualizeCode(){
         addStep(lineNo, `${nested ? '入れ子の' : ''}if文の条件を評価できないため、プログラムの実行を停止します。`);
         return {
           status:'execution-stopped',
+          stopKind:'runtime-error',
           stopIndex:node.startIndex,
           reason:'for文内のif文で実行を停止したため、この行は実行されませんでした。'
         };
@@ -1884,6 +1891,7 @@ function visualizeCode(){
       if(simpleResult === 'execution-error' || simpleResult === 'scanf-error'){
         return {
           status:'execution-stopped',
+          stopKind:'runtime-error',
           stopIndex:index,
           reason:'for文内のif文で実行を停止したため、この行は実行されませんでした。'
         };
@@ -2146,9 +2154,15 @@ function visualizeCode(){
   }
 
   // for全体を初期化前に検査し、現在の対応範囲で安全に実行できる本体だけを受け付けます。
-  function inspectSupportedFor(startIndex){
+  function inspectSupportedFor(startIndex, options = {}){
+    const forDepth = options.forDepth ?? 1;
+    const containerEndIndex = Math.min(
+      options.containerEndIndex ?? Math.max(startIndex, executionEndIndex - 1),
+      Math.max(startIndex, executionEndIndex - 1)
+    );
     const range = findUnsupportedControlRange(startIndex);
-    const safeEndIndex = Math.min(range.endIndex, Math.max(startIndex, executionEndIndex - 1));
+    const rangeExceedsContainer = range.endIndex > containerEndIndex;
+    const safeEndIndex = Math.min(range.endIndex, containerEndIndex);
     const structuralCode = codeOutsideStringAndLineComment(executableLines[startIndex]).trim();
     const header = parseForHeader(structuralCode);
     const bodyItems = [];
@@ -2166,8 +2180,20 @@ function visualizeCode(){
     if(!header.ok){
       return failure(`${header.error} C言語として正しい形であっても、現在のVisualizerの対応範囲外である場合は実行しません。`);
     }
+    if(forDepth > MAX_FOR_NESTING_DEPTH){
+      return failure(
+        `for文の入れ子は最大${MAX_FOR_NESTING_DEPTH}階層まで対応しています。外側のfor文全体を初期化前に停止します。`,
+        `for文の入れ子は最大${MAX_FOR_NESTING_DEPTH}階層まで対応`
+      );
+    }
     if(!range.closed){
       return failure('for文を閉じる波かっこを確認できないため、初期化を含めて実行しません。', 'for文の終わりを確認');
+    }
+    if(rangeExceedsContainer){
+      return failure(
+        '子for文の終わりを親for文の本体内で確認できません。外側のfor文全体を初期化前に停止します。',
+        '入れ子forの閉じ波かっこを確認'
+      );
     }
 
     function validateIfSimpleStatement(index, structuralBodyCode){
@@ -2244,6 +2270,32 @@ function visualizeCode(){
         continue;
       }
 
+      if(/^for\b/.test(structuralBodyCode)){
+        if(forDepth >= MAX_FOR_NESTING_DEPTH){
+          return failure(
+            `for文の入れ子は最大${MAX_FOR_NESTING_DEPTH}階層まで対応しています。4階層目以降を含む外側のfor文全体は実行しません。`,
+            `for文の入れ子は最大${MAX_FOR_NESTING_DEPTH}階層まで対応`
+          );
+        }
+
+        const nestedForNode = inspectSupportedFor(index, {
+          forDepth:forDepth + 1,
+          containerEndIndex:Math.max(index, safeEndIndex - 1)
+        });
+        if(!nestedForNode.ok){
+          return failure(nestedForNode.message, nestedForNode.title);
+        }
+        if(nestedForNode.endIndex >= safeEndIndex){
+          return failure(
+            '子for文の終わりを親for文の本体内で確認できません。外側のfor文全体を実行しません。',
+            '入れ子forの閉じ波かっこを確認'
+          );
+        }
+        bodyItems.push({ type:'for', node:nestedForNode });
+        index = nestedForNode.endIndex;
+        continue;
+      }
+
       if(hasMultipleStatementsOnOneLine(trimmed)){
         return failure('for文の本体に1行で複数の文が書かれています。本体を部分実行せず、この地点で停止します。', 'for文本体の改行を確認');
       }
@@ -2252,7 +2304,7 @@ function visualizeCode(){
       }
       const nestedControl = unsupportedControlInfo(structuralBodyCode);
       if(nestedControl){
-        return failure(`for文の本体内に${nestedControl.label}があります。現在のVisualizerでは、入れ子forやwhile等の制御構造に対応していないため、for文全体を実行しません。`, 'for文内の制御構造は未対応');
+        return failure(`for文の本体内に${nestedControl.label}があります。現在のVisualizerでは、この制御構造をfor文内で実行できないため、for文全体を実行しません。`, 'for文内の制御構造は未対応');
       }
       if(/^do\b|^else\b/.test(structuralBodyCode) || bracesOutsideString(executableLines[index]).length > 0){
         return failure('for文の本体内に、現在のVisualizerでは実行できないブロック構造があります。for文全体を実行しません。', 'for文内のブロックは未対応');
@@ -2286,6 +2338,7 @@ function visualizeCode(){
     return {
       ok:true,
       ...header,
+      forDepth,
       startIndex,
       bodyStartIndex:startIndex + 1,
       bodyEndIndex:safeEndIndex,
@@ -2312,12 +2365,71 @@ function visualizeCode(){
     }
   }
 
+  // 単独forは従来表示のままとし、入れ子forツリーだけにソース深度の表示名を付けます。
+  function assignForExplanationLabels(rootNode){
+    const hasNestedFor = rootNode.bodyItems.some(item => item.type === 'for');
+    if(!hasNestedFor) return;
+
+    function assign(node){
+      node.explanationLabel = FOR_NESTING_LABELS[node.forDepth];
+      for(const bodyItem of node.bodyItems){
+        if(bodyItem.type === 'for') assign(bodyItem.node);
+      }
+    }
+
+    assign(rootNode);
+  }
+
+  function forIterationState(node, iterationNumber){
+    const unit = node.explanationLabel && node.forDepth > 1 ? '周目' : '回目';
+    return `${iterationNumber}${unit}`;
+  }
+
+  function forExplanationPrefix(node, label, parentLocation = []){
+    if(!node.explanationLabel){
+      return `<strong>【${label}】</strong> `;
+    }
+
+    const location = [
+      ...parentLocation.map(item => `${item.label}：${item.state}`),
+      `${node.explanationLabel}：${label}`
+    ];
+    return `<strong>【${location.join('｜')}】</strong> `;
+  }
+
+  function forNormalEndMessage(node, parentLocation){
+    if(node.explanationLabel && parentLocation.length > 0){
+      const parent = parentLocation[parentLocation.length - 1];
+      return `${node.explanationLabel}の繰り返しはここで終了します。${parent.label}の${parent.state}の続きに戻ります。`;
+    }
+    if(node.explanationLabel){
+      return `${node.explanationLabel}の繰り返しはここで終了します。`;
+    }
+    return 'for文を終了します。';
+  }
+
   // for文の実行中に生成された説明の範囲だけを記録し、実行後に表示用履歴を整えます。
   // 出力・変数・条件評価・本体実行・更新には触れず、説明配列とSTEP配列だけを編集します。
-  function createForExplanationHistory(node){
+  function createForExplanationHistory(node, parentLocation){
     const iterationRecords = [];
     const firstLineNo = node.startIndex + 1;
     const lastLineNo = node.endIndex + 1;
+    const nestedForRanges = node.bodyItems
+      .filter(item => item.type === 'for')
+      .map(item => ({
+        firstLineNo:item.node.startIndex + 1,
+        lastLineNo:item.node.endIndex + 1
+      }));
+
+    function belongsToNestedFor(lineNo){
+      return nestedForRanges.some(range =>
+        lineNo >= range.firstLineNo && lineNo <= range.lastLineNo
+      );
+    }
+
+    function hasForHierarchyPrefix(text){
+      return /^<strong>【(?:外側for|内側for|最奥for)：/.test(String(text));
+    }
 
     function snapshot(){
       const analysisLengths = {};
@@ -2340,11 +2452,15 @@ function visualizeCode(){
     }
 
     function iterationPrefix(iterationNumber){
-      return `<strong>【${iterationNumber}回目】</strong> `;
+      return forExplanationPrefix(node, forIterationState(node, iterationNumber), parentLocation);
     }
 
     function omissionText(firstOmitted, lastOmitted){
-      return `<span class="dim">…… ${firstOmitted}～${lastOmitted}回目の反復を省略しました ……</span>`;
+      const unit = node.explanationLabel && node.forDepth > 1 ? '周目' : '回目';
+      const omissionPrefix = node.explanationLabel
+        ? forExplanationPrefix(node, '省略', parentLocation)
+        : '';
+      return `${omissionPrefix}<span class="dim">…… ${firstOmitted}～${lastOmitted}${unit}の反復を省略しました ……</span>`;
     }
 
     function labeledSlice(items, startIndex, endIndex, iterationNumber, mapItem){
@@ -2382,7 +2498,9 @@ function visualizeCode(){
             rangeStart,
             rangeEnd,
             record.iterationNumber,
-            (entry, prefix) => `${prefix}${entry}`
+            (entry, prefix) => belongsToNestedFor(lineNo) || hasForHierarchyPrefix(entry)
+              ? entry
+              : `${prefix}${entry}`
           ));
 
           if(shouldCompress && recordIndex === LEADING_FOR_EXPLANATION_ITERATIONS - 1){
@@ -2413,7 +2531,12 @@ function visualizeCode(){
           record.before.stepLength,
           record.after.stepLength,
           record.iterationNumber,
-          (item, prefix) => ({ ...item, text:`${prefix}${item.text}` })
+          (item, prefix) => ({
+            ...item,
+            text:belongsToNestedFor(item.lineNo) || hasForHierarchyPrefix(item.text)
+              ? item.text
+              : `${prefix}${item.text}`
+          })
         ));
 
         if(shouldCompress && recordIndex === LEADING_FOR_EXPLANATION_ITERATIONS - 1){
@@ -2432,9 +2555,9 @@ function visualizeCode(){
     return { beginIteration, finishIteration, finalize };
   }
 
-  function executeFor(node){
+  function executeFor(node, parentLocation = []){
     const lineNo = node.startIndex + 1;
-    const explanationHistory = createForExplanationHistory(node);
+    const explanationHistory = createForExplanationHistory(node, parentLocation);
     const initialization = executeAssignment(
       node.initialization.name,
       node.initialization.expression,
@@ -2445,6 +2568,7 @@ function visualizeCode(){
       addStep(lineNo, 'for文の初期化を実行できないため、プログラムの実行を停止します。');
       return {
         status:'execution-stopped',
+        stopKind:'runtime-error',
         stopIndex:node.startIndex,
         reason:'for文の初期化で実行を停止したため、この行は実行されませんでした。'
       };
@@ -2455,13 +2579,15 @@ function visualizeCode(){
       const activeIteration = explanationHistory.beginIteration(iterationCount + 1);
       const conditionResult = evaluateExpression(node.condition, variables);
       if(!conditionResult.ok){
-        addAnalysis(analysis, lineNo, `<strong>【条件判定エラー】</strong> for文の条件 <code>${escapeHtml(node.condition)}</code> を評価できませんでした。`);
+        const conditionErrorPrefix = forExplanationPrefix(node, '条件判定エラー', parentLocation);
+        addAnalysis(analysis, lineNo, `${conditionErrorPrefix}for文の条件 <code>${escapeHtml(node.condition)}</code> を評価できませんでした。`);
         addHint(hints, lineNo, 'for文の条件を評価できません', escapeHtml(conditionResult.error));
         warningLines.add(lineNo);
-        addStep(lineNo, '<strong>【条件判定エラー】</strong> for文の条件を評価できないため、プログラムの実行を停止します。');
+        addStep(lineNo, `${conditionErrorPrefix}for文の条件を評価できないため、プログラムの実行を停止します。`);
         explanationHistory.finalize();
         return {
           status:'execution-stopped',
+          stopKind:'runtime-error',
           stopIndex:node.startIndex,
           reason:'for文の条件評価で実行を停止したため、この行は実行されませんでした。'
         };
@@ -2471,44 +2597,77 @@ function visualizeCode(){
       const conditionExplanation = conditionResult.comparison
         ? describeComparison(conditionResult)
         : `${escapeHtml(conditionResult.readable)} を計算した結果は ${conditionResult.value} です。C言語では0以外を条件成立、0を条件不成立として扱います。`;
-      const reachesSafetyLimit = conditionMet && iterationCount >= MAX_FOR_ITERATIONS;
+      const enteredIterationTotal = forEnteredIterationTotals.get(node.startIndex) || 0;
+      const nextEnteredIteration = enteredIterationTotal + 1;
+      const nextLocalIteration = iterationCount + 1;
+      const reachesSafetyLimit = conditionMet && enteredIterationTotal >= MAX_FOR_ITERATIONS;
+      const normalEndMessage = forNormalEndMessage(node, parentLocation);
       const nextAction = reachesSafetyLimit
-        ? `条件が成立したため、本来は${iterationCount + 1}回目の本体へ進む必要があります。`
+        ? (node.explanationLabel
+          ? `条件が成立したため、本来は今回の呼び出しの${forIterationState(node, nextLocalIteration)}（可視化全体では累計${nextEnteredIteration}回目）の本体へ進む必要があります。`
+          : `条件が成立したため、本来は${nextEnteredIteration}回目の本体へ進む必要があります。`)
         : (conditionMet
           ? '条件が成立したため、for文の本体へ進みます。'
-          : '条件が成立しなかったため、for文を終了します。');
+          : `条件が成立しなかったため、${normalEndMessage}`);
       const conditionDisplayPrefix = !conditionMet
-        ? `<strong>【${iterationCount === 0 ? '最初の条件判定／終了判定' : '終了判定'}】</strong> `
+        ? forExplanationPrefix(node, iterationCount === 0 ? '最初の条件判定／終了判定' : '終了判定', parentLocation)
         : (reachesSafetyLimit
-          ? `<strong>【${iterationCount + 1}回目へ進む条件判定】</strong> `
+          ? forExplanationPrefix(
+            node,
+            `${node.explanationLabel ? forIterationState(node, nextLocalIteration) : `${nextEnteredIteration}回目`}へ進む条件判定`,
+            parentLocation
+          )
           : '');
       addAnalysis(analysis, lineNo, `${conditionDisplayPrefix}<strong>for文の条件：</strong> ${conditionExplanation}${nextAction}`);
       addStep(lineNo, `${conditionDisplayPrefix}for文の条件 ${escapeHtml(node.condition)} を判定しました。<br>${nextAction}`);
 
       if(!conditionMet){
-        addAnalysis(analysis, node.endIndex + 1, '<strong>【for終了】</strong> 最終条件が成立しなかったため、for文の処理を終えて後続の処理へ進みます。');
-        addStep(lineNo, '<strong>【for終了】</strong> for文の最終条件が成立しなかったため、for文を終了します。');
+        const endDisplayPrefix = forExplanationPrefix(
+          node,
+          node.explanationLabel ? '終了' : 'for終了',
+          parentLocation
+        );
+        const endAnalysis = node.explanationLabel
+          ? `最終条件が成立しなかったため、${normalEndMessage}`
+          : '最終条件が成立しなかったため、for文の処理を終えて後続の処理へ進みます。';
+        const endStep = node.explanationLabel
+          ? normalEndMessage
+          : 'for文の最終条件が成立しなかったため、for文を終了します。';
+        addAnalysis(analysis, node.endIndex + 1, `${endDisplayPrefix}${endAnalysis}`);
+        addStep(lineNo, `${endDisplayPrefix}${endStep}`);
         explanationHistory.finalize();
         return { status:'normal' };
       }
 
       // 500回目までは実行し、501回目の本体へ入る直前に停止します。
       if(reachesSafetyLimit){
-        const safetyMessage = '無限ループ、または非常に多い反復の可能性があります。安全のため実行を停止しました。for文の「条件」と「更新式」を確認してみましょう。<strong>変数の値は、終了条件へ近づいていますか？</strong>';
-        addAnalysis(analysis, lineNo, `<strong>【安全上限停止】</strong> 繰り返し回数が安全上限の ${MAX_FOR_ITERATIONS} 回に達したため、次の本体へ入らず停止しました。`);
+        const safetyPrefix = forExplanationPrefix(node, '安全上限停止', parentLocation);
+        const safetyMessage = node.explanationLabel
+          ? `このfor文は可視化全体で本体を累計 ${MAX_FOR_ITERATIONS} 回実行済みです。次の本体へ入ると累計 ${nextEnteredIteration} 回目になるため、C Code Visualizerが安全のため停止しました。これはC言語自体の制限ではありません。for文の「条件」と「更新式」を確認してみましょう。<strong>変数の値は、終了条件へ近づいていますか？</strong>`
+          : '無限ループ、または非常に多い反復の可能性があります。安全のため実行を停止しました。for文の「条件」と「更新式」を確認してみましょう。<strong>変数の値は、終了条件へ近づいていますか？</strong>';
+        const safetyAnalysis = node.explanationLabel
+          ? `このfor文は本体を可視化全体で累計 ${MAX_FOR_ITERATIONS} 回実行済みです。条件が成立し、次の本体へ入ると累計 ${nextEnteredIteration} 回目になるため、C Code Visualizerの安全上限として本体へ入る前に停止しました。500回はC言語自体の制限ではありません。`
+          : `繰り返し回数が安全上限の ${MAX_FOR_ITERATIONS} 回に達したため、次の本体へ入らず停止しました。`;
+        addAnalysis(analysis, lineNo, `${safetyPrefix}${safetyAnalysis}`);
         addHint(hints, lineNo, '繰り返し回数が安全上限に達しました', safetyMessage);
         warningLines.add(lineNo);
-        addStep(lineNo, `<strong>【安全上限停止】</strong> for文は ${MAX_FOR_ITERATIONS} 回反復しました。その本体へ入る前に、安全のためプログラムの実行を停止します。`);
-        addAnalysis(analysis, node.endIndex + 1, '<strong>【安全上限停止】</strong> for文が安全上限で停止したため、後続の処理へは進みません。');
+        const safetyStep = node.explanationLabel
+          ? `このfor文は本体を可視化全体で累計 ${MAX_FOR_ITERATIONS} 回実行済みです。次の本体へ入ると累計 ${nextEnteredIteration} 回目になるため、C Code Visualizerの安全上限により、本体へ入る前にプログラム全体を停止します。`
+          : `for文は ${MAX_FOR_ITERATIONS} 回反復しました。その本体へ入る前に、安全のためプログラムの実行を停止します。`;
+        addStep(lineNo, `${safetyPrefix}${safetyStep}`);
+        const safetyEndPrefix = node.explanationLabel ? '' : safetyPrefix;
+        addAnalysis(analysis, node.endIndex + 1, `${safetyEndPrefix}for文が安全上限で停止したため、ここでは通常の終了処理を行いません。`);
         explanationHistory.finalize();
         return {
           status:'execution-stopped',
+          stopKind:'safety-limit',
           stopIndex:node.endIndex,
           reason:'for文が安全上限で停止したため、この行は実行されませんでした。'
         };
       }
 
       iterationCount++;
+      forEnteredIterationTotals.set(node.startIndex, enteredIterationTotal + 1);
       for(const bodyItem of node.bodyItems){
         if(bodyItem.type === 'simple'){
           const index = bodyItem.index;
@@ -2522,14 +2681,37 @@ function visualizeCode(){
             return { status:'program-ended', stopIndex:index };
           }
           if(bodyResult === 'execution-error' || bodyResult === 'scanf-error'){
-            addStep(index + 1, 'for文の本体で処理を継続できないため、プログラムの実行を停止します。');
+            const runtimeErrorPrefix = node.explanationLabel
+              ? forExplanationPrefix(node, '実行時エラー', parentLocation)
+              : '';
+            if(runtimeErrorPrefix){
+              addAnalysis(analysis, index + 1, `${runtimeErrorPrefix}for文の本体で実行時エラーが発生したため、プログラム全体を停止します。`);
+            }
+            addStep(index + 1, `${runtimeErrorPrefix}for文の本体で処理を継続できないため、プログラムの実行を停止します。`);
             explanationHistory.finishIteration(activeIteration);
             explanationHistory.finalize();
             return {
               status:'execution-stopped',
+              stopKind:'runtime-error',
               stopIndex:index,
               reason:'for文の本体で実行を停止したため、この行は実行されませんでした。'
             };
+          }
+          continue;
+        }
+
+        if(bodyItem.type === 'for'){
+          const nestedForResult = executeFor(bodyItem.node, [
+            ...parentLocation,
+            {
+              label:node.explanationLabel,
+              state:forIterationState(node, iterationCount)
+            }
+          ]);
+          if(nestedForResult.status !== 'normal'){
+            explanationHistory.finishIteration(activeIteration);
+            explanationHistory.finalize();
+            return nestedForResult;
           }
           continue;
         }
@@ -2549,6 +2731,7 @@ function visualizeCode(){
           explanationHistory.finalize();
           return {
             status:'execution-stopped',
+            stopKind:ifResult.stopKind || 'runtime-error',
             stopIndex:ifResult.stopIndex,
             reason:ifResult.reason
           };
@@ -2567,12 +2750,19 @@ function visualizeCode(){
         );
       }
       if(!updateResult.ok){
-        addStep(lineNo, 'for文の更新を実行できないため、プログラムの実行を停止します。');
+        const updateErrorPrefix = node.explanationLabel
+          ? forExplanationPrefix(node, '更新エラー', parentLocation)
+          : '';
+        if(updateErrorPrefix){
+          addAnalysis(analysis, lineNo, `${updateErrorPrefix}for文の更新式を評価できないため、プログラム全体を停止します。`);
+        }
+        addStep(lineNo, `${updateErrorPrefix}for文の更新を実行できないため、プログラムの実行を停止します。`);
         addAnalysis(analysis, node.endIndex + 1, 'for文の更新で実行を停止したため、後続の処理へは進みません。');
         explanationHistory.finishIteration(activeIteration);
         explanationHistory.finalize();
         return {
           status:'execution-stopped',
+          stopKind:'runtime-error',
           stopIndex:node.endIndex,
           reason:'for文の更新で実行を停止したため、この行は実行されませんでした。'
         };
@@ -2620,11 +2810,13 @@ function visualizeCode(){
         warnUnsupportedFor(index, forNode);
         executionStop = {
           index:forNode.endIndex,
+          stopKind:'structural-rejection',
           reason:'未対応のfor文で実行を停止したため、この行は実行されませんでした。'
         };
         break;
       }
 
+      assignForExplanationLabels(forNode);
       const forResult = executeFor(forNode);
       if(forResult.status === 'program-ended'){
         programEndIndex = forResult.stopIndex;
@@ -2633,6 +2825,7 @@ function visualizeCode(){
       if(forResult.status === 'execution-stopped'){
         executionStop = {
           index:forResult.stopIndex,
+          stopKind:forResult.stopKind,
           reason:forResult.reason
         };
         break;
