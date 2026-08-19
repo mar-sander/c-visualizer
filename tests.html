@@ -250,7 +250,8 @@
           variables:['i = 4', 'j = 4'],
           warningMax:0,
           scanfInputValue:'',
-          stepsInclude:['【外側for・1回目】', '【内側for・1回目】', '【外側for・終了】'],
+          stepsInclude:['【外側for：1回目】', '【外側for：1回目｜内側for：1周目】', '【外側for：終了】'],
+          stepsExclude:['【内側for：1周目】', '外側for・', '内側for・', '最奥for・'],
           executedIncludes:['for(i = 1; i <= 3; i++){', 'for(j = 1; j <= i; j++){', 'printf("*");', 'printf("\\n");', 'return 0;'],
           editorScrollTop:0,
           editorScrollLeft:0
@@ -1478,7 +1479,7 @@
       {
         name:'Stage1 2重for安全上限・21×25は内側累計501回目直前で停止',
         code:makeMainCode(`    int i;\n    int j;\n    int count = 0;\n    for(i = 0; i < 21; i++){\n        for(j = 0; j < 25; j++){\n            count++;\n        }\n    }\n    printf("WRONG-AFTER-2D-LIMIT");\n    return 0;`),
-        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG'], variables:['count = 500', 'i = 20', 'j = 0'], warningMin:1, hintsInclude:['安全上限'], stepsInclude:['【内側for・1回目へ進む条件判定】'], stepsExclude:['【内側for・501回目】'], executedExcludes:['printf("WRONG-AFTER-2D-LIMIT'] }
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG'], variables:['count = 500', 'i = 20', 'j = 0'], warningMin:1, hintsInclude:['安全上限'], stepsInclude:['【外側for：21回目｜内側for：1周目へ進む条件判定】'], stepsExclude:['内側for：501周目'], executedExcludes:['printf("WRONG-AFTER-2D-LIMIT'] }
       },
       {
         name:'Stage1 3重for安全上限・5×5×20の最奥累計500回は正常終了',
@@ -1488,7 +1489,7 @@
       {
         name:'Stage1 3重for安全上限・5×5×21は最奥累計501回目直前で停止',
         code:makeMainCode(`    int i;\n    int j;\n    int k;\n    int count = 0;\n    for(i = 0; i < 5; i++){\n        for(j = 0; j < 5; j++){\n            for(k = 0; k < 21; k++){\n                count++;\n            }\n        }\n    }\n    printf("WRONG-AFTER-3D-LIMIT");\n    return 0;`),
-        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG'], variables:['count = 500', 'i = 4', 'j = 3', 'k = 17'], warningMin:1, hintsInclude:['安全上限'], stepsInclude:['【最奥for・18回目へ進む条件判定】'], stepsExclude:['【最奥for・501回目】'], executedExcludes:['printf("WRONG-AFTER-3D-LIMIT'] }
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG'], variables:['count = 500', 'i = 4', 'j = 3', 'k = 17'], warningMin:1, hintsInclude:['安全上限'], stepsInclude:['【外側for：5回目｜内側for：4周目｜最奥for：18周目へ進む条件判定】'], stepsExclude:['最奥for：501周目'], executedExcludes:['printf("WRONG-AFTER-3D-LIMIT'] }
       },
       {
         name:'Stage1 累計500回到達後も次回条件偽なら正常終了',
@@ -1518,7 +1519,7 @@
           output:'000102101112',
           variables:['i = 2', 'j = 3'],
           warningMax:0,
-          stepsInclude:['【外側for・1回目】', '【内側for・1回目】', '【内側for・終了判定】', '【内側for・終了】', '【外側for・終了判定】', '【外側for・終了】'],
+          stepsInclude:['【外側for：1回目】', '【外側for：1回目｜内側for：1周目】', '【外側for：2回目｜内側for：終了判定】', '【外側for：2回目｜内側for：終了】', '【外側for：終了判定】', '【外側for：終了】', '内側forの繰り返しはここで終了します。外側forの2回目の続きに戻ります。'],
           stepsExclude:['最奥for']
         }
       },
@@ -1529,7 +1530,7 @@
           output:'000001010011100101110111',
           variables:['i = 2', 'j = 2', 'k = 2'],
           warningMax:0,
-          stepsInclude:['【外側for・1回目】', '【内側for・1回目】', '【最奥for・1回目】', '【最奥for・終了判定】', '【最奥for・終了】']
+          stepsInclude:['【外側for：1回目】', '【外側for：1回目｜内側for：1周目】', '【外側for：1回目｜内側for：1周目｜最奥for：1周目】', '【外側for：2回目｜内側for：2周目｜最奥for：終了判定】', '【外側for：2回目｜内側for：2周目｜最奥for：終了】', '最奥forの繰り返しはここで終了します。内側forの2周目の続きに戻ります。']
         }
       },
       {
@@ -1539,7 +1540,7 @@
           output:'000102101112',
           variables:['i = 2', 'j = 3'],
           warningMax:0,
-          stepsInOrder:['【外側for・1回目】', '【内側for・1回目】', '【内側for・2回目】', '【内側for・3回目】', '【外側for・2回目】', '【内側for・1回目】', '【内側for・2回目】', '【内側for・3回目】']
+          stepsInOrder:['【外側for：1回目】', '【外側for：1回目｜内側for：1周目】', '【外側for：1回目｜内側for：2周目】', '【外側for：1回目｜内側for：3周目】', '【外側for：2回目】', '【外側for：2回目｜内側for：1周目】', '【外側for：2回目｜内側for：2周目】', '【外側for：2回目｜内側for：3周目】']
         }
       },
       {
@@ -1550,8 +1551,8 @@
           outputExcludes:['WRONG-INNER-ZERO'],
           variables:['i = 1', 'j = 0'],
           warningMax:0,
-          stepsInclude:['【内側for・最初の条件判定／終了判定】', '【内側for・終了】'],
-          stepsExclude:['【内側for・1回目】'],
+          stepsInclude:['【外側for：1回目｜内側for：最初の条件判定／終了判定】', '【外側for：1回目｜内側for：終了】', '内側forの繰り返しはここで終了します。外側forの1回目の続きに戻ります。'],
+          stepsExclude:['内側for：1周目'],
           executedExcludes:['printf("WRONG-INNER-ZERO']
         }
       },
@@ -1563,8 +1564,8 @@
           outputExcludes:['WRONG-OUTER-ZERO'],
           variables:['i = 0', 'j = 8'],
           warningMax:0,
-          stepsInclude:['【外側for・最初の条件判定／終了判定】', '【外側for・終了】'],
-          stepsExclude:['【外側for・1回目】', '内側for・1回目'],
+          stepsInclude:['【外側for：最初の条件判定／終了判定】', '【外側for：終了】'],
+          stepsExclude:['【外側for：1回目】', '内側for：1周目', '続きに戻ります'],
           executedExcludes:['printf("WRONG-OUTER-ZERO']
         }
       },
@@ -1575,7 +1576,7 @@
           output:'SN',
           variables:['i = 1', 'j = 1'],
           warningMax:0,
-          analysisByLineIncludes:{ '6':['【1回目】', '【終了判定】'], '9':['【外側for・1回目】'], '10':['【内側for・1回目】'] },
+          analysisByLineIncludes:{ '6':['【1回目】', '【終了判定】'], '9':['【外側for：1回目】'], '10':['【外側for：1回目｜内側for：1周目】'] },
           analysisByLineExcludes:{ '6':['外側for', '内側for', '最奥for'] }
         }
       },
@@ -1586,7 +1587,7 @@
           output:'XYY',
           variables:['i = 1', 'j = 1', 'k = 1', 'a = 1', 'b = 2'],
           warningMax:0,
-          analysisByLineIncludes:{ '9':['【外側for・1回目】'], '10':['【内側for・1回目】'], '11':['【最奥for・1回目】'], '16':['【外側for・1回目】'], '17':['【内側for・1回目】'] },
+          analysisByLineIncludes:{ '9':['【外側for：1回目】'], '10':['【外側for：1回目｜内側for：1周目】'], '11':['【外側for：1回目｜内側for：1周目｜最奥for：1周目】'], '16':['【外側for：1回目】'], '17':['【外側for：1回目｜内側for：1周目】'] },
           analysisByLineExcludes:{ '17':['最奥for'] }
         }
       },
@@ -1597,9 +1598,9 @@
           output:'N',
           variables:['i = 1', 'j = 1'],
           warningMax:0,
-          analysisByLineIncludes:{ '7':['【内側for・1回目】'], '8':['【内側for・1回目】'] },
-          analysisByLineExcludes:{ '7':['【外側for・1回目】', '【1回目】'], '8':['【外側for・1回目】', '【1回目】'] },
-          stepsExclude:['【外側for・1回目】 【内側for・1回目】', '【内側for・1回目】 【1回目】']
+          analysisByLineIncludes:{ '7':['【外側for：1回目｜内側for：1周目】'], '8':['【外側for：1回目｜内側for：1周目】'] },
+          analysisByLineExcludes:{ '7':['【内側for：1周目】', '【1回目】'], '8':['【内側for：1周目】', '【1回目】'] },
+          stepsExclude:['【内側for：1周目】', '外側for・', '内側for・', '最奥for・']
         }
       },
       {
@@ -1609,10 +1610,10 @@
           output:'14',
           variables:['i = 2', 'j = 7', 'count = 14'],
           warningMax:0,
-          stepsInclude:['【外側for・1回目】', '内側forの4～6回目の反復を省略しました', '【内側for・7回目】'],
-          stepsExclude:['外側forの4～', '最奥forの4～'],
-          stepCounts:{ '内側forの4～6回目の反復を省略しました':2, '【内側for・終了】':2 },
-          analysisByLineCounts:{ '8':{ '内側forの4～6回目の反復を省略しました':2 }, '9':{ '内側forの4～6回目の反復を省略しました':2 } }
+          stepsInclude:['【外側for：1回目】', '【外側for：1回目｜内側for：省略】', '4～6周目の反復を省略しました', '【外側for：1回目｜内側for：7周目】'],
+          stepsExclude:['外側for：省略', '最奥for：省略'],
+          stepCounts:{ '内側for：省略】':2, '内側for：終了】':2 },
+          analysisByLineCounts:{ '8':{ '内側for：省略】':2 }, '9':{ '内側for：省略】':2 } }
         }
       },
       {
@@ -1622,10 +1623,10 @@
           output:'14',
           variables:['i = 7', 'j = 2', 'count = 14'],
           warningMax:0,
-          stepsInclude:['外側forの4～6回目の反復を省略しました', '【外側for・7回目】'],
-          stepsExclude:['内側forの4～', '最奥forの4～'],
-          stepCounts:{ '外側forの4～6回目の反復を省略しました':1, '【内側for・終了】':4, 'for文の初期化':5, 'for文の条件':17, 'for文の更新':12 },
-          analysisByLineCounts:{ '7':{ '外側forの4～6回目の反復を省略しました':1 }, '10':{ '【内側for・終了】':4 } }
+          stepsInclude:['【外側for：省略】', '4～6回目の反復を省略しました', '【外側for：7回目】'],
+          stepsExclude:['内側for：省略', '最奥for：省略'],
+          stepCounts:{ '【外側for：省略】':1, '内側for：終了】':4, 'for文の初期化':5, 'for文の条件':17, 'for文の更新':12 },
+          analysisByLineCounts:{ '7':{ '【外側for：省略】':1 }, '10':{ '内側for：終了】':4 } }
         }
       },
       {
@@ -1635,10 +1636,10 @@
           output:'100',
           variables:['i = 10', 'j = 10', 'count = 100'],
           warningMax:0,
-          stepsInclude:['外側forの4～9回目の反復を省略しました', '内側forの4～9回目の反復を省略しました', '【外側for・10回目】', '【内側for・10回目】'],
-          stepsExclude:['最奥forの4～'],
-          stepCounts:{ '外側forの4～9回目の反復を省略しました':1, '内側forの4～9回目の反復を省略しました':4, '【内側for・終了】':4, 'for文の初期化':5, 'for文の条件':25, 'for文の更新':20 },
-          analysisByLineCounts:{ '7':{ '外側forの4～9回目の反復を省略しました':1 }, '8':{ '外側forの4～9回目の反復を省略しました':1, '内側forの4～9回目の反復を省略しました':4 } }
+          stepsInclude:['【外側for：省略】', '4～9回目の反復を省略しました', '内側for：省略】', '4～9周目の反復を省略しました', '【外側for：10回目】', '外側for：10回目｜内側for：10周目】'],
+          stepsExclude:['最奥for：省略'],
+          stepCounts:{ '【外側for：省略】':1, '内側for：省略】':4, '内側for：終了】':4, 'for文の初期化':5, 'for文の条件':25, 'for文の更新':20 },
+          analysisByLineCounts:{ '7':{ '【外側for：省略】':1 }, '8':{ '【外側for：省略】':1, '内側for：省略】':4 } }
         }
       },
       {
@@ -1648,8 +1649,8 @@
           output:'AIIIIIIIBAIIIIIIIBAIIIIIIIBAIIIIIIIBAIIIIIIIBAIIIIIIIBAIIIIIIIB',
           variables:['i = 7', 'j = 7'],
           warningMax:0,
-          stepsInOrder:['【外側for・1回目】', '画面に「A', '【内側for・1回目】', '内側forの4～6回目の反復を省略しました', '【内側for・7回目】', '画面に「B', '外側forの4～6回目の反復を省略しました', '【外側for・7回目】', '画面に「A', '画面に「B'],
-          stepCounts:{ '画面に「A':4, '画面に「B':4, '内側forの4～6回目の反復を省略しました':4 }
+          stepsInOrder:['【外側for：1回目】', '画面に「A', '【外側for：1回目｜内側for：1周目】', '【外側for：1回目｜内側for：省略】', '4～6周目の反復を省略しました', '【外側for：1回目｜内側for：7周目】', '画面に「B', '【外側for：省略】', '4～6回目の反復を省略しました', '【外側for：7回目】', '画面に「A', '画面に「B'],
+          stepCounts:{ '画面に「A':4, '画面に「B':4, '内側for：省略】':4 }
         }
       },
       {
@@ -1659,9 +1660,9 @@
           output:'28',
           variables:['i = 2', 'j = 2', 'k = 7', 'count = 28'],
           warningMax:0,
-          stepsExclude:['外側forの4～', '内側forの4～'],
-          stepCounts:{ '最奥forの4～6回目の反復を省略しました':4, '【最奥for・終了】':4 },
-          analysisByLineCounts:{ '10':{ '最奥forの4～6回目の反復を省略しました':4 } }
+          stepsExclude:['外側for：省略', '内側for：省略'],
+          stepCounts:{ '最奥for：省略】':4, '最奥for：終了】':4 },
+          analysisByLineCounts:{ '10':{ '最奥for：省略】':4 } }
         }
       },
       {
@@ -1671,9 +1672,9 @@
           output:'28',
           variables:['i = 2', 'j = 7', 'k = 2', 'count = 28'],
           warningMax:0,
-          stepsExclude:['外側forの4～', '最奥forの4～'],
-          stepCounts:{ '内側forの4～6回目の反復を省略しました':2, '【最奥for・終了】':8 },
-          analysisByLineCounts:{ '9':{ '内側forの4～6回目の反復を省略しました':2 }, '12':{ '【最奥for・終了】':8 } }
+          stepsExclude:['外側for：省略', '最奥for：省略'],
+          stepCounts:{ '内側for：省略】':2, '最奥for：終了】':8 },
+          analysisByLineCounts:{ '9':{ '内側for：省略】':2 }, '12':{ '最奥for：終了】':8 } }
         }
       },
       {
@@ -1683,9 +1684,9 @@
           output:'28',
           variables:['i = 7', 'j = 2', 'k = 2', 'count = 28'],
           warningMax:0,
-          stepsExclude:['内側forの4～', '最奥forの4～'],
-          stepCounts:{ '外側forの4～6回目の反復を省略しました':1, '【内側for・終了】':4, '【最奥for・終了】':8 },
-          analysisByLineCounts:{ '8':{ '外側forの4～6回目の反復を省略しました':1 }, '13':{ '【内側for・終了】':4 }, '12':{ '【最奥for・終了】':8 } }
+          stepsExclude:['内側for：省略', '最奥for：省略'],
+          stepCounts:{ '【外側for：省略】':1, '内側for：終了】':4, '最奥for：終了】':8 },
+          analysisByLineCounts:{ '8':{ '【外側for：省略】':1 }, '13':{ '内側for：終了】':4 }, '12':{ '最奥for：終了】':8 } }
         }
       },
       {
@@ -1696,8 +1697,8 @@
           variables:['i = 7', 'j = 7', 'k = 7', 'count = 343'],
           warningMax:0,
           hintsExclude:['安全上限'],
-          stepCounts:{ '外側forの4～6回目の反復を省略しました':1, '内側forの4～6回目の反復を省略しました':4, '最奥forの4～6回目の反復を省略しました':16, '【外側for・終了】':1, '【内側for・終了】':4, '【最奥for・終了】':16, 'for文の初期化':21, 'for文の条件':105, 'for文の更新':84 },
-          analysisByLineCounts:{ '8':{ '外側forの4～6回目の反復を省略しました':1 }, '9':{ '内側forの4～6回目の反復を省略しました':4 }, '10':{ '最奥forの4～6回目の反復を省略しました':16 } }
+          stepCounts:{ '【外側for：省略】':1, '内側for：省略】':4, '最奥for：省略】':16, '【外側for：終了】':1, '内側for：終了】':4, '最奥for：終了】':16, 'for文の初期化':21, 'for文の条件':105, 'for文の更新':84 },
+          analysisByLineCounts:{ '8':{ '【外側for：省略】':1 }, '9':{ '内側for：省略】':4 }, '10':{ '最奥for：省略】':16 } }
         }
       },
       {
@@ -1707,7 +1708,7 @@
           output:'17',
           variables:['i = 1', 'j = 7', 'k = 10', 'count = 17'],
           warningMax:0,
-          stepCounts:{ '内側forの4～6回目の反復を省略しました':1, '内側forの4～9回目の反復を省略しました':1, '【内側for・終了】':2 }
+          stepCounts:{ '内側for：省略】':2, '4～6周目の反復を省略しました':1, '4～9周目の反復を省略しました':1, '内側for：終了】':2 }
         }
       },
       {
@@ -1717,7 +1718,7 @@
           output:'28',
           variables:['i = 2', 'j = 7', 'a = 7', 'b = 2', 'count = 28'],
           warningMax:0,
-          stepCounts:{ '外側forの4～6回目の反復を省略しました':1, '内側forの4～6回目の反復を省略しました':2, '【内側for・終了】':6 }
+          stepCounts:{ '【外側for：省略】':1, '内側for：省略】':2, '内側for：終了】':6 }
         }
       },
       {
@@ -1728,10 +1729,10 @@
           outputExcludes:['WRONG'],
           variables:['i = 0', 'j = 7', 'count = 8'],
           warningMax:0,
-          stepsInOrder:['【外側for・1回目】', '【内側for・1回目】', '【内側for・2回目】', '【内側for・3回目】', '内側forの4～7回目の反復を省略しました', '【内側for・8回目】', 'プログラムを終了します。'],
-          stepsExclude:['【内側for・9回目】', '【内側for・終了判定】', '【内側for・終了】', '【外側for・終了判定】', '【外側for・終了】'],
+          stepsInOrder:['【外側for：1回目】', '【外側for：1回目｜内側for：1周目】', '【外側for：1回目｜内側for：2周目】', '【外側for：1回目｜内側for：3周目】', '【外側for：1回目｜内側for：省略】', '4～7周目の反復を省略しました', '【外側for：1回目｜内側for：8周目】', 'プログラムを終了します。'],
+          stepsExclude:['内側for：9周目', '内側for：終了判定', '内側for：終了', '外側for：終了判定', '外側for：終了', '続きに戻ります'],
           stepCounts:{ 'プログラムを終了します。':1 },
-          analysisByLineCounts:{ '8':{ '【内側for・8回目】':1 } },
+          analysisByLineCounts:{ '8':{ '【外側for：1回目｜内側for：8周目】':1 } },
           executedExcludes:['printf("WRONG-PARENT', 'printf("WRONG-MAIN']
         }
       },
@@ -1743,9 +1744,10 @@
           outputExcludes:['WRONG'],
           variables:['i = 7', 'j = 4', 'k = 0', 'count = 40'],
           warningMax:0,
-          stepsInOrder:['【外側for・1回目】', '【外側for・2回目】', '【外側for・3回目】', '外側forの4～7回目の反復を省略しました', '【外側for・8回目】', '【内側for・5回目】', '【最奥for・1回目】', 'プログラムを終了します。'],
-          stepCounts:{ '外側forの4～7回目の反復を省略しました':1, 'プログラムを終了します。':1, '【外側for・終了】':0, '【内側for・終了】':3, '【最奥for・終了】':19 },
-          analysisByLineIncludes:{ '8':['【外側for・8回目】'], '9':['【内側for・5回目】'], '10':['【最奥for・1回目】'], '13':['【最奥for・1回目】'] },
+          stepsInOrder:['【外側for：1回目】', '【外側for：2回目】', '【外側for：3回目】', '【外側for：省略】', '4～7回目の反復を省略しました', '【外側for：8回目】', '【外側for：8回目｜内側for：5周目】', '【外側for：8回目｜内側for：5周目｜最奥for：1周目】', 'プログラムを終了します。'],
+          stepsExclude:['続きに戻ります。プログラムを終了します。'],
+          stepCounts:{ '【外側for：省略】':1, 'プログラムを終了します。':1, '【外側for：終了】':0, '内側for：終了】':3, '最奥for：終了】':19 },
+          analysisByLineIncludes:{ '8':['【外側for：8回目】'], '9':['【外側for：8回目｜内側for：5周目】'], '10':['【外側for：8回目｜内側for：5周目｜最奥for：1周目】'], '13':['【外側for：8回目｜内側for：5周目｜最奥for：1周目】'] },
           executedExcludes:['printf("WRONG-MAIN']
         }
       },
@@ -1758,10 +1760,10 @@
           variables:['i = 0', 'j = 7', 'value = 10'],
           warningMin:1,
           hintsInclude:['0で割ろうとしています'],
-          stepsInOrder:['【外側for・1回目】', '【内側for・1回目】', '【内側for・2回目】', '【内側for・3回目】', '内側forの4～7回目の反復を省略しました', '【内側for・8回目】', '【内側for・実行時エラー】'],
-          stepsExclude:['【内側for・終了判定】', '【内側for・終了】', '【外側for・終了】'],
-          stepCounts:{ '【内側for・実行時エラー】':1 },
-          analysisByLineCounts:{ '8':{ '【内側for・8回目】':1 }, '10':{ '【内側for・実行時エラー】':1 } },
+          stepsInOrder:['【外側for：1回目】', '【外側for：1回目｜内側for：1周目】', '【外側for：1回目｜内側for：2周目】', '【外側for：1回目｜内側for：3周目】', '【外側for：1回目｜内側for：省略】', '4～7周目の反復を省略しました', '【外側for：1回目｜内側for：8周目】', '【外側for：1回目｜内側for：実行時エラー】'],
+          stepsExclude:['内側for：終了判定', '内側for：終了', '外側for：終了', '続きに戻ります'],
+          stepCounts:{ '内側for：実行時エラー】':1 },
+          analysisByLineCounts:{ '8':{ '【外側for：1回目｜内側for：8周目】':1 }, '10':{ '内側for：実行時エラー】':1 } },
           executedExcludes:['printf("WRONG-MAIN']
         }
       },
@@ -1774,10 +1776,10 @@
           variables:['i = 0', 'j = 7', 'count = 7'],
           warningMin:1,
           hintsInclude:['0で割ろうとしています'],
-          stepsInOrder:['【内側for・1回目】', '【内側for・2回目】', '【内側for・3回目】', '内側forの4～6回目の反復を省略しました', '【内側for・7回目】', '【内側for・条件判定エラー】'],
-          stepsExclude:['【内側for・8回目】', '【内側for・終了判定】', '【内側for・終了】', '【外側for・終了】'],
-          stepCounts:{ '【内側for・条件判定エラー】':1 },
-          analysisByLineCounts:{ '8':{ '【内側for・条件判定エラー】':1 } },
+          stepsInOrder:['【外側for：1回目｜内側for：1周目】', '【外側for：1回目｜内側for：2周目】', '【外側for：1回目｜内側for：3周目】', '【外側for：1回目｜内側for：省略】', '4～6周目の反復を省略しました', '【外側for：1回目｜内側for：7周目】', '【外側for：1回目｜内側for：条件判定エラー】'],
+          stepsExclude:['内側for：8周目', '内側for：終了判定', '内側for：終了', '外側for：終了', '続きに戻ります'],
+          stepCounts:{ '内側for：条件判定エラー】':1 },
+          analysisByLineCounts:{ '8':{ '内側for：条件判定エラー】':1 } },
           executedExcludes:['printf("WRONG-MAIN']
         }
       },
@@ -1790,10 +1792,10 @@
           variables:['i = 0', 'j = 7', 'count = 8'],
           warningMin:1,
           hintsInclude:['0で割ろうとしています'],
-          stepsInOrder:['【内側for・1回目】', '【内側for・2回目】', '【内側for・3回目】', '内側forの4～7回目の反復を省略しました', '【内側for・8回目】', '【内側for・更新エラー】'],
-          stepsExclude:['【内側for・終了判定】', '【内側for・終了】', '【外側for・終了】'],
-          stepCounts:{ '【内側for・更新エラー】':1 },
-          analysisByLineCounts:{ '8':{ '【内側for・更新エラー】':1 } },
+          stepsInOrder:['【外側for：1回目｜内側for：1周目】', '【外側for：1回目｜内側for：2周目】', '【外側for：1回目｜内側for：3周目】', '【外側for：1回目｜内側for：省略】', '4～7周目の反復を省略しました', '【外側for：1回目｜内側for：8周目】', '【外側for：1回目｜内側for：更新エラー】'],
+          stepsExclude:['内側for：終了判定', '内側for：終了', '外側for：終了', '続きに戻ります'],
+          stepCounts:{ '内側for：更新エラー】':1 },
+          analysisByLineCounts:{ '8':{ '内側for：更新エラー】':1 } },
           executedExcludes:['printf("WRONG-MAIN']
         }
       },
@@ -1805,8 +1807,8 @@
           variables:['i = 20', 'j = 25', 'count = 500'],
           warningMax:0,
           hintsExclude:['安全上限'],
-          stepsInclude:['【内側for・25回目】', '【内側for・終了】', '【外側for・終了】'],
-          stepsExclude:['安全上限停止', '501回目へ進む条件判定', '内側for・501回目']
+          stepsInclude:['内側for：25周目】', '内側for：終了】', '【外側for：終了】'],
+          stepsExclude:['安全上限停止', '501周目へ進む条件判定', '内側for：501周目']
         }
       },
       {
@@ -1818,10 +1820,10 @@
           variables:['i = 29', 'j = 7', 'count = 500'],
           warningMin:1,
           hintsInclude:['累計 500 回実行済み', '累計 501 回目', 'C言語自体の制限ではありません'],
-          stepsInOrder:['【外側for・1回目】', '【外側for・2回目】', '【外側for・3回目】', '外側forの4～29回目の反復を省略しました', '【外側for・30回目】', '【内側for・1回目】', '【内側for・2回目】', '【内側for・3回目】', '内側forの4～6回目の反復を省略しました', '【内側for・7回目】', '【内側for・8回目へ進む条件判定】', '【内側for・安全上限停止】'],
-          stepsExclude:['【内側for・501回目】', '【501回目へ進む条件判定】', '【外側for・終了】'],
-          stepCounts:{ '【内側for・安全上限停止】':1, '【内側for・終了】':3 },
-          analysisByLineCounts:{ '8':{ '【内側for・8回目へ進む条件判定】':1, '【内側for・安全上限停止】':1 } },
+          stepsInOrder:['【外側for：1回目】', '【外側for：2回目】', '【外側for：3回目】', '【外側for：省略】', '4～29回目の反復を省略しました', '【外側for：30回目】', '【外側for：30回目｜内側for：1周目】', '【外側for：30回目｜内側for：2周目】', '【外側for：30回目｜内側for：3周目】', '【外側for：30回目｜内側for：省略】', '4～6周目の反復を省略しました', '【外側for：30回目｜内側for：7周目】', '【外側for：30回目｜内側for：8周目へ進む条件判定】', '【外側for：30回目｜内側for：安全上限停止】'],
+          stepsExclude:['内側for：501周目', '【501回目へ進む条件判定】', '【外側for：終了】'],
+          stepCounts:{ '内側for：安全上限停止】':1, '内側for：終了】':3 },
+          analysisByLineCounts:{ '8':{ '内側for：8周目へ進む条件判定】':1, '内側for：安全上限停止】':1 } },
           executedExcludes:['printf("WRONG-MAIN']
         }
       },
@@ -1833,9 +1835,9 @@
           variables:['i = 2', 'j = 0', 'count = 500'],
           warningMax:0,
           hintsExclude:['安全上限'],
-          stepsInclude:['【内側for・500回目】', '【内側for・最初の条件判定／終了判定】', '【外側for・終了】'],
-          stepsExclude:['内側for・安全上限停止', '内側for・501回目'],
-          stepCounts:{ '【内側for・終了】':2 }
+          stepsInclude:['【外側for：1回目｜内側for：500周目】', '【外側for：2回目｜内側for：最初の条件判定／終了判定】', '【外側for：終了】', '内側forの繰り返しはここで終了します。外側forの2回目の続きに戻ります。'],
+          stepsExclude:['内側for：安全上限停止', '内側for：501周目'],
+          stepCounts:{ '内側for：終了】':2 }
         }
       },
       {
@@ -1847,12 +1849,53 @@
           variables:['i = 7', 'j = 6', 'k = 4', 'count = 500'],
           warningMin:1,
           hintsInclude:['累計 500 回実行済み', '累計 501 回目', 'C言語自体の制限ではありません'],
-          stepsInOrder:['【外側for・1回目】', '【外側for・2回目】', '【外側for・3回目】', '外側forの4～7回目の反復を省略しました', '【外側for・8回目】', '【内側for・1回目】', '【内側for・2回目】', '【内側for・3回目】', '内側forの4～6回目の反復を省略しました', '【内側for・7回目】', '【最奥for・4回目】', '【最奥for・5回目へ進む条件判定】', '【最奥for・安全上限停止】'],
-          stepsExclude:['【最奥for・501回目】', '【501回目へ進む条件判定】', '【外側for・終了】'],
-          stepCounts:{ '【最奥for・安全上限停止】':1, '【外側for・終了】':0, '【内側for・終了】':3, '【最奥for・終了】':15 },
-          analysisByLineIncludes:{ '8':['【外側for・8回目】'], '9':['【内側for・7回目】'], '10':['【最奥for・5回目へ進む条件判定】'] },
-          analysisByLineCounts:{ '10':{ '【最奥for・安全上限停止】':1 } },
+          stepsInOrder:['【外側for：1回目】', '【外側for：2回目】', '【外側for：3回目】', '【外側for：省略】', '4～7回目の反復を省略しました', '【外側for：8回目】', '【外側for：8回目｜内側for：1周目】', '【外側for：8回目｜内側for：2周目】', '【外側for：8回目｜内側for：3周目】', '【外側for：8回目｜内側for：省略】', '4～6周目の反復を省略しました', '【外側for：8回目｜内側for：7周目】', '【外側for：8回目｜内側for：7周目｜最奥for：4周目】', '【外側for：8回目｜内側for：7周目｜最奥for：5周目へ進む条件判定】', '【外側for：8回目｜内側for：7周目｜最奥for：安全上限停止】'],
+          stepsExclude:['最奥for：501周目', '【501回目へ進む条件判定】', '【外側for：終了】'],
+          stepCounts:{ '最奥for：安全上限停止】':1, '【外側for：終了】':0, '内側for：終了】':3, '最奥for：終了】':15 },
+          analysisByLineIncludes:{ '8':['【外側for：8回目】'], '9':['【外側for：8回目｜内側for：7周目】'], '10':['【外側for：8回目｜内側for：7周目｜最奥for：5周目へ進む条件判定】'] },
+          analysisByLineCounts:{ '10':{ '最奥for：安全上限停止】':1 } },
           executedExcludes:['printf("WRONG-MAIN']
+        }
+      },
+      {
+        name:'Ver.0.8 UX 2重forの現在地と親反復への復帰を両表示で案内',
+        code:makeMainCode(`    int i;
+    int j;
+    for(i = 0; i < 2; i++){
+        for(j = 0; j < 2; j++){
+            printf("%d%d", i, j);
+        }
+    }
+    return 0;`),
+        expect:{
+          output:'00011011',
+          variables:['i = 2', 'j = 2'],
+          warningMax:0,
+          stepsInclude:['【外側for：2回目｜内側for：1周目】', '【外側for：2回目｜内側for：2周目】', '【外側for：2回目｜内側for：終了判定】', '【外側for：2回目｜内側for：終了】', '内側forの繰り返しはここで終了します。外側forの2回目の続きに戻ります。'],
+          stepsExclude:['【内側for：1周目】', '外側for・', '内側for・', '最奥for・'],
+          analysisByLineIncludes:{ '7':['【外側for：2回目｜内側for：終了判定】'], '9':['【外側for：2回目｜内側for：終了】', '外側forの2回目の続きに戻ります。'] }
+        }
+      },
+      {
+        name:'Ver.0.8 UX 3重forの最奥まで現在地と直近親への復帰を案内',
+        code:makeMainCode(`    int i;
+    int j;
+    int k;
+    for(i = 0; i < 2; i++){
+        for(j = 0; j < 2; j++){
+            for(k = 0; k < 2; k++){
+                printf("%d%d%d", i, j, k);
+            }
+        }
+    }
+    return 0;`),
+        expect:{
+          output:'000001010011100101110111',
+          variables:['i = 2', 'j = 2', 'k = 2'],
+          warningMax:0,
+          stepsInclude:['【外側for：2回目｜内側for：1周目｜最奥for：1周目】', '【外側for：2回目｜内側for：1周目｜最奥for：2周目】', '【外側for：2回目｜内側for：1周目｜最奥for：終了判定】', '【外側for：2回目｜内側for：1周目｜最奥for：終了】', '最奥forの繰り返しはここで終了します。内側forの1周目の続きに戻ります。'],
+          stepsExclude:['【最奥for：1周目】', '外側for・', '内側for・', '最奥for・'],
+          analysisByLineIncludes:{ '9':['【外側for：2回目｜内側for：1周目｜最奥for：終了判定】'], '11':['【外側for：2回目｜内側for：1周目｜最奥for：終了】', '内側forの1周目の続きに戻ります。'] }
         }
       },
       {

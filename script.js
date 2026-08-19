@@ -2380,14 +2380,37 @@ function visualizeCode(){
     assign(rootNode);
   }
 
-  function forExplanationPrefix(node, label){
-    const hierarchyLabel = node.explanationLabel ? `${node.explanationLabel}・` : '';
-    return `<strong>【${hierarchyLabel}${label}】</strong> `;
+  function forIterationState(node, iterationNumber){
+    const unit = node.explanationLabel && node.forDepth > 1 ? '周目' : '回目';
+    return `${iterationNumber}${unit}`;
+  }
+
+  function forExplanationPrefix(node, label, parentLocation = []){
+    if(!node.explanationLabel){
+      return `<strong>【${label}】</strong> `;
+    }
+
+    const location = [
+      ...parentLocation.map(item => `${item.label}：${item.state}`),
+      `${node.explanationLabel}：${label}`
+    ];
+    return `<strong>【${location.join('｜')}】</strong> `;
+  }
+
+  function forNormalEndMessage(node, parentLocation){
+    if(node.explanationLabel && parentLocation.length > 0){
+      const parent = parentLocation[parentLocation.length - 1];
+      return `${node.explanationLabel}の繰り返しはここで終了します。${parent.label}の${parent.state}の続きに戻ります。`;
+    }
+    if(node.explanationLabel){
+      return `${node.explanationLabel}の繰り返しはここで終了します。`;
+    }
+    return 'for文を終了します。';
   }
 
   // for文の実行中に生成された説明の範囲だけを記録し、実行後に表示用履歴を整えます。
   // 出力・変数・条件評価・本体実行・更新には触れず、説明配列とSTEP配列だけを編集します。
-  function createForExplanationHistory(node){
+  function createForExplanationHistory(node, parentLocation){
     const iterationRecords = [];
     const firstLineNo = node.startIndex + 1;
     const lastLineNo = node.endIndex + 1;
@@ -2405,7 +2428,7 @@ function visualizeCode(){
     }
 
     function hasForHierarchyPrefix(text){
-      return /^<strong>【(?:外側for|内側for|最奥for)・/.test(String(text));
+      return /^<strong>【(?:外側for|内側for|最奥for)：/.test(String(text));
     }
 
     function snapshot(){
@@ -2429,12 +2452,15 @@ function visualizeCode(){
     }
 
     function iterationPrefix(iterationNumber){
-      return forExplanationPrefix(node, `${iterationNumber}回目`);
+      return forExplanationPrefix(node, forIterationState(node, iterationNumber), parentLocation);
     }
 
     function omissionText(firstOmitted, lastOmitted){
-      const hierarchyLabel = node.explanationLabel ? `${node.explanationLabel}の` : '';
-      return `<span class="dim">…… ${hierarchyLabel}${firstOmitted}～${lastOmitted}回目の反復を省略しました ……</span>`;
+      const unit = node.explanationLabel && node.forDepth > 1 ? '周目' : '回目';
+      const omissionPrefix = node.explanationLabel
+        ? forExplanationPrefix(node, '省略', parentLocation)
+        : '';
+      return `${omissionPrefix}<span class="dim">…… ${firstOmitted}～${lastOmitted}${unit}の反復を省略しました ……</span>`;
     }
 
     function labeledSlice(items, startIndex, endIndex, iterationNumber, mapItem){
@@ -2529,9 +2555,9 @@ function visualizeCode(){
     return { beginIteration, finishIteration, finalize };
   }
 
-  function executeFor(node){
+  function executeFor(node, parentLocation = []){
     const lineNo = node.startIndex + 1;
-    const explanationHistory = createForExplanationHistory(node);
+    const explanationHistory = createForExplanationHistory(node, parentLocation);
     const initialization = executeAssignment(
       node.initialization.name,
       node.initialization.expression,
@@ -2553,7 +2579,7 @@ function visualizeCode(){
       const activeIteration = explanationHistory.beginIteration(iterationCount + 1);
       const conditionResult = evaluateExpression(node.condition, variables);
       if(!conditionResult.ok){
-        const conditionErrorPrefix = forExplanationPrefix(node, '条件判定エラー');
+        const conditionErrorPrefix = forExplanationPrefix(node, '条件判定エラー', parentLocation);
         addAnalysis(analysis, lineNo, `${conditionErrorPrefix}for文の条件 <code>${escapeHtml(node.condition)}</code> を評価できませんでした。`);
         addHint(hints, lineNo, 'for文の条件を評価できません', escapeHtml(conditionResult.error));
         warningLines.add(lineNo);
@@ -2575,19 +2601,21 @@ function visualizeCode(){
       const nextEnteredIteration = enteredIterationTotal + 1;
       const nextLocalIteration = iterationCount + 1;
       const reachesSafetyLimit = conditionMet && enteredIterationTotal >= MAX_FOR_ITERATIONS;
+      const normalEndMessage = forNormalEndMessage(node, parentLocation);
       const nextAction = reachesSafetyLimit
         ? (node.explanationLabel
-          ? `条件が成立したため、本来は今回の呼び出しの${nextLocalIteration}回目（可視化全体では累計${nextEnteredIteration}回目）の本体へ進む必要があります。`
+          ? `条件が成立したため、本来は今回の呼び出しの${forIterationState(node, nextLocalIteration)}（可視化全体では累計${nextEnteredIteration}回目）の本体へ進む必要があります。`
           : `条件が成立したため、本来は${nextEnteredIteration}回目の本体へ進む必要があります。`)
         : (conditionMet
           ? '条件が成立したため、for文の本体へ進みます。'
-          : '条件が成立しなかったため、for文を終了します。');
+          : `条件が成立しなかったため、${normalEndMessage}`);
       const conditionDisplayPrefix = !conditionMet
-        ? forExplanationPrefix(node, iterationCount === 0 ? '最初の条件判定／終了判定' : '終了判定')
+        ? forExplanationPrefix(node, iterationCount === 0 ? '最初の条件判定／終了判定' : '終了判定', parentLocation)
         : (reachesSafetyLimit
           ? forExplanationPrefix(
             node,
-            `${node.explanationLabel ? nextLocalIteration : nextEnteredIteration}回目へ進む条件判定`
+            `${node.explanationLabel ? forIterationState(node, nextLocalIteration) : `${nextEnteredIteration}回目`}へ進む条件判定`,
+            parentLocation
           )
           : '');
       addAnalysis(analysis, lineNo, `${conditionDisplayPrefix}<strong>for文の条件：</strong> ${conditionExplanation}${nextAction}`);
@@ -2596,17 +2624,24 @@ function visualizeCode(){
       if(!conditionMet){
         const endDisplayPrefix = forExplanationPrefix(
           node,
-          node.explanationLabel ? '終了' : 'for終了'
+          node.explanationLabel ? '終了' : 'for終了',
+          parentLocation
         );
-        addAnalysis(analysis, node.endIndex + 1, `${endDisplayPrefix}最終条件が成立しなかったため、for文の処理を終えて後続の処理へ進みます。`);
-        addStep(lineNo, `${endDisplayPrefix}for文の最終条件が成立しなかったため、for文を終了します。`);
+        const endAnalysis = node.explanationLabel
+          ? `最終条件が成立しなかったため、${normalEndMessage}`
+          : '最終条件が成立しなかったため、for文の処理を終えて後続の処理へ進みます。';
+        const endStep = node.explanationLabel
+          ? normalEndMessage
+          : 'for文の最終条件が成立しなかったため、for文を終了します。';
+        addAnalysis(analysis, node.endIndex + 1, `${endDisplayPrefix}${endAnalysis}`);
+        addStep(lineNo, `${endDisplayPrefix}${endStep}`);
         explanationHistory.finalize();
         return { status:'normal' };
       }
 
       // 500回目までは実行し、501回目の本体へ入る直前に停止します。
       if(reachesSafetyLimit){
-        const safetyPrefix = forExplanationPrefix(node, '安全上限停止');
+        const safetyPrefix = forExplanationPrefix(node, '安全上限停止', parentLocation);
         const safetyMessage = node.explanationLabel
           ? `このfor文は可視化全体で本体を累計 ${MAX_FOR_ITERATIONS} 回実行済みです。次の本体へ入ると累計 ${nextEnteredIteration} 回目になるため、C Code Visualizerが安全のため停止しました。これはC言語自体の制限ではありません。for文の「条件」と「更新式」を確認してみましょう。<strong>変数の値は、終了条件へ近づいていますか？</strong>`
           : '無限ループ、または非常に多い反復の可能性があります。安全のため実行を停止しました。for文の「条件」と「更新式」を確認してみましょう。<strong>変数の値は、終了条件へ近づいていますか？</strong>';
@@ -2647,7 +2682,7 @@ function visualizeCode(){
           }
           if(bodyResult === 'execution-error' || bodyResult === 'scanf-error'){
             const runtimeErrorPrefix = node.explanationLabel
-              ? forExplanationPrefix(node, '実行時エラー')
+              ? forExplanationPrefix(node, '実行時エラー', parentLocation)
               : '';
             if(runtimeErrorPrefix){
               addAnalysis(analysis, index + 1, `${runtimeErrorPrefix}for文の本体で実行時エラーが発生したため、プログラム全体を停止します。`);
@@ -2666,7 +2701,13 @@ function visualizeCode(){
         }
 
         if(bodyItem.type === 'for'){
-          const nestedForResult = executeFor(bodyItem.node);
+          const nestedForResult = executeFor(bodyItem.node, [
+            ...parentLocation,
+            {
+              label:node.explanationLabel,
+              state:forIterationState(node, iterationCount)
+            }
+          ]);
           if(nestedForResult.status !== 'normal'){
             explanationHistory.finishIteration(activeIteration);
             explanationHistory.finalize();
@@ -2710,7 +2751,7 @@ function visualizeCode(){
       }
       if(!updateResult.ok){
         const updateErrorPrefix = node.explanationLabel
-          ? forExplanationPrefix(node, '更新エラー')
+          ? forExplanationPrefix(node, '更新エラー', parentLocation)
           : '';
         if(updateErrorPrefix){
           addAnalysis(analysis, lineNo, `${updateErrorPrefix}for文の更新式を評価できないため、プログラム全体を停止します。`);
