@@ -6,7 +6,7 @@ const samples = {
   nestedIf: `#include <stdio.h>\n\nint main(void){\n    int score = 75;\n\n    if(score >= 60){\n        if(score >= 80){\n            printf("高得点です\\n");\n        }else{\n            printf("合格です\\n");\n        }\n    }\n\n    return 0;\n}`,
   forBasic: `#include <stdio.h>\n\nint main(void){\n    int i;\n\n    for(i = 0; i < 5; i++){\n        printf("%d\\n", i);\n    }\n\n    return 0;\n}`,
   forIf: `#include <stdio.h>\n\nint main(void){\n    int i;\n\n    for(i = 0; i < 10; i++){\n        if(i % 2 == 0){\n            printf("%d\\n", i);\n        }\n    }\n\n    return 0;\n}`,
-  nestedFor: `#include <stdio.h>\n\nint main(void){\n    int i;\n    int j;\n\n    for(i = 1; i <= 5; i++){\n        for(j = 1; j <= i; j++){\n            printf("*");\n        }\n        printf("\\n");\n    }\n\n    return 0;\n}`,
+  nestedFor: `#include <stdio.h>\n\nint main(void){\n    int i;\n    int j;\n\n    for(i = 1; i <= 3; i++){\n        for(j = 1; j <= i; j++){\n            printf("*");\n        }\n        printf("\\n");\n    }\n\n    return 0;\n}`,
   scanfInput: `#include <stdio.h>\n\nint main(void){\n    int score;\n\n    scanf("%d", &score);\n\n    if(score >= 60){\n        printf("合格です\\n");\n    }else{\n        printf("不合格です\\n");\n    }\n\n    return 0;\n}`,
   unsupported: `#include <stdio.h>\n\nint main(void){\n    int count = 0;\n\n    while(count < 3){\n        count = count + 1;\n    }\n\n    return 0;\n}`
 };
