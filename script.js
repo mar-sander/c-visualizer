@@ -1815,6 +1815,7 @@ function visualizeCode(){
 
   function executeIfNode(node, context = {}){
     const stopOnRuntimeError = context.stopOnRuntimeError === true;
+    const parentLoopLabel = context.insideWhile === true ? 'while文' : 'for文';
     const nested = node.depth > 1;
     const lineNo = node.startIndex + 1;
     const result = evaluateExpression(node.condition, variables);
@@ -1830,7 +1831,7 @@ function visualizeCode(){
           status:'execution-stopped',
           stopKind:'runtime-error',
           stopIndex:node.startIndex,
-          reason:'for文内のif文で実行を停止したため、この行は実行されませんでした。'
+          reason:`${parentLoopLabel}内のif文で実行を停止したため、この行は実行されませんでした。`
         };
       }
 
@@ -1928,6 +1929,7 @@ function visualizeCode(){
   }
 
   function executeIfBranch(startIndex, endIndex, nestedIfs, context = {}){
+    const parentLoopLabel = context.insideWhile === true ? 'while文' : 'for文';
     const nestedIfMap = new Map(nestedIfs.map(node => [node.startIndex, node]));
     for(let index = startIndex; index < endIndex; index++){
       const nestedIf = nestedIfMap.get(index);
@@ -1937,7 +1939,13 @@ function visualizeCode(){
         index = nestedIf.endIndex;
         continue;
       }
-      const simpleResult = processSimpleLine(lines[index], index, true, context.insideFor === true);
+      const simpleResult = processSimpleLine(
+        lines[index],
+        index,
+        true,
+        context.insideFor === true,
+        context.insideWhile === true
+      );
       if(simpleResult === 'program-ended'){
         return { status:'program-ended', stopIndex:index };
       }
@@ -1946,7 +1954,7 @@ function visualizeCode(){
           status:'execution-stopped',
           stopKind:'runtime-error',
           stopIndex:index,
-          reason:'for文内のif文で実行を停止したため、この行は実行されませんでした。'
+          reason:`${parentLoopLabel}内のif文で実行を停止したため、この行は実行されませんでした。`
         };
       }
     }
@@ -2231,6 +2239,53 @@ function visualizeCode(){
       return failure('while文を閉じる波かっこを確認できないため、条件判定を含めて実行しません。', 'while文の終わりを確認');
     }
 
+    function validateIfSimpleStatement(index, structuralBodyCode){
+      const trimmed = executableLines[index].trim();
+      function invalid(title, message){
+        return { ok:false, title, message };
+      }
+
+      if(hasMultipleStatementsOnOneLine(trimmed)){
+        return invalid(
+          'if分岐内の改行を確認',
+          'while文内のif分岐に1行で複数の文があります。while文全体を部分実行せず、条件判定前に停止します。'
+        );
+      }
+      if(/^int\b/.test(structuralBodyCode)){
+        return invalid(
+          'if分岐内の変数宣言は未対応',
+          'while文内のif側・else側で変数を宣言する形は現在未対応です。while文全体を実行しません。'
+        );
+      }
+      if(parseVariableUpdate(structuralBodyCode, true) !== null || /\+=|-=|\+\+|--/.test(structuralBodyCode)){
+        return invalid(
+          'if分岐内の更新文は未対応',
+          'while文内のif側・else側では、++ / -- / += / -= を現在実行できません。while文全体を実行しません。'
+        );
+      }
+
+      const looksLikePrintf = /^printf\b/.test(structuralBodyCode);
+      const printfMatch = looksLikePrintf ? matchSimplePrintfStatement(trimmed) : null;
+      if(looksLikePrintf && (!printfMatch || printfMatch[1].includes('%%'))){
+        return invalid(
+          'if分岐内のprintfは未対応',
+          'while文内のif側・else側に、既存の単純printfとして安全に実行できない文があります。while文全体を実行しません。'
+        );
+      }
+
+      const supportedSimpleStatement =
+        /^return\s+0\s*;?$/.test(structuralBodyCode) ||
+        /^[A-Za-z_]\w*\s*=\s*.+;$/.test(structuralBodyCode) ||
+        printfMatch !== null;
+      if(!supportedSimpleStatement){
+        return invalid(
+          'if分岐内の文は未対応',
+          'while文内のif側・else側に、現在実行できない文があります。while文全体を部分実行せず、条件判定前に停止します。'
+        );
+      }
+      return { ok:true };
+    }
+
     for(let index = startIndex + 1; index < safeEndIndex; index++){
       const trimmed = executableLines[index].trim();
       const structuralBodyCode = codeOutsideStringAndLineComment(executableLines[index]).trim();
@@ -2242,8 +2297,26 @@ function visualizeCode(){
       if(hasMultipleStatementsOnOneLine(trimmed)){
         return failure('while文の本体に1行で複数の文が書かれています。本体を部分実行せず、条件判定前に停止します。', 'while文本体の改行を確認');
       }
-      if(/^if\b/.test(structuralBodyCode) || /^else\b/.test(structuralBodyCode)){
-        return failure('while文の本体内にif・elseがあります。Stage1Aではwhile内ifにまだ対応していないため、while文全体を実行しません。', 'Stage1Aではwhile内ifは未対応');
+      if(/^if\b/.test(structuralBodyCode)){
+        const ifNode = inspectSupportedIf(index, {
+          containerEndIndex:Math.max(index, safeEndIndex - 1),
+          validateSimpleStatement:validateIfSimpleStatement
+        });
+        if(!ifNode.ok){
+          return failure(ifNode.message, ifNode.title);
+        }
+        if(ifNode.endIndex >= safeEndIndex){
+          return failure(
+            'while文内のif文の終わりを外側whileの本体内で確認できません。while文全体を実行しません。',
+            'while文内ifの閉じ波かっこを確認'
+          );
+        }
+        bodyItems.push({ type:'if', node:ifNode });
+        index = ifNode.endIndex;
+        continue;
+      }
+      if(/^else\b/.test(structuralBodyCode)){
+        return failure('対応するif文を安全に確定できないelseがあります。while文全体を実行しません。', 'このelse付きif文は未対応');
       }
       if(/^scanf\b/.test(structuralBodyCode) || /\bscanf\s*\(/.test(structuralBodyCode)){
         return failure('while文の本体内にscanfがあります。現在のVisualizerではwhile内scanfに対応していないため、while文全体を実行しません。', 'while文内のscanfは未対応');
@@ -2323,7 +2396,7 @@ function visualizeCode(){
     return `<strong>【${label}】</strong> `;
   }
 
-  // Stage1Aでは圧縮せず、各反復で追加された説明へ同じ反復番号を付けます。
+  // Stage1では圧縮せず、各反復で追加された説明へ同じ反復番号を付けます。
   function snapshotWhileIteration(node){
     const analysisLengths = {};
     for(let lineNo = node.startIndex + 1; lineNo <= node.endIndex + 1; lineNo++){
@@ -2409,25 +2482,42 @@ function visualizeCode(){
       enteredBodyCount++;
 
       for(const bodyItem of node.bodyItems){
-        const index = bodyItem.index;
-        // 空行とコメントは最初の反復で一度だけ説明し、大量の同一説明を避けます。
-        if(executableLines[index].trim() === '' && enteredBodyCount > 1) continue;
+        if(bodyItem.type === 'simple'){
+          const index = bodyItem.index;
+          // 空行とコメントは最初の反復で一度だけ説明し、大量の同一説明を避けます。
+          if(executableLines[index].trim() === '' && enteredBodyCount > 1) continue;
 
-        const bodyResult = processSimpleLine(lines[index], index, false, false, true);
-        if(bodyResult === 'program-ended'){
-          labelWhileIteration(node, iterationSnapshot, iterationNumber);
-          return { status:'program-ended', stopIndex:index };
+          const bodyResult = processSimpleLine(lines[index], index, false, false, true);
+          if(bodyResult === 'program-ended'){
+            labelWhileIteration(node, iterationSnapshot, iterationNumber);
+            return { status:'program-ended', stopIndex:index };
+          }
+          if(bodyResult === 'execution-error' || bodyResult === 'scanf-error'){
+            addAnalysis(analysis, index + 1, 'while文の本体で実行時エラーが発生したため、プログラム全体を停止します。');
+            addStep(index + 1, 'while文の本体で処理を継続できないため、プログラムの実行を停止します。');
+            labelWhileIteration(node, iterationSnapshot, iterationNumber);
+            return {
+              status:'execution-stopped',
+              stopKind:'runtime-error',
+              stopIndex:index,
+              reason:'while文の本体で実行を停止したため、この行は実行されませんでした。'
+            };
+          }
+          continue;
         }
-        if(bodyResult === 'execution-error' || bodyResult === 'scanf-error'){
-          addAnalysis(analysis, index + 1, 'while文の本体で実行時エラーが発生したため、プログラム全体を停止します。');
-          addStep(index + 1, 'while文の本体で処理を継続できないため、プログラムの実行を停止します。');
+
+        const ifResult = executeIfNode(bodyItem.node, {
+          insideWhile:true,
+          stopOnRuntimeError:true
+        });
+        if(ifResult.status === 'program-ended'){
           labelWhileIteration(node, iterationSnapshot, iterationNumber);
-          return {
-            status:'execution-stopped',
-            stopKind:'runtime-error',
-            stopIndex:index,
-            reason:'while文の本体で実行を停止したため、この行は実行されませんでした。'
-          };
+          return ifResult;
+        }
+        if(ifResult.status === 'execution-stopped'){
+          addStep(ifResult.stopIndex + 1, 'while文の本体内のif文で処理を継続できないため、プログラムの実行を停止します。');
+          labelWhileIteration(node, iterationSnapshot, iterationNumber);
+          return ifResult;
         }
       }
 

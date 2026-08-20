@@ -2679,9 +2679,9 @@
         expect:{ output:'出力はまだありません。', outputExcludes:['WRONG'], variables:['i = 10', 'j = 9'], warningMin:1, hintsInclude:['while文内の制御構造は未対応'], stepCounts:{ 'while文の条件':0, 'for文の初期化':0 }, executedExcludes:['i++;', 'printf("WRONG'] }
       },
       {
-        name:'Stage1A 0反復while内ifを一時的に事前拒否',
-        code:makeMainCode(`    int i = 10;\n    while(i < 5){\n        if(i == 0){\n            i++;\n        }\n    }\n    printf("WRONG");\n    return 0;`),
-        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG'], variables:['i = 10'], warningMin:1, hintsInclude:['Stage1Aではwhile内ifは未対応'], stepCounts:{ 'while文の条件':0 }, executedExcludes:['i++;', 'printf("WRONG'] }
+        name:'Stage1B 0反復while内ifは構造検証だけ行い条件を評価しない',
+        code:makeMainCode(`    int i = 10;\n    while(i < 5){\n        if(i == 0){\n            i = i + 1;\n        }\n    }\n    printf("AFTER");\n    return 0;`),
+        expect:{ output:'AFTER', variables:['i = 10'], warningMax:0, stepsInclude:['【最初の条件判定／終了判定】', '【while終了】'], stepCounts:{ 'i == 0を判定':0 }, executedExcludes:['i = i + 1;'] }
       },
       {
         name:'Stage1A 0反復while内scanfを拒否して入力を消費しない',
@@ -2768,6 +2768,162 @@
         name:'Stage1A while本体の0除算エラーで後続停止',
         code:makeMainCode(`    int i = 0;\n    while(i < 1){\n        i = 1 / 0;\n    }\n    printf("WRONG");\n    return 0;`),
         expect:{ output:'出力はまだありません。', outputExcludes:['WRONG'], variables:['i = 0'], warningMin:1, hintsInclude:['式を計算できません'], stepsInclude:['【1回目】', 'while文の本体で処理を継続できない'], executedExcludes:['printf("WRONG'] }
+      },
+      {
+        name:'Stage1B while内if・true側の代入とprintfを実行',
+        code:makeMainCode(`    int i = 0;\n    int hits = 0;\n    while(i < 3){\n        if(i == 1){\n            hits = hits + 1;\n            printf("T");\n        }\n        i++;\n    }\n    printf("%d", hits);\n    return 0;`),
+        expect:{ output:'T1', variables:['i = 3', 'hits = 1'], warningMax:0, stepsInclude:['【2回目】', 'i == 1を判定', '画面に「T」'], executedIncludes:['hits = hits + 1;', 'printf("T");'] }
+      },
+      {
+        name:'Stage1B while内if・false側は実行しない',
+        code:makeMainCode(`    int i = 0;\n    while(i < 2){\n        if(i > 9){\n            printf("WRONG");\n        }\n        i++;\n    }\n    printf("AFTER");\n    return 0;`),
+        expect:{ output:'AFTER', outputExcludes:['WRONG'], variables:['i = 2'], warningMax:0, stepsInclude:['i > 9を判定', '【2回目】', '【while終了】'], executedExcludes:['printf("WRONG");'] }
+      },
+      {
+        name:'Stage1B while内if〜else・if側を実行',
+        code:makeMainCode(`    int flag = 1;\n    while(flag){\n        if(flag == 1){\n            printf("IF");\n        }else{\n            printf("ELSE");\n        }\n        flag = 0;\n    }\n    return 0;`),
+        expect:{ output:'IF', outputExcludes:['ELSE'], variables:['flag = 0'], warningMax:0, stepsInclude:['if文の中へ進みます', '【while終了】'], executedIncludes:['printf("IF");'], executedExcludes:['printf("ELSE");'] }
+      },
+      {
+        name:'Stage1B while内if〜else・else側を実行',
+        code:makeMainCode(`    int flag = 0;\n    int count = 0;\n    while(count < 1){\n        if(flag){\n            printf("IF");\n        }else{\n            printf("ELSE");\n        }\n        count++;\n    }\n    return 0;`),
+        expect:{ output:'ELSE', outputExcludes:['IF'], variables:['flag = 0', 'count = 1'], warningMax:0, stepsInclude:['else文の中へ進みます', '【while終了】'], executedIncludes:['printf("ELSE");'], executedExcludes:['printf("IF");'] }
+      },
+      {
+        name:'Stage1B 複数反復でwhile内if〜elseの結果が変化',
+        code:makeMainCode(`    int i = 1;\n    while(i <= 4){\n        if(i % 2 == 0){\n            printf("E");\n        }else{\n            printf("O");\n        }\n        i++;\n    }\n    return 0;`),
+        expect:{ output:'OEOE', variables:['i = 5'], warningMax:0, stepsInclude:['【1回目】', '【4回目】', '【終了判定】'], stepCounts:{ 'i % 2 == 0を判定':4 } }
+      },
+      {
+        name:'Stage1B while内2階層if・内側true',
+        code:makeMainCode(`    int i = 2;\n    while(i < 3){\n        if(i >= 2){\n            if(i <= 2){\n                printf("NESTED");\n            }\n        }\n        i++;\n    }\n    return 0;`),
+        expect:{ output:'NESTED', variables:['i = 3'], warningMax:0, stepsInclude:['i >= 2を判定', '入れ子のif文の条件 i <= 2', '【while終了】'], executedIncludes:['printf("NESTED");'] }
+      },
+      {
+        name:'Stage1B while内2階層if・内側false',
+        code:makeMainCode(`    int i = 2;\n    while(i < 3){\n        if(i >= 2){\n            if(i < 0){\n                printf("WRONG");\n            }\n        }\n        i++;\n    }\n    printf("AFTER");\n    return 0;`),
+        expect:{ output:'AFTER', outputExcludes:['WRONG'], variables:['i = 3'], warningMax:0, stepsInclude:['入れ子のif文の条件 i < 0', '【while終了】'], executedExcludes:['printf("WRONG");'] }
+      },
+      {
+        name:'Stage1B while内2階層if〜else・内側elseを実行',
+        code:makeMainCode(`    int i = 1;\n    while(i < 2){\n        if(i > 0){\n            if(i == 2){\n                printf("INNER-IF");\n            }else{\n                printf("INNER-ELSE");\n            }\n        }\n        i++;\n    }\n    return 0;`),
+        expect:{ output:'INNER-ELSE', outputExcludes:['INNER-IF'], variables:['i = 2'], warningMax:0, stepsInclude:['入れ子のif文の条件 i == 2', 'else側の処理を実行します'], executedIncludes:['printf("INNER-ELSE");'] }
+      },
+      {
+        name:'Stage1B while本体の複数独立ifを上から実行',
+        code:makeMainCode(`    int i = 1;\n    while(i <= 4){\n        if(i == 2){\n            printf("A");\n        }\n        if(i == 4){\n            printf("B");\n        }\n        i++;\n    }\n    return 0;`),
+        expect:{ output:'AB', variables:['i = 5'], warningMax:0, stepsInclude:['i == 2を判定', 'i == 4を判定', '【4回目】'], executedIncludes:['printf("A");', 'printf("B");'] }
+      },
+      {
+        name:'Stage1B while内ifからreturnして全体終了',
+        code:makeMainCode(`    int flag = 1;\n    while(flag){\n        if(flag){\n            printf("IF-RETURN");\n            return 0;\n        }\n        flag = 0;\n    }\n    printf("WRONG");`),
+        expect:{ output:'IF-RETURN', outputExcludes:['WRONG'], variables:['flag = 1'], warningMax:0, stepsInclude:['【1回目】', 'プログラムを終了します'], stepsExclude:['【while終了】'], executedExcludes:['flag = 0;', 'printf("WRONG");'] }
+      },
+      {
+        name:'Stage1B while内elseからreturnして全体終了',
+        code:makeMainCode(`    int flag = 0;\n    int count = 0;\n    while(count < 1){\n        if(flag){\n            printf("WRONG-IF");\n        }else{\n            printf("ELSE-RETURN");\n            return 0;\n        }\n        count++;\n    }\n    printf("WRONG-AFTER");`),
+        expect:{ output:'ELSE-RETURN', outputExcludes:['WRONG'], variables:['flag = 0', 'count = 0'], warningMax:0, stepsInclude:['【1回目】', 'プログラムを終了します'], stepsExclude:['【while終了】'], executedExcludes:['count++;', 'printf("WRONG-AFTER");'] }
+      },
+      {
+        name:'Stage1B while内2階層ifからreturnして全体終了',
+        code:makeMainCode(`    int i = 1;\n    while(i < 2){\n        if(i == 1){\n            if(i > 0){\n                printf("NESTED-RETURN");\n                return 0;\n            }\n        }\n        i++;\n    }\n    printf("WRONG");`),
+        expect:{ output:'NESTED-RETURN', outputExcludes:['WRONG'], variables:['i = 1'], warningMax:0, stepsInclude:['入れ子のif文の条件', 'プログラムを終了します'], stepsExclude:['【while終了】'], executedExcludes:['i++;', 'printf("WRONG");'] }
+      },
+      {
+        name:'Stage1B 未選択else側の実行時式は評価しない',
+        code:makeMainCode(`    int i = 0;\n    while(i < 1){\n        if(1){\n            printf("OK");\n        }else{\n            missing = 1 / 0;\n        }\n        i++;\n    }\n    return 0;`),
+        expect:{ output:'OK', variables:['i = 1'], variablesExclude:['missing ='], warningMax:0, hintsExclude:['式を計算できません', '宣言前の代入'], executedExcludes:['missing = 1 / 0;'] }
+      },
+      {
+        name:'Stage1B while内if条件評価エラーを全体へ伝播',
+        code:makeMainCode(`    int i = 0;\n    while(i < 1){\n        if(missing){\n            i = 1;\n        }\n        i = 1;\n    }\n    printf("WRONG");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG'], variables:['i = 0'], warningMin:1, hintsInclude:['if文の条件を評価できません'], stepsInclude:['【1回目】', 'while文の本体内のif文で処理を継続できない'], stepsExclude:['【終了判定】', '【while終了】'], analysisInclude:['while文内のif文で実行を停止'], analysisByLineExcludes:{ '5':['for文内で停止'] }, executedExcludes:['i = 1;', 'printf("WRONG");'] }
+      },
+      {
+        name:'Stage1B while内if代入エラーを全体へ伝播',
+        code:makeMainCode(`    int i = 0;\n    while(i < 1){\n        if(1){\n            missing = i;\n        }\n        i = 1;\n    }\n    printf("WRONG");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG'], variables:['i = 0'], warningMin:1, hintsInclude:['宣言前の代入かも'], stepsInclude:['【1回目】', 'while文の本体内のif文で処理を継続できない'], stepsExclude:['【終了判定】', '【while終了】'], analysisInclude:['while文内のif文で実行を停止'], executedExcludes:['i = 1;', 'printf("WRONG");'] }
+      },
+      {
+        name:'Stage1B while内if printfエラーを全体へ伝播',
+        code:makeMainCode(`    int i = 0;\n    int value;\n    while(i < 1){\n        if(1){\n            printf("%d", value);\n        }\n        i = 1;\n    }\n    printf("WRONG");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG'], variables:['i = 0', 'value = 未初期化'], warningMin:1, hintsInclude:['printfの値を確認'], stepsInclude:['【1回目】', 'while文の本体内のif文で処理を継続できない'], stepsExclude:['【終了判定】', '【while終了】'], executedExcludes:['i = 1;', 'printf("WRONG");'] }
+      },
+      {
+        name:'Stage1B 0反復でもwhile内if内whileを事前拒否',
+        code:makeMainCode(`    int i = 10;\n    while(i < 5){\n        if(i == 0){\n            while(i < 1){\n                i++;\n            }\n        }\n    }\n    printf("WRONG");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG'], variables:['i = 10'], warningMin:1, hintsInclude:['while文を含むif文の入れ子は現在未対応'], stepCounts:{ 'while文の条件':0 }, executedExcludes:['i++;', 'printf("WRONG");'] }
+      },
+      {
+        name:'Stage1B 0反復でもwhile内if内forを事前拒否',
+        code:makeMainCode(`    int i = 10;\n    int j = 9;\n    while(i < 5){\n        if(i == 0){\n            for(j = 0; j < 1; j++){\n                i = i + 1;\n            }\n        }\n    }\n    printf("WRONG");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG'], variables:['i = 10', 'j = 9'], warningMin:1, hintsInclude:['for文を含むif文の入れ子は現在未対応'], stepCounts:{ 'while文の条件':0, 'for文の初期化':0 }, executedExcludes:['i = i + 1;', 'printf("WRONG");'] }
+      },
+      {
+        name:'Stage1B 未選択if側のwhileも条件判定前に拒否',
+        code:makeMainCode(`    int i = 0;\n    while(i < 1){\n        if(0){\n            while(i < 1){\n                i++;\n            }\n        }else{\n            i = i + 1;\n        }\n    }\n    printf("WRONG");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG'], variables:['i = 0'], warningMin:1, hintsInclude:['while文を含むif文の入れ子は現在未対応'], stepCounts:{ 'while文の条件':0, 'if文の条件':0 }, executedExcludes:['i++;', 'i = i + 1;', 'printf("WRONG");'] }
+      },
+      {
+        name:'Stage1B 未選択else側のforも条件判定前に拒否',
+        code:makeMainCode(`    int i = 0;\n    int j = 9;\n    while(i < 1){\n        if(1){\n            i = i + 1;\n        }else{\n            for(j = 0; j < 1; j++){\n                i = i + 1;\n            }\n        }\n    }\n    printf("WRONG");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG'], variables:['i = 0', 'j = 9'], warningMin:1, hintsInclude:['for文を含むif文の入れ子は現在未対応'], stepCounts:{ 'while文の条件':0, 'for文の初期化':0 }, executedExcludes:['i = i + 1;', 'printf("WRONG");'] }
+      },
+      {
+        name:'Stage1B while内3階層ifを事前拒否',
+        code:makeMainCode(`    int i = 10;\n    while(i < 5){\n        if(1){\n            if(1){\n                if(1){\n                    i = i + 1;\n                }\n            }\n        }\n    }\n    printf("WRONG");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG'], variables:['i = 10'], warningMin:1, hintsInclude:['3階層以上のifは未対応'], stepCounts:{ 'while文の条件':0 }, executedExcludes:['i = i + 1;', 'printf("WRONG");'] }
+      },
+      {
+        name:'Stage1B while内ifの++を事前拒否',
+        code:makeMainCode(`    int i = 0;\n    while(i < 0){\n        if(1){\n            i++;\n        }\n    }\n    printf("WRONG");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', variables:['i = 0'], warningMin:1, hintsInclude:['if分岐内の更新文は未対応'], stepCounts:{ 'while文の条件':0 }, executedExcludes:['i++;', 'printf("WRONG");'] }
+      },
+      {
+        name:'Stage1B while内ifの--を事前拒否',
+        code:makeMainCode(`    int i = 0;\n    while(i < 0){\n        if(1){\n            i--;\n        }\n    }\n    printf("WRONG");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', variables:['i = 0'], warningMin:1, hintsInclude:['if分岐内の更新文は未対応'], stepCounts:{ 'while文の条件':0 }, executedExcludes:['i--;', 'printf("WRONG");'] }
+      },
+      {
+        name:'Stage1B while内ifの+=を事前拒否',
+        code:makeMainCode(`    int i = 0;\n    while(i < 0){\n        if(1){\n            i += 1;\n        }\n    }\n    printf("WRONG");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', variables:['i = 0'], warningMin:1, hintsInclude:['if分岐内の更新文は未対応'], stepCounts:{ 'while文の条件':0 }, executedExcludes:['i += 1;', 'printf("WRONG");'] }
+      },
+      {
+        name:'Stage1B while内ifの-=を事前拒否',
+        code:makeMainCode(`    int i = 0;\n    while(i < 0){\n        if(1){\n            i -= 1;\n        }\n    }\n    printf("WRONG");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', variables:['i = 0'], warningMin:1, hintsInclude:['if分岐内の更新文は未対応'], stepCounts:{ 'while文の条件':0 }, executedExcludes:['i -= 1;', 'printf("WRONG");'] }
+      },
+      {
+        name:'Stage1B while内ifのscanfを事前拒否',
+        input:'7',
+        code:makeMainCode(`    int i = 0;\n    while(i < 0){\n        if(1){\n            scanf("%d", &i);\n        }\n    }\n    printf("WRONG");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', variables:['i = 0'], warningMin:1, hintsInclude:['分岐内のscanfは未対応'], scanfInputValue:'7', stepCounts:{ 'while文の条件':0, '入力値 7':0 }, executedExcludes:['scanf("%d"', 'printf("WRONG");'] }
+      },
+      {
+        name:'Stage1B while内ifの変数宣言を事前拒否',
+        code:makeMainCode(`    int i = 0;\n    while(i < 0){\n        if(1){\n            int value = 1;\n        }\n    }\n    printf("WRONG");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', variables:['i = 0'], variablesExclude:['value ='], warningMin:1, hintsInclude:['if分岐内の変数宣言は未対応'], stepCounts:{ 'while文の条件':0 } }
+      },
+      {
+        name:'Stage1B while内ifのbreakを事前拒否',
+        code:makeMainCode(`    int i = 0;\n    while(i < 0){\n        if(1){\n            break;\n        }\n    }\n    printf("WRONG");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', variables:['i = 0'], warningMin:1, hintsInclude:['if分岐内の文は未対応'], stepCounts:{ 'while文の条件':0 }, executedExcludes:['break;', 'printf("WRONG");'] }
+      },
+      {
+        name:'Stage1B while内ifのcontinueを事前拒否',
+        code:makeMainCode(`    int i = 0;\n    while(i < 0){\n        if(1){\n            continue;\n        }\n    }\n    printf("WRONG");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', variables:['i = 0'], warningMin:1, hintsInclude:['if分岐内の文は未対応'], stepCounts:{ 'while文の条件':0 }, executedExcludes:['continue;', 'printf("WRONG");'] }
+      },
+      {
+        name:'Stage1B while内ifありで500回目後falseなら正常終了',
+        code:makeMainCode(`    int i = 0;\n    int hits = 0;\n    while(i < 500){\n        if(i == 499){\n            hits = hits + 1;\n        }\n        i++;\n    }\n    printf("%d", hits);\n    return 0;`),
+        expect:{ output:'1', variables:['i = 500', 'hits = 1'], warningMax:0, hintsExclude:['安全上限'], stepsInclude:['【500回目】', '【終了判定】', '【while終了】'], stepsExclude:['【501回目へ進む条件判定】', '【安全上限停止】'] }
+      },
+      {
+        name:'Stage1B while内ifありで501回目直前に安全停止',
+        code:makeMainCode(`    int i = 0;\n    int hits = 0;\n    while(i <= 500){\n        if(i == 499){\n            hits = hits + 1;\n        }\n        i++;\n    }\n    printf("WRONG");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG'], variables:['i = 500', 'hits = 1'], warningMin:1, hintsInclude:['安全上限'], stepsInclude:['【500回目】', '【501回目へ進む条件判定】', '【安全上限停止】'], stepsExclude:['【while終了】'], executedExcludes:['printf("WRONG");'] }
       }
     ];
 
