@@ -48,9 +48,9 @@ Avoid:
 - adding many features at once
 - changing the core design without reason
 
-## Supported scope for Ver.0.8_0818
+## Supported scope for Ver.0.9_0820
 
-Last updated: 2026-08-18
+Last updated: 2026-08-20
 
 Currently supported:
 
@@ -64,7 +64,7 @@ Currently supported:
 - comparison operators `<`, `<=`, `>`, `>=`, `==`, `!=`
 - C-style truth values: `0` is false, nonzero is true
 - simple printf output
-- `return 0;` from main, supported if branches, direct or nested for bodies, and if branches inside for
+- `return 0;` from main, supported if branches, direct or nested for bodies, direct while bodies, and if branches inside for or while
 - simple integer input with `scanf("%d", &variable);` directly inside main
 - one declared int variable per scanf call
 - one scanf input value per non-empty line in the dedicated input field
@@ -108,6 +108,16 @@ Currently supported:
 - removal of nested explanations when their parent iteration is omitted
 - preservation of the complete outer-to-inner path when return, runtime error, or safety stop occurs
 - an independent cumulative 500-entry safety budget for each source-level for statement across one visualization run
+- basic while statements directly inside main
+- multiple independent while statements directly inside main
+- sequential execution of independent main-level for and while statements
+- while conditions using the existing expression evaluator and C-style truth values
+- multiple supported statements and empty bodies inside while
+- ordinary assignment, standalone updates, printf, and `return 0;` directly inside while
+- supported if/if-else statements, multiple independent if statements, and up to two if levels inside while
+- complete structural validation before the first while condition evaluation, including zero-iteration bodies and unselected if/else branches
+- explanation compression after six while iterations without omitting execution, output, variable updates, or stop paths
+- an independent 500-entry safety limit for each main-level while statement, separate from every for safety counter
 - sequential execution
 - line-by-line explanations
 - variable state display
@@ -157,9 +167,9 @@ Rules:
 - else is optional
 - support both `}else{` and a separate `else{` line after the if closing brace
 - no else if
-- count an if directly inside main or directly inside a for body as level 1
+- count an if directly inside main, directly inside a for body, or directly inside a while body as level 1
 - count an if inside that if or else branch as level 2
-- do not count the containing for statement as an if nesting level
+- do not count the containing for or while statement as an if nesting level
 - support a maximum depth of 2
 - allow multiple independent level-2 if or if-else statements in one outer branch
 - allow at most one else on a level-2 if
@@ -174,11 +184,11 @@ Rules:
 - use the current expression evaluator for all conditions
 - treat `0` as false and every nonzero result as true
 - validate the complete outer if/if-else structure before evaluating the outer condition
-- after a nested if or if-else finishes or its condition evaluation fails, continue with supported later statements in the selected outer branch
+- when an if executes directly inside main, continue with supported later statements in the selected outer branch after a nested if/if-else finishes or its condition evaluation fails
 - do not evaluate a nested condition in an unselected outer branch, and do not warn about undeclared or uninitialized values used only there
 - if a selected nested condition cannot be evaluated, skip both its if and else branches
 - preserve the existing non-fatal runtime-error behavior for if/if-else directly inside main
-- when executing an if inside a for, propagate condition and selected-branch runtime errors so the for and program stop
+- when executing an if inside a for or while, propagate condition and selected-branch runtime errors so the loop and program stop
 - propagate `return 0;` from a selected outer or nested branch to the program level
 - treat unsupported structures as safe-stop targets even when they appear in an unselected outer branch
 - if level 3 or deeper, else if, an extra else, or an unsupported control structure appears inside a nested if, do not partially execute the containing outer structure
@@ -277,7 +287,65 @@ Rules:
 - never omit actual condition evaluation, body execution, updates, printf output, or final variable state
 - keep explanation histories independent across sibling for statements and independent for trees
 
-## Unsupported scope for Ver.0.8_0818
+## Basic while specification
+
+Supported form:
+
+```c
+int i = 1;
+
+while(i <= 5){
+    printf("%d\n", i);
+    i++;
+}
+```
+
+Rules:
+
+- support while statements only when they are direct child statements of main
+- allow multiple independent main-level while statements
+- allow independent main-level for and while statements to execute sequentially in source order
+- require a nonempty condition inside parentheses
+- use the existing expression evaluator for the condition
+- treat condition result `0` as false and every nonzero result as true
+- require braces and require the opening brace on the while header line
+- allow multiple supported statements and an empty body
+- directly supported body statements are ordinary assignment, standalone prefix/postfix `++` and `--`, integer-constant `+=` and `-=`, printf, and `return 0;`
+- treat every update in the body as an ordinary statement at its source position; do not infer a special while update or termination variable
+- allow supported if/if-else nodes, multiple independent if statements, and up to two if levels inside while
+- inside an if/else branch in while, allow only ordinary assignment, printf, and `return 0;`
+- do not support standalone `++`, `--`, `+=`, or `-=` inside an if/else branch
+- do not support declarations or scanf anywhere in the while body
+- do not support break, continue, or do-while
+- do not support any nested loop, including while inside while, for inside while, while inside for, or a loop inside any if/else branch
+- validate the complete while structure before the first condition evaluation
+- validate unsupported structures even when the while will execute zero times or an if/else branch will not be selected
+- never evaluate an inner if condition or execute a branch statement during structural validation
+- never partially execute a while that fails structural validation, and do not continue to later main statements after rejection
+- ignore while text and braces inside comments or string literals when determining structure
+- do not misidentify the trailing `while(condition);` of do-while as a supported main-level while
+- propagate `return 0;` from the direct body or a selected if branch to main and stop the whole program
+- propagate runtime errors from the condition, body, and selected if branches; never continue to the next iteration or later main statements after an error
+- keep an independent entered-body counter for each main-level while statement
+- do not share a while counter with another while statement or with any for statement
+- permit 500 entered body iterations; after the 500th body, evaluate the condition once more
+- if that condition is false, finish normally after 500 iterations
+- if that condition is true, stop before entering the 501st body iteration
+- preserve output, variables, executed lines, warnings, and the actual stop location when the safety limit is reached
+- describe this as a Visualizer safety limit, not a C language restriction
+
+## While explanation display
+
+- show every iteration explanation for 0 through 6 entered body iterations
+- for 7 or more iterations, keep the first 3 iterations, one omission marker, the actual final entered iteration, and the actual termination reason
+- compress only analysis entries and step entries
+- never omit actual condition evaluation, body execution, variable updates, printf output, or final variable state
+- retain the actual return, runtime-error, condition-error, or safety-stop iteration
+- do not invent a final false condition or normal while completion after return, runtime error, condition error, or safety stop
+- on a safety stop, retain the 500th iteration and the true condition that would require the 501st entry; never create a 501st body explanation
+- keep explanation histories independent across multiple while statements and independent from for explanation histories
+
+## Unsupported scope for Ver.0.9_0820
 
 Do not implement these unless explicitly requested:
 
@@ -298,9 +366,16 @@ Do not implement these unless explicitly requested:
 - for inside any if or else branch
 - for inside an if/else branch inside a for (`for -> if -> for`)
 - scanf and declarations inside a for body
+- while inside while
+- for inside while
+- while inside for
+- while inside any if or else branch
+- any loop inside an if or else branch inside while
+- scanf and declarations inside a while body
+- standalone `++`, `--`, `+=`, and `-=` inside an if or else branch inside while
+- braceless while, split-line opening brace style for while, and empty-statement while
 - expressions that use the value or side effects of `++` or `--`
 - break and continue
-- while
 - do while
 - switch
 - arrays
@@ -322,7 +397,7 @@ Do not implement these unless explicitly requested:
 
 ## Input rule
 
-In Ver.0.8_0818, assume one C statement per line.
+In Ver.0.9_0820, assume one C statement per line.
 
 If multiple statements are written on one line, show a warning instead of trying to parse them automatically.
 

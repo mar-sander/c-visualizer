@@ -7,8 +7,9 @@ const samples = {
   forBasic: `#include <stdio.h>\n\nint main(void){\n    int i;\n\n    for(i = 0; i < 5; i++){\n        printf("%d\\n", i);\n    }\n\n    return 0;\n}`,
   forIf: `#include <stdio.h>\n\nint main(void){\n    int i;\n\n    for(i = 0; i < 10; i++){\n        if(i % 2 == 0){\n            printf("%d\\n", i);\n        }\n    }\n\n    return 0;\n}`,
   nestedFor: `#include <stdio.h>\n\nint main(void){\n    int i;\n    int j;\n\n    for(i = 1; i <= 3; i++){\n        for(j = 1; j <= i; j++){\n            printf("*");\n        }\n        printf("\\n");\n    }\n\n    return 0;\n}`,
+  whileBasic: `#include <stdio.h>\n\nint main(void){\n    int i = 1;\n\n    while(i <= 5){\n        printf("%d\\n", i);\n        i++;\n    }\n\n    return 0;\n}`,
   scanfInput: `#include <stdio.h>\n\nint main(void){\n    int score;\n\n    scanf("%d", &score);\n\n    if(score >= 60){\n        printf("合格です\\n");\n    }else{\n        printf("不合格です\\n");\n    }\n\n    return 0;\n}`,
-  unsupported: `#include <stdio.h>\n\nint main(void){\n    int count = 0;\n\n    while(count < 3){\n        count = count + 1;\n    }\n\n    return 0;\n}`
+  unsupported: `#include <stdio.h>\n\nint main(void){\n    int number = 2;\n\n    switch(number){\n        case 1:\n            printf("one\\n");\n            break;\n        default:\n            printf("other\\n");\n            break;\n    }\n\n    return 0;\n}`
 };
 
 // scanfを使うサンプルだけ、コードと一緒に専用入力欄の値も準備します。
@@ -1348,7 +1349,7 @@ function visualizeCode(){
 
     if(/^if\s*\(/.test(trimmed) || /^for\s*\(/.test(trimmed) || /^while\s*\(/.test(trimmed)){
       addAnalysis(analysis, lineNo, 'この場所・書き方の制御構文は、現在のVisualizerでは未対応です。');
-      addHint(hints, lineNo, 'この制御構文は現在未対応', 'main直下のfor、最大3階層までの直接的な入れ子for、対応範囲内のif・if〜elseは実行できますが、この場所または書き方は正確に実行シミュレートしていません。');
+      addHint(hints, lineNo, 'この制御構文は現在未対応', 'main直下の基本while、main直下のfor、最大3階層までの直接的な入れ子for、対応範囲内のif・if〜elseは実行できますが、この場所または書き方は正確に実行シミュレートしていません。');
       warningLines.add(lineNo);
       return;
     }
@@ -1465,7 +1466,7 @@ function visualizeCode(){
 
     addAnalysis(analysis, lineNo, '現在のVisualizerでは説明未対応のコードです。');
     if(trimmed !== ''){
-      addHint(hints, lineNo, '未対応コード', 'この行は現在の可視化対象外です。まずは int、代入、整数演算、比較、printf、main直下の単純なscanf、対応範囲内のif・if〜else、最大3階層までの直接的な入れ子forの範囲で試してみましょう。');
+      addHint(hints, lineNo, '未対応コード', 'この行は現在の可視化対象外です。まずは int、代入、整数演算、比較、printf、main直下の単純なscanf、対応範囲内のif・if〜else、main直下の基本while、最大3階層までの直接的な入れ子forの範囲で試してみましょう。');
       warningLines.add(lineNo);
     }
     return insideLoop ? 'execution-error' : undefined;

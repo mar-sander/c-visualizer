@@ -221,6 +221,23 @@
         }
       },
       {
+        name:'Ver.0.9 while文正式サンプル・1から5を全説明表示',
+        code:samples.whileBasic,
+        loadSampleKey:'whileBasic',
+        expect:{
+          output:'1\n2\n3\n4\n5',
+          variables:['i = 6'],
+          warningMax:0,
+          scanfInputValue:'',
+          stepsInclude:['【1回目】', '【5回目】', '【終了判定】', '【while終了】'],
+          stepsExclude:['反復説明を省略しました'],
+          stepCounts:{ 'while文の条件':6, '反復説明を省略しました':0 },
+          executedIncludes:['while(i <= 5){', 'printf("%d\\n", i);', 'i++;', 'return 0;'],
+          editorScrollTop:0,
+          editorScrollLeft:0
+        }
+      },
+      {
         name:'for＋ifサンプル・偶数出力と10反復圧縮',
         code:samples.forIf,
         loadSampleKey:'forIf',
@@ -868,10 +885,21 @@
         expect:{ variables:['value = 未初期化'], warningMin:1, hintsInclude:['入力値が足りません'], scanfInputValue:'' }
       },
       {
-        name:'Stage1A 既存未対応サンプルのwhileを実行',
+        name:'Ver.0.9 未対応switchサンプルの本文を部分実行しない',
         code:samples.unsupported,
         loadSampleKey:'unsupported',
-        expect:{ output:'出力はまだありません。', variables:['count = 3'], warningMax:0, stepsInclude:['【1回目】', '【3回目】', '【終了判定】', '【while終了】'], executedIncludes:['count = count + 1;'] }
+        expect:{
+          output:'出力はまだありません。',
+          outputExcludes:['one', 'other'],
+          variables:['number = 2'],
+          warningMin:1,
+          hintsInclude:['switch文は未対応'],
+          scanfInputValue:'',
+          executedIncludes:['return 0;'],
+          executedExcludes:['printf("one', 'printf("other', 'break;'],
+          editorScrollTop:0,
+          editorScrollLeft:0
+        }
       },
       {
         name:'return後のprintfを実行しない',
