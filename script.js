@@ -33,6 +33,10 @@ const FOR_NESTING_LABELS = [null, '外側for', '内側for', '最奥for'];
 const MAX_FULL_FOR_EXPLANATION_ITERATIONS = 6;
 const LEADING_FOR_EXPLANATION_ITERATIONS = 3;
 
+// while文の説明も6反復までは全件を表示し、7反復以上は先頭3反復と最終反復へ圧縮します。
+const MAX_FULL_WHILE_EXPLANATION_ITERATIONS = 6;
+const LEADING_WHILE_EXPLANATION_ITERATIONS = 3;
+
 function escapeHtml(str){
   return String(str)
     .replace(/&/g, '&amp;')
@@ -2396,31 +2400,118 @@ function visualizeCode(){
     return `<strong>【${label}】</strong> `;
   }
 
-  // Stage1では圧縮せず、各反復で追加された説明へ同じ反復番号を付けます。
-  function snapshotWhileIteration(node){
-    const analysisLengths = {};
-    for(let lineNo = node.startIndex + 1; lineNo <= node.endIndex + 1; lineNo++){
-      analysisLengths[lineNo] = (analysis[lineNo] || []).length;
-    }
-    return { analysisLengths, stepLength:steps.length };
-  }
+  // while文の各反復が生成した説明範囲を記録し、実行完了後に表示用履歴だけを整えます。
+  // 出力・変数・警告・実行済み行・停止状態には触れません。
+  function createWhileExplanationHistory(node){
+    const iterationRecords = [];
+    const firstLineNo = node.startIndex + 1;
+    const lastLineNo = node.endIndex + 1;
 
-  function labelWhileIteration(node, snapshot, iterationNumber){
-    const prefix = whileDisplayPrefix(`${iterationNumber}回目`);
-    for(let lineNo = node.startIndex + 1; lineNo <= node.endIndex + 1; lineNo++){
-      const entries = analysis[lineNo] || [];
-      const firstNewEntry = snapshot.analysisLengths[lineNo] || 0;
-      for(let index = firstNewEntry; index < entries.length; index++){
-        entries[index] = `${prefix}${entries[index]}`;
+    function snapshot(){
+      const analysisLengths = {};
+      for(let lineNo = firstLineNo; lineNo <= lastLineNo; lineNo++){
+        analysisLengths[lineNo] = (analysis[lineNo] || []).length;
       }
+      return { analysisLengths, stepLength:steps.length };
     }
-    for(let index = snapshot.stepLength; index < steps.length; index++){
-      steps[index].text = `${prefix}${steps[index].text}`;
+
+    function beginIteration(iterationNumber){
+      return { iterationNumber, before:snapshot() };
     }
+
+    function finishIteration(activeIteration){
+      iterationRecords.push({
+        iterationNumber:activeIteration.iterationNumber,
+        before:activeIteration.before,
+        after:snapshot()
+      });
+    }
+
+    function iterationPrefix(iterationNumber){
+      return whileDisplayPrefix(`${iterationNumber}回目`);
+    }
+
+    function omissionText(firstOmitted, lastOmitted){
+      return `<span class="dim">…… ${firstOmitted}～${lastOmitted}回目の反復説明を省略しました ……</span>`;
+    }
+
+    function finalize(){
+      if(iterationRecords.length === 0) return;
+
+      const shouldCompress = iterationRecords.length > MAX_FULL_WHILE_EXPLANATION_ITERATIONS;
+      const lastRecord = iterationRecords[iterationRecords.length - 1];
+      const shownRecords = shouldCompress
+        ? [
+          ...iterationRecords.slice(0, LEADING_WHILE_EXPLANATION_ITERATIONS),
+          lastRecord
+        ]
+        : iterationRecords;
+      const omittedFirst = LEADING_WHILE_EXPLANATION_ITERATIONS + 1;
+      const omittedLast = iterationRecords.length - 1;
+
+      for(let lineNo = firstLineNo; lineNo <= lastLineNo; lineNo++){
+        const originalEntries = analysis[lineNo] || [];
+        const firstIterationStart = iterationRecords[0].before.analysisLengths[lineNo];
+        const lastIterationEnd = lastRecord.after.analysisLengths[lineNo];
+        const rebuiltEntries = originalEntries.slice(0, firstIterationStart);
+
+        for(let recordIndex = 0; recordIndex < shownRecords.length; recordIndex++){
+          const record = shownRecords[recordIndex];
+          const rangeStart = record.before.analysisLengths[lineNo];
+          const rangeEnd = record.after.analysisLengths[lineNo];
+          rebuiltEntries.push(...originalEntries
+            .slice(rangeStart, rangeEnd)
+            .map(entry => `${iterationPrefix(record.iterationNumber)}${entry}`));
+
+          if(shouldCompress && recordIndex === LEADING_WHILE_EXPLANATION_ITERATIONS - 1){
+            const omittedHasEntries = iterationRecords
+              .slice(LEADING_WHILE_EXPLANATION_ITERATIONS, -1)
+              .some(omittedRecord =>
+                omittedRecord.after.analysisLengths[lineNo] > omittedRecord.before.analysisLengths[lineNo]
+              );
+            if(omittedHasEntries){
+              rebuiltEntries.push(omissionText(omittedFirst, omittedLast));
+            }
+          }
+        }
+
+        rebuiltEntries.push(...originalEntries.slice(lastIterationEnd));
+        if(rebuiltEntries.length > 0) analysis[lineNo] = rebuiltEntries;
+      }
+
+      const originalSteps = [...steps];
+      const firstStepIndex = iterationRecords[0].before.stepLength;
+      const lastStepIndex = lastRecord.after.stepLength;
+      const rebuiltSteps = originalSteps.slice(0, firstStepIndex);
+
+      for(let recordIndex = 0; recordIndex < shownRecords.length; recordIndex++){
+        const record = shownRecords[recordIndex];
+        rebuiltSteps.push(...originalSteps
+          .slice(record.before.stepLength, record.after.stepLength)
+          .map(item => ({
+            ...item,
+            text:`${iterationPrefix(record.iterationNumber)}${item.text}`
+          })));
+
+        if(shouldCompress && recordIndex === LEADING_WHILE_EXPLANATION_ITERATIONS - 1){
+          rebuiltSteps.push({
+            step:0,
+            lineNo:firstLineNo,
+            text:omissionText(omittedFirst, omittedLast)
+          });
+        }
+      }
+
+      rebuiltSteps.push(...originalSteps.slice(lastStepIndex));
+      steps.splice(0, steps.length, ...rebuiltSteps);
+    }
+
+    return { beginIteration, finishIteration, finalize };
   }
 
   function executeWhile(node){
     const lineNo = node.startIndex + 1;
+    const explanationHistory = createWhileExplanationHistory(node);
     let enteredBodyCount = 0;
 
     while(true){
@@ -2431,6 +2522,7 @@ function visualizeCode(){
         addHint(hints, lineNo, 'while文の条件を評価できません', escapeHtml(conditionResult.error));
         warningLines.add(lineNo);
         addStep(lineNo, `${errorPrefix}while文の条件を評価できないため、プログラムの実行を停止します。`);
+        explanationHistory.finalize();
         return {
           status:'execution-stopped',
           stopKind:'runtime-error',
@@ -2452,6 +2544,7 @@ function visualizeCode(){
         const whileEndPrefix = whileDisplayPrefix('while終了');
         addAnalysis(analysis, node.endIndex + 1, `${whileEndPrefix}while文の最終条件が成立しなかったため、後続の処理へ進みます。`);
         addStep(lineNo, `${whileEndPrefix}while文を終了します。`);
+        explanationHistory.finalize();
         return { status:'normal' };
       }
 
@@ -2467,6 +2560,7 @@ function visualizeCode(){
         warningLines.add(lineNo);
         addStep(lineNo, `${safetyPrefix}${enteredBodyCount + 1}回目の本体へ入る前に、プログラム全体を停止します。`);
         addAnalysis(analysis, node.endIndex + 1, `${safetyPrefix}while文が安全上限で停止したため、ここでは通常の終了処理を行いません。`);
+        explanationHistory.finalize();
         return {
           status:'execution-stopped',
           stopKind:'safety-limit',
@@ -2476,7 +2570,7 @@ function visualizeCode(){
       }
 
       const iterationNumber = enteredBodyCount + 1;
-      const iterationSnapshot = snapshotWhileIteration(node);
+      const activeIteration = explanationHistory.beginIteration(iterationNumber);
       addAnalysis(analysis, lineNo, `<strong>while文の条件：</strong> ${conditionExplanation}条件が成立したため、while文の本体へ進みます。`);
       addStep(lineNo, `while文の条件 ${escapeHtml(node.condition)} を判定しました。<br>条件が成立したため、while文の本体へ進みます。`);
       enteredBodyCount++;
@@ -2489,13 +2583,15 @@ function visualizeCode(){
 
           const bodyResult = processSimpleLine(lines[index], index, false, false, true);
           if(bodyResult === 'program-ended'){
-            labelWhileIteration(node, iterationSnapshot, iterationNumber);
+            explanationHistory.finishIteration(activeIteration);
+            explanationHistory.finalize();
             return { status:'program-ended', stopIndex:index };
           }
           if(bodyResult === 'execution-error' || bodyResult === 'scanf-error'){
             addAnalysis(analysis, index + 1, 'while文の本体で実行時エラーが発生したため、プログラム全体を停止します。');
             addStep(index + 1, 'while文の本体で処理を継続できないため、プログラムの実行を停止します。');
-            labelWhileIteration(node, iterationSnapshot, iterationNumber);
+            explanationHistory.finishIteration(activeIteration);
+            explanationHistory.finalize();
             return {
               status:'execution-stopped',
               stopKind:'runtime-error',
@@ -2511,19 +2607,21 @@ function visualizeCode(){
           stopOnRuntimeError:true
         });
         if(ifResult.status === 'program-ended'){
-          labelWhileIteration(node, iterationSnapshot, iterationNumber);
+          explanationHistory.finishIteration(activeIteration);
+          explanationHistory.finalize();
           return ifResult;
         }
         if(ifResult.status === 'execution-stopped'){
           addStep(ifResult.stopIndex + 1, 'while文の本体内のif文で処理を継続できないため、プログラムの実行を停止します。');
-          labelWhileIteration(node, iterationSnapshot, iterationNumber);
+          explanationHistory.finishIteration(activeIteration);
+          explanationHistory.finalize();
           return ifResult;
         }
       }
 
       addAnalysis(analysis, node.endIndex + 1, 'while文の本体が終わったため、再び条件判定へ戻ります。');
       addStep(node.endIndex + 1, 'while文の本体が終わったため、再び条件判定へ戻ります。');
-      labelWhileIteration(node, iterationSnapshot, iterationNumber);
+      explanationHistory.finishIteration(activeIteration);
     }
   }
 

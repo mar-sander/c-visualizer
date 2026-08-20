@@ -2641,12 +2641,12 @@
       {
         name:'Stage1A while安全上限・500回後falseで正常終了',
         code:makeMainCode(`    int i = 0;\n    while(i < 500){\n        i++;\n    }\n    printf("%d", i);\n    return 0;`),
-        expect:{ output:'500', variables:['i = 500'], warningMax:0, hintsExclude:['安全上限'], stepsInclude:['【500回目】', '【終了判定】', '【while終了】'], stepsExclude:['【501回目へ進む条件判定】', '【安全上限停止】'] }
+        expect:{ output:'500', variables:['i = 500'], warningMax:0, hintsExclude:['安全上限'], stepsInclude:['4～499回目の反復説明を省略しました', '【500回目】', '【終了判定】', '【while終了】'], stepsExclude:['【4回目】', '【501回目へ進む条件判定】', '【安全上限停止】'], stepCounts:{ '反復説明を省略しました':1 } }
       },
       {
         name:'Stage1A while安全上限・501回目本体直前で停止',
         code:makeMainCode(`    int i = 0;\n    while(i <= 500){\n        i++;\n    }\n    printf("WRONG");\n    return 0;`),
-        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG'], variables:['i = 500'], warningMin:1, hintsInclude:['安全上限', 'C言語自体の制限ではありません'], stepsInclude:['【500回目】', '【501回目へ進む条件判定】', '【安全上限停止】'], stepsExclude:['【while終了】'], executedExcludes:['printf("WRONG'] }
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG'], variables:['i = 500'], warningMin:1, hintsInclude:['安全上限', 'C言語自体の制限ではありません'], stepsInclude:['4～499回目の反復説明を省略しました', '【500回目】', '【501回目へ進む条件判定】', '【安全上限停止】'], stepsExclude:['【4回目】', '【501回目】', '【while終了】'], stepCounts:{ '反復説明を省略しました':1 }, executedExcludes:['printf("WRONG'] }
       },
       {
         name:'Stage1A while安全上限・条件値が変化しなくても断定しない',
@@ -2918,12 +2918,92 @@
       {
         name:'Stage1B while内ifありで500回目後falseなら正常終了',
         code:makeMainCode(`    int i = 0;\n    int hits = 0;\n    while(i < 500){\n        if(i == 499){\n            hits = hits + 1;\n        }\n        i++;\n    }\n    printf("%d", hits);\n    return 0;`),
-        expect:{ output:'1', variables:['i = 500', 'hits = 1'], warningMax:0, hintsExclude:['安全上限'], stepsInclude:['【500回目】', '【終了判定】', '【while終了】'], stepsExclude:['【501回目へ進む条件判定】', '【安全上限停止】'] }
+        expect:{ output:'1', variables:['i = 500', 'hits = 1'], warningMax:0, hintsExclude:['安全上限'], stepsInclude:['4～499回目の反復説明を省略しました', '【500回目】', 'i == 499を判定', '【終了判定】', '【while終了】'], stepsExclude:['【4回目】', '【501回目へ進む条件判定】', '【安全上限停止】'], stepCounts:{ '反復説明を省略しました':1 } }
       },
       {
         name:'Stage1B while内ifありで501回目直前に安全停止',
         code:makeMainCode(`    int i = 0;\n    int hits = 0;\n    while(i <= 500){\n        if(i == 499){\n            hits = hits + 1;\n        }\n        i++;\n    }\n    printf("WRONG");\n    return 0;`),
-        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG'], variables:['i = 500', 'hits = 1'], warningMin:1, hintsInclude:['安全上限'], stepsInclude:['【500回目】', '【501回目へ進む条件判定】', '【安全上限停止】'], stepsExclude:['【while終了】'], executedExcludes:['printf("WRONG");'] }
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG'], variables:['i = 500', 'hits = 1'], warningMin:1, hintsInclude:['安全上限'], stepsInclude:['4～499回目の反復説明を省略しました', '【500回目】', 'i == 499を判定', '【501回目へ進む条件判定】', '【安全上限停止】'], stepsExclude:['【4回目】', '【501回目】', '【while終了】'], stepCounts:{ '反復説明を省略しました':1 }, executedExcludes:['printf("WRONG");'] }
+      },
+      {
+        name:'Stage2 while説明・6反復までは全件表示',
+        code:makeMainCode(`    int i = 0;\n    while(i < 6){\n        i++;\n    }\n    return 0;`),
+        expect:{ output:'出力はまだありません。', variables:['i = 6'], warningMax:0, stepsInclude:['【1回目】', '【2回目】', '【3回目】', '【4回目】', '【5回目】', '【6回目】', '【終了判定】', '【while終了】'], stepsExclude:['反復説明を省略しました'], analysisByLineIncludes:{ '5':['【1回目】', '【6回目】'], '6':['【1回目】', '【6回目】'], '7':['【1回目】', '【6回目】'] } }
+      },
+      {
+        name:'Stage2 while説明・7反復から4〜6回目を圧縮',
+        code:makeMainCode(`    int i = 0;\n    while(i < 7){\n        printf("%d", i);\n        i++;\n    }\n    return 0;`),
+        expect:{ output:'0123456', variables:['i = 7'], warningMax:0, stepsInclude:['【1回目】', '【2回目】', '【3回目】', '4～6回目の反復説明を省略しました', '【7回目】', '【終了判定】', '【while終了】'], stepsExclude:['【4回目】', '【6回目】'], stepsInOrder:['【1回目】', '【2回目】', '【3回目】', '4～6回目の反復説明を省略しました', '【7回目】', '【終了判定】', '【while終了】'], stepCounts:{ '反復説明を省略しました':1 }, analysisByLineIncludes:{ '5':['4～6回目の反復説明を省略しました', '【7回目】'], '6':['4～6回目の反復説明を省略しました', '【7回目】'], '7':['4～6回目の反復説明を省略しました', '【7回目】'], '8':['4～6回目の反復説明を省略しました', '【7回目】'] } }
+      },
+      {
+        name:'Stage2 while説明・10反復で4〜9回目を圧縮',
+        code:makeMainCode(`    int i = 0;\n    int total = 0;\n    while(i < 10){\n        total = total + i;\n        i++;\n    }\n    printf("%d", total);\n    return 0;`),
+        expect:{ output:'45', variables:['i = 10', 'total = 45'], warningMax:0, stepsInclude:['【1回目】', '【2回目】', '【3回目】', '4～9回目の反復説明を省略しました', '【10回目】', '【終了判定】', '【while終了】'], stepsExclude:['【4回目】', '【9回目】'], stepsInOrder:['【1回目】', '【2回目】', '【3回目】', '4～9回目の反復説明を省略しました', '【10回目】', '【終了判定】'], stepCounts:{ '反復説明を省略しました':1 }, analysisByLineIncludes:{ '6':['4～9回目の反復説明を省略しました', '【10回目】'], '7':['4～9回目の反復説明を省略しました', '【10回目】'], '8':['4～9回目の反復説明を省略しました', '【10回目】'] } }
+      },
+      {
+        name:'Stage2 while内return・6回目は圧縮しない',
+        code:makeMainCode(`    int i = 0;\n    while(i < 20){\n        i++;\n        if(i == 6){\n            printf("RETURN-6");\n            return 0;\n        }\n    }\n    printf("WRONG");`),
+        expect:{ output:'RETURN-6', outputExcludes:['WRONG'], variables:['i = 6'], warningMax:0, stepsInclude:['【1回目】', '【6回目】', 'プログラムを終了します'], stepsExclude:['反復説明を省略しました', '【終了判定】', '【while終了】'], executedExcludes:['printf("WRONG");'] }
+      },
+      {
+        name:'Stage2 while内return・7回目を残して4〜6回目を圧縮',
+        code:makeMainCode(`    int i = 0;\n    while(i < 20){\n        i++;\n        if(i == 7){\n            printf("RETURN-7");\n            return 0;\n        }\n    }\n    printf("WRONG");`),
+        expect:{ output:'RETURN-7', outputExcludes:['WRONG'], variables:['i = 7'], warningMax:0, stepsInclude:['4～6回目の反復説明を省略しました', '【7回目】', 'プログラムを終了します'], stepsExclude:['【4回目】', '【終了判定】', '【while終了】'], stepCounts:{ '反復説明を省略しました':1 }, executedExcludes:['printf("WRONG");'] }
+      },
+      {
+        name:'Stage2 while内ifから8回目returnの停止経路を保持',
+        code:makeMainCode(`    int i = 0;\n    while(i < 20){\n        i++;\n        if(i == 8){\n            printf("RETURN-8");\n            return 0;\n        }\n    }\n    printf("WRONG");`),
+        expect:{ output:'RETURN-8', outputExcludes:['WRONG'], variables:['i = 8'], warningMax:0, stepsInclude:['4～7回目の反復説明を省略しました', '【8回目】', 'i == 8を判定', 'プログラムを終了します'], stepsExclude:['【4回目】', '【7回目】', '【終了判定】', '【while終了】'], stepCounts:{ '反復説明を省略しました':1 }, executedIncludes:['return 0;'], executedExcludes:['printf("WRONG");'] }
+      },
+      {
+        name:'Stage2 while内2階層ifから9回目returnの停止経路を保持',
+        code:makeMainCode(`    int i = 0;\n    while(i < 20){\n        i++;\n        if(i >= 9){\n            if(i == 9){\n                printf("NESTED-RETURN-9");\n                return 0;\n            }\n        }\n    }\n    printf("WRONG");`),
+        expect:{ output:'NESTED-RETURN-9', outputExcludes:['WRONG'], variables:['i = 9'], warningMax:0, stepsInclude:['4～8回目の反復説明を省略しました', '【9回目】', '入れ子のif文の条件 i == 9', 'プログラムを終了します'], stepsExclude:['【4回目】', '【8回目】', '【終了判定】', '【while終了】'], stepCounts:{ '反復説明を省略しました':1 }, executedExcludes:['printf("WRONG");'] }
+      },
+      {
+        name:'Stage2 while実行時エラー・4回目は圧縮しない',
+        code:makeMainCode(`    int i = 0;\n    int value = 0;\n    while(i < 10){\n        i++;\n        value = 10 / (4 - i);\n    }\n    printf("WRONG");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG'], variables:['i = 4', 'value = 10'], warningMin:1, hintsInclude:['式を計算できません'], stepsInclude:['【1回目】', '【4回目】', 'while文の本体で処理を継続できない'], stepsExclude:['反復説明を省略しました', '【終了判定】', '【while終了】'], executedExcludes:['printf("WRONG");'] }
+      },
+      {
+        name:'Stage2 while実行時エラー・8回目の停止経路を保持',
+        code:makeMainCode(`    int i = 0;\n    int value = 0;\n    while(i < 10){\n        i++;\n        value = 10 / (8 - i);\n    }\n    printf("WRONG");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG'], variables:['i = 8', 'value = 10'], warningMin:1, hintsInclude:['式を計算できません'], stepsInclude:['4～7回目の反復説明を省略しました', '【8回目】', 'while文の本体で処理を継続できない'], stepsExclude:['【4回目】', '【7回目】', '【終了判定】', '【while終了】'], stepCounts:{ '反復説明を省略しました':1 }, executedExcludes:['printf("WRONG");'] }
+      },
+      {
+        name:'Stage2 while内if実行時エラー・8回目の停止経路を保持',
+        code:makeMainCode(`    int i = 0;\n    while(i < 10){\n        i++;\n        if(i == 8){\n            missing = i;\n        }\n    }\n    printf("WRONG");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG'], variables:['i = 8'], warningMin:1, hintsInclude:['宣言前の代入かも'], stepsInclude:['4～7回目の反復説明を省略しました', '【8回目】', 'i == 8を判定', 'while文の本体内のif文で処理を継続できない'], stepsExclude:['【4回目】', '【7回目】', '【終了判定】', '【while終了】'], stepCounts:{ '反復説明を省略しました':1 }, executedExcludes:['printf("WRONG");'] }
+      },
+      {
+        name:'Stage2 複数反復後のwhile条件評価エラーを保持',
+        code:makeMainCode(`    int divisor = 8;\n    while(100 / divisor > 1){\n        divisor--;\n    }\n    printf("WRONG");\n    return 0;`),
+        expect:{ output:'出力はまだありません。', outputExcludes:['WRONG'], variables:['divisor = 0'], warningMin:1, hintsInclude:['while文の条件を評価できません'], stepsInclude:['4～7回目の反復説明を省略しました', '【8回目】', '【条件判定エラー】'], stepsExclude:['【4回目】', '【7回目】', '【終了判定】', '【while終了】'], stepCounts:{ '反復説明を省略しました':1 }, executedExcludes:['printf("WRONG");'] }
+      },
+      {
+        name:'Stage2 複数while・10回から2回へ履歴を持ち越さない',
+        code:makeMainCode(`    int a = 0;\n    int b = 0;\n    while(a < 10){\n        a++;\n    }\n    while(b < 2){\n        b++;\n    }\n    return 0;`),
+        expect:{ output:'出力はまだありません。', variables:['a = 10', 'b = 2'], warningMax:0, stepsInclude:['4～9回目の反復説明を省略しました', '【10回目】', '【2回目】'], stepCounts:{ '反復説明を省略しました':1, '【while終了】':2 }, analysisByLineIncludes:{ '6':['4～9回目の反復説明を省略しました', '【10回目】'], '9':['【1回目】', '【2回目】'] }, analysisByLineExcludes:{ '9':['反復説明を省略しました', '【10回目】'] } }
+      },
+      {
+        name:'Stage2 複数while・2回から10回へ履歴を持ち越さない',
+        code:makeMainCode(`    int a = 0;\n    int b = 0;\n    while(a < 2){\n        a++;\n    }\n    while(b < 10){\n        b++;\n    }\n    return 0;`),
+        expect:{ output:'出力はまだありません。', variables:['a = 2', 'b = 10'], warningMax:0, stepsInclude:['【2回目】', '4～9回目の反復説明を省略しました', '【10回目】'], stepCounts:{ '反復説明を省略しました':1, '【while終了】':2 }, analysisByLineIncludes:{ '6':['【1回目】', '【2回目】'], '9':['4～9回目の反復説明を省略しました', '【10回目】'] }, analysisByLineExcludes:{ '6':['反復説明を省略しました', '【10回目】'] } }
+      },
+      {
+        name:'Stage2 while10回からforへ説明履歴を混在させない',
+        code:makeMainCode(`    int i = 0;\n    while(i < 10){\n        i++;\n    }\n    for(i = 0; i < 2; i++){\n        printf("F");\n    }\n    return 0;`),
+        expect:{ output:'FF', variables:['i = 2'], warningMax:0, stepsInclude:['4～9回目の反復説明を省略しました', '【10回目】', '【for終了】'], stepCounts:{ '反復説明を省略しました':1, '反復を省略しました':0 }, analysisByLineExcludes:{ '8':['反復説明を省略しました', '【10回目】'] } }
+      },
+      {
+        name:'Stage2 for7回からwhile10回へ説明履歴を混在させない',
+        code:makeMainCode(`    int i;\n    int j = 0;\n    for(i = 0; i < 7; i++){\n        printf("F");\n    }\n    while(j < 10){\n        j++;\n    }\n    return 0;`),
+        expect:{ output:'FFFFFFF', variables:['i = 7', 'j = 10'], warningMax:0, stepsInclude:['4～6回目の反復を省略しました', '【7回目】', '4～9回目の反復説明を省略しました', '【10回目】', '【while終了】'], stepCounts:{ '反復を省略しました':1, '反復説明を省略しました':1 } }
+      },
+      {
+        name:'Stage2 圧縮対象while内ifの変化と最終反復説明を保持',
+        code:makeMainCode(`    int i = 0;\n    while(i < 10){\n        if(i % 2 == 0){\n            printf("E");\n        }else{\n            printf("O");\n        }\n        i++;\n    }\n    return 0;`),
+        expect:{ output:'EOEOEOEOEO', variables:['i = 10'], warningMax:0, stepsInclude:['4～9回目の反復説明を省略しました', '【10回目】', 'i % 2 == 0を判定', '画面に「O」', '【while終了】'], stepsExclude:['【4回目】', '【9回目】'], stepCounts:{ '反復説明を省略しました':1, 'i % 2 == 0を判定':4 }, analysisByLineIncludes:{ '6':['4～9回目の反復説明を省略しました', '【10回目】'], '10':['4～9回目の反復説明を省略しました', '【10回目】'] } }
       }
     ];
 
