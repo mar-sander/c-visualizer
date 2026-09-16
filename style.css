@@ -455,6 +455,19 @@ button:hover{
 
 .step-array-views .array-cell{padding-top:24px;}
 
+.array-access-resolution{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  max-width:100%;
+  margin:-2px 0 8px;
+  color:#c7ecff;
+  font-weight:bold;
+  overflow-wrap:anywhere;
+}
+
+.array-access-resolution span{color:#8eb3c7;}
+
 .array-access-label{
   position:absolute;
   top:0;
