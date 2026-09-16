@@ -3163,29 +3163,29 @@
         expect:{ variables:['i = 9'], arrayCount:0, warningMin:1, hintsInclude:['while文内の変数宣言は未対応'], stepCounts:{ 'while文の条件':0 } }
       },
       {
-        name:'Stage1A 固定添字への代入は未対応',
+        name:'Stage1B 固定添字への代入へ移行',
         code:makeMainCode(`    int a[2];\n    a[0] = 10;\n    printf("WRONG");\n    return 0;`),
-        expect:{ arrays:[{ name:'a', values:['—', '—'] }], output:'出力はまだありません。', warningMin:1, hintsInclude:['配列要素のread／writeはまだ未対応'], executedExcludes:['printf("WRONG'] }
+        expect:{ arrays:[{ name:'a', values:['10', '—'] }], output:'WRONG', warningMax:0, executedIncludes:['a[0] = 10'] }
       },
       {
         name:'Stage1A 変数添字への代入は未対応',
         code:makeMainCode(`    int i = 0;\n    int a[2];\n    a[i] = 10;\n    return 0;`),
-        expect:{ variables:['i = 0'], arrays:[{ name:'a', values:['—', '—'] }], warningMin:1, hintsInclude:['配列要素のread／writeはまだ未対応'] }
+        expect:{ variables:['i = 0'], arrays:[{ name:'a', values:['—', '—'] }], warningMin:1, hintsInclude:['変数添字・複数access・要素更新'] }
       },
       {
-        name:'Stage1A printfでの配列要素readは未対応',
+        name:'Stage1B printfでの固定添字readへ移行',
         code:makeMainCode(`    int a[2] = {10, 20};\n    printf("%d", a[0]);\n    return 0;`),
-        expect:{ arrays:[{ name:'a', values:['10', '20'] }], output:'出力はまだありません。', warningMin:1, hintsInclude:['配列要素のread／writeはまだ未対応'] }
+        expect:{ arrays:[{ name:'a', values:['10', '20'] }], output:'10', warningMax:0 }
       },
       {
         name:'Stage1A 配列要素postfix更新は未対応',
         code:makeMainCode(`    int a[2] = {10, 20};\n    a[0]++;\n    return 0;`),
-        expect:{ arrays:[{ name:'a', values:['10', '20'] }], warningMin:1, hintsInclude:['配列要素のread／writeはまだ未対応'] }
+        expect:{ arrays:[{ name:'a', values:['10', '20'] }], warningMin:1, hintsInclude:['変数添字・複数access・要素更新'] }
       },
       {
         name:'Stage1A 配列要素compound更新は未対応',
         code:makeMainCode(`    int a[2] = {10, 20};\n    a[0] += 1;\n    return 0;`),
-        expect:{ arrays:[{ name:'a', values:['10', '20'] }], warningMin:1, hintsInclude:['配列要素のread／writeはまだ未対応'] }
+        expect:{ arrays:[{ name:'a', values:['10', '20'] }], warningMin:1, hintsInclude:['変数添字・複数access・要素更新'] }
       },
       {
         name:'Stage1A trailing comma initializerを拒否',
@@ -3221,6 +3221,118 @@
 
     testCases.push(...stage1AArrayTests);
 
+    // Stage 1Bでは、main直下の1文につき固定添字accessを1つだけ扱います。
+    const stage1BArrayAccessTests = [
+      {
+        name:'Stage1B 先頭要素へwrite',
+        code:makeMainCode(`    int a[3];\n    a[0] = 10;\n    return 0;`),
+        expect:{ arrays:[{ name:'a', values:['10', '—', '—'] }], warningMax:0, stepArrays:[{ name:'a', values:['10', '—', '—'], activeIndex:'[0]', accessLabel:'代入' }], finalActiveCount:0 }
+      },
+      {
+        name:'Stage1B 中央要素へ負数write',
+        code:makeMainCode(`    int a[3] = {1, 2, 3};\n    a[1] = -5;\n    return 0;`),
+        expect:{ arrays:[{ name:'a', values:['1', '-5', '3'] }], warningMax:0, stepArrays:[{ name:'a', values:['1', '-5', '3'], activeIndex:'[1]', accessLabel:'代入' }] }
+      },
+      {
+        name:'Stage1B 最終要素へwrite',
+        code:makeMainCode(`    int a[3];\n    a[2] = 30;\n    return 0;`),
+        expect:{ arrays:[{ name:'a', values:['—', '—', '30'] }], warningMax:0, stepArrays:[{ name:'a', activeIndex:'[2]', accessLabel:'代入' }] }
+      },
+      {
+        name:'Stage1B scalar式RHSをwrite',
+        code:makeMainCode(`    int x = 4;\n    int a[2];\n    a[1] = x + 5;\n    return 0;`),
+        expect:{ variables:['x = 4'], arrays:[{ name:'a', values:['—', '9'] }], warningMax:0, stepArrays:[{ name:'a', values:['—', '9'], activeIndex:'[1]', accessLabel:'代入' }] }
+      },
+      {
+        name:'Stage1B 後続writeで過去snapshotを変更しない',
+        code:makeMainCode(`    int a[2];\n    a[0] = 10;\n    a[1] = 20;\n    return 0;`),
+        expect:{ arrays:[{ name:'a', values:['10', '20'] }], warningMax:0, stepArrayCount:2, stepArrays:[{ name:'a', values:['10', '—'], activeIndex:'[0]', accessLabel:'代入' }, { name:'a', values:['10', '20'], activeIndex:'[1]', accessLabel:'代入' }], finalActiveCount:0 }
+      },
+      {
+        name:'Stage1B 固定添字readをscalarへ代入',
+        code:makeMainCode(`    int a[3] = {10, 20, 30};\n    int x;\n    x = a[1];\n    return 0;`),
+        expect:{ variables:['x = 20'], arrays:[{ name:'a', values:['10', '20', '30'] }], warningMax:0, stepArrays:[{ name:'a', values:['10', '20', '30'], activeIndex:'[1]', accessLabel:'参照' }], finalActiveCount:0 }
+      },
+      {
+        name:'Stage1B 固定添字readを算術式で利用',
+        code:makeMainCode(`    int a[2] = {10, 20};\n    int x = 0;\n    x = a[0] + 5;\n    return 0;`),
+        expect:{ variables:['x = 15'], warningMax:0, stepArrays:[{ name:'a', activeIndex:'[0]', accessLabel:'参照' }] }
+      },
+      {
+        name:'Stage1B 固定添字readをprintfで利用',
+        code:makeMainCode(`    int a[2] = {10, 20};\n    printf("%d", a[1]);\n    return 0;`),
+        expect:{ output:'20', warningMax:0, stepArrays:[{ name:'a', activeIndex:'[1]', accessLabel:'参照' }] }
+      },
+      {
+        name:'Stage1B 0の要素をread',
+        code:makeMainCode(`    int a[1] = {0};\n    int x;\n    x = a[0];\n    return 0;`),
+        expect:{ variables:['x = 0'], warningMax:0, stepArrays:[{ name:'a', activeIndex:'[0]', accessLabel:'参照' }] }
+      },
+      {
+        name:'Stage1B 負数の要素をread',
+        code:makeMainCode(`    int a[1] = {-8};\n    int x;\n    x = a[0];\n    return 0;`),
+        expect:{ variables:['x = -8'], warningMax:0, stepArrays:[{ name:'a', activeIndex:'[0]', accessLabel:'参照' }] }
+      },
+      {
+        name:'Stage1B 負の添字をbounds errorで停止',
+        code:makeMainCode(`    int a[2] = {1, 2};\n    a[-1] = 9;\n    printf("WRONG");\n    return 0;`),
+        expect:{ arrays:[{ name:'a', values:['1', '2'] }], output:'出力はまだありません。', warningMin:1, hintsInclude:['有効な添字は0～1'], executedExcludes:['printf("WRONG'] }
+      },
+      {
+        name:'Stage1B length同値の添字をbounds errorで停止',
+        code:makeMainCode(`    int a[2] = {1, 2};\n    int x;\n    x = a[2];\n    printf("WRONG");\n    return 0;`),
+        expect:{ variables:['x = 未初期化'], output:'出力はまだありません。', warningMin:1, hintsInclude:['有効な添字は0～1'], executedExcludes:['printf("WRONG'] }
+      },
+      {
+        name:'Stage1B 未宣言arrayへのaccessを停止',
+        code:makeMainCode(`    int x;\n    x = missing[0];\n    return 0;`),
+        expect:{ variables:['x = 未初期化'], warningMin:1, hintsInclude:['配列 missing は宣言されていません'] }
+      },
+      {
+        name:'Stage1B scalarへのindex accessを停止',
+        code:makeMainCode(`    int a = 10;\n    int x;\n    x = a[0];\n    return 0;`),
+        expect:{ variables:['a = 10', 'x = 未初期化'], warningMin:1, hintsInclude:['通常の変数です'] }
+      },
+      {
+        name:'Stage1B 未初期化readで状態と出力を保持して停止',
+        code:makeMainCode(`    int a[2];\n    int x = 7;\n    printf("OK");\n    x = a[1];\n    printf("WRONG");\n    return 0;`),
+        expect:{ variables:['x = 7'], arrays:[{ name:'a', values:['—', '—'] }], output:'OK', outputExcludes:['WRONG'], warningMin:1, hintsInclude:['まだ値が代入されていない'], stepArrays:[{ name:'a', values:['—', '—'], activeIndex:'[1]', accessLabel:'参照' }], executedExcludes:['printf("WRONG'] }
+      },
+      {
+        name:'Stage1B 変数添字はunsupported維持',
+        code:makeMainCode(`    int i = 0;\n    int a[2] = {1, 2};\n    printf("%d", a[i]);\n    return 0;`),
+        expect:{ output:'出力はまだありません。', warningMin:1, hintsInclude:['変数添字・複数access・要素更新'] }
+      },
+      {
+        name:'Stage1B 複数array readはunsupported維持',
+        code:makeMainCode(`    int a[2] = {1, 2};\n    int x = 0;\n    x = a[0] + a[1];\n    return 0;`),
+        expect:{ variables:['x = 0'], warningMin:1, hintsInclude:['固定された整数の添字を1つだけ'] }
+      },
+      {
+        name:'Stage1B 同一statementのreadとwriteはunsupported維持',
+        code:makeMainCode(`    int a[2] = {1, 2};\n    a[1] = a[0] + 1;\n    return 0;`),
+        expect:{ arrays:[{ name:'a', values:['1', '2'] }], warningMin:1, hintsInclude:['同じ文での配列read／writeは未対応'] }
+      },
+      {
+        name:'Stage1B if内array accessはunsupported維持',
+        code:makeMainCode(`    int a[1] = {5};\n    if(1){\n        printf("%d", a[0]);\n    }\n    return 0;`),
+        expect:{ output:'出力はまだありません。', warningMin:1, executedExcludes:['printf("%d", a[0]'] }
+      },
+      {
+        name:'Stage1B for内array accessはunsupported維持',
+        code:makeMainCode(`    int i = 0;\n    int a[1] = {5};\n    for(i = 0; i < 1; i++){\n        printf("%d", a[0]);\n    }\n    return 0;`),
+        expect:{ output:'出力はまだありません。', variables:['i = 0'], warningMin:1, executedExcludes:['printf("%d", a[0]'] }
+      },
+      {
+        name:'Stage1B array scanfはunsupported維持',
+        code:makeMainCode(`    int a[1];\n    scanf("%d", &a[0]);\n    return 0;`),
+        input:'9',
+        expect:{ arrays:[{ name:'a', values:['—'] }], warningMin:1, hintsInclude:['固定された整数の添字を1つだけ'] }
+      }
+    ];
+
+    testCases.push(...stage1BArrayAccessTests);
+
     function normalizeText(value){
       return String(value || '').replace(/\r\n/g, '\n').trim();
     }
@@ -3233,13 +3345,23 @@
         if(lineNo) analysisByLine[lineNo] = normalizeText(lineAnalysis);
       }
 
-      const arrays = [...document.querySelectorAll('#variableState .array-card')].map(card => ({
-        name:normalizeText(card.querySelector('.array-name')?.textContent),
-        type:normalizeText(card.querySelector('.array-type')?.textContent),
-        values:[...card.querySelectorAll('.array-value')].map(element => normalizeText(element.textContent)),
-        indexes:[...card.querySelectorAll('.array-index')].map(element => normalizeText(element.textContent)),
-        legend:normalizeText(card.querySelector('.array-legend')?.textContent)
-      }));
+      function readArrayCard(card){
+        const activeCell = card.querySelector('.array-cell-active');
+        return {
+          name:normalizeText(card.querySelector('.array-name')?.textContent),
+          type:normalizeText(card.querySelector('.array-type')?.textContent),
+          values:[...card.querySelectorAll('.array-value')].map(element => normalizeText(element.textContent)),
+          indexes:[...card.querySelectorAll('.array-index')].map(element => normalizeText(element.textContent)),
+          legend:normalizeText(card.querySelector('.array-legend')?.textContent),
+          activeIndex:normalizeText(activeCell?.querySelector('.array-index')?.textContent),
+          accessLabel:normalizeText(activeCell?.querySelector('.array-access-label')?.textContent)
+        };
+      }
+
+      const arrays = [...document.querySelectorAll('#variableState .array-card')]
+        .map(readArrayCard);
+      const stepArrays = [...document.querySelectorAll('#stepResult .array-card')]
+        .map(readArrayCard);
 
       return {
         codeInputValue:document.getElementById('codeInput').value,
@@ -3247,6 +3369,8 @@
         output:normalizeText(document.getElementById('outputResult').textContent),
         variables:[...document.querySelectorAll('#variableState .variable-chip')].map(element => normalizeText(element.textContent)),
         arrays,
+        stepArrays,
+        finalActiveCount:document.querySelectorAll('#variableState .array-cell-active').length,
         hints:normalizeText(document.getElementById('hintResult').textContent),
         warningCount:document.querySelectorAll('#hintResult .warning-line').length,
         steps:normalizeText(document.getElementById('stepResult').textContent),
@@ -3366,6 +3490,34 @@
         if(expectedArray.legendIncludes !== undefined && !actualArray.legend.includes(expectedArray.legendIncludes)){
           failures.push(`配列${expectedArray.name}の凡例に「${expectedArray.legendIncludes}」がない`);
         }
+      }
+
+      if(expected.stepArrayCount !== undefined && actual.stepArrays.length !== expected.stepArrayCount){
+        failures.push(`STEP内array card数: 期待${expected.stepArrayCount}件 / 実際${actual.stepArrays.length}件`);
+      }
+
+      for(const [index, expectedArray] of (expected.stepArrays || []).entries()){
+        const actualArray = actual.stepArrays[index];
+        if(!actualArray){
+          failures.push(`STEP内${index + 1}番目のarray cardがない`);
+          continue;
+        }
+        if(expectedArray.name !== undefined && actualArray.name !== expectedArray.name){
+          failures.push(`STEP内配列名: 期待「${expectedArray.name}」/ 実際「${actualArray.name}」`);
+        }
+        if(expectedArray.values && JSON.stringify(actualArray.values) !== JSON.stringify(expectedArray.values)){
+          failures.push(`STEP内配列${actualArray.name}の値: 期待「${expectedArray.values.join(', ')}」/ 実際「${actualArray.values.join(', ')}」`);
+        }
+        if(expectedArray.activeIndex !== undefined && actualArray.activeIndex !== expectedArray.activeIndex){
+          failures.push(`STEP内active添字: 期待「${expectedArray.activeIndex}」/ 実際「${actualArray.activeIndex}」`);
+        }
+        if(expectedArray.accessLabel !== undefined && actualArray.accessLabel !== expectedArray.accessLabel){
+          failures.push(`STEP内access label: 期待「${expectedArray.accessLabel}」/ 実際「${actualArray.accessLabel}」`);
+        }
+      }
+
+      if(expected.finalActiveCount !== undefined && actual.finalActiveCount !== expected.finalActiveCount){
+        failures.push(`最終状態のactive cell数: 期待${expected.finalActiveCount}件 / 実際${actual.finalActiveCount}件`);
       }
 
       if(expected.warningMin !== undefined && actual.warningCount < expected.warningMin){
