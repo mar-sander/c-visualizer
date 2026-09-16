@@ -3035,6 +3035,192 @@
       }
     ];
 
+    // Stage 1Aでは、配列の宣言とinitializerだけを対象にします。
+    const stage1AArrayTests = [
+      {
+        name:'Stage1A 配列size 1・未初期化box',
+        code:makeMainCode(`    int a[1];\n    return 0;`),
+        expect:{ arrays:[{ name:'a', type:'int[1]', values:['—'], firstIndex:'[0]', lastIndex:'[0]', legendIncludes:'まだ値を入れていない' }], arrayCount:1, warningMax:0 }
+      },
+      {
+        name:'Stage1A 配列size 100・100要素DOM生成',
+        code:makeMainCode(`    int a[100];\n    return 0;`),
+        expect:{ arrays:[{ name:'a', type:'int[100]', valueCount:100, firstIndex:'[0]', lastIndex:'[99]' }], arrayCount:1, warningMax:0 }
+      },
+      {
+        name:'Stage1A 複数配列・宣言順保持',
+        code:makeMainCode(`    int first[2];\n    int second[3] = {1, 2, 3};\n    return 0;`),
+        expect:{ arrayOrder:['first', 'second'], arrays:[{ name:'first', values:['—', '—'] }, { name:'second', values:['1', '2', '3'] }], warningMax:0 }
+      },
+      {
+        name:'Stage1A scalarとarrayの共存',
+        code:makeMainCode(`    int score = 60;\n    int data[2] = {10, 20};\n    return 0;`),
+        expect:{ variables:['score = 60'], arrays:[{ name:'data', values:['10', '20'] }], warningMax:0 }
+      },
+      {
+        name:'Stage1A full initializer・負数と0',
+        code:makeMainCode(`    int a[5] = {10, 2, 0, -5, -23};\n    return 0;`),
+        expect:{ arrays:[{ name:'a', values:['10', '2', '0', '-5', '-23'], firstIndex:'[0]', lastIndex:'[4]' }], warningMax:0, stepsInclude:['0番から順番に値を入れました'] }
+      },
+      {
+        name:'Stage1A partial initializer・残りを0初期化',
+        code:makeMainCode(`    int a[5] = {10, 2};\n    return 0;`),
+        expect:{ arrays:[{ name:'a', values:['10', '2', '0', '0', '0'] }], warningMax:0, stepsInclude:['残り3個の要素は0で初期化'] }
+      },
+      {
+        name:'Stage1A initializer {0}・全要素0',
+        code:makeMainCode(`    int a[5] = {0};\n    return 0;`),
+        expect:{ arrays:[{ name:'a', values:['0', '0', '0', '0', '0'] }], warningMax:0, stepsInclude:['残り4個の要素は0で初期化'] }
+      },
+      {
+        name:'Stage1A initializer過多・配列を部分生成しない',
+        code:makeMainCode(`    int a[2] = {1, 2, 3};\n    printf("WRONG");\n    return 0;`),
+        expect:{ arrayCount:0, output:'出力はまだありません。', outputExcludes:['WRONG'], warningMin:1, hintsInclude:['initializerの値が多すぎます'], executedExcludes:['printf("WRONG'] }
+      },
+      {
+        name:'Stage1A size 0を拒否',
+        code:makeMainCode(`    int a[0];\n    return 0;`),
+        expect:{ arrayCount:0, warningMin:1, hintsInclude:['1～100'] }
+      },
+      {
+        name:'Stage1A size 101を拒否',
+        code:makeMainCode(`    int a[101];\n    return 0;`),
+        expect:{ arrayCount:0, warningMin:1, hintsInclude:['1～100'] }
+      },
+      {
+        name:'Stage1A 負のsizeを拒否',
+        code:makeMainCode(`    int a[-1];\n    return 0;`),
+        expect:{ arrayCount:0, warningMin:1, hintsInclude:['10進正整数'] }
+      },
+      {
+        name:'Stage1A 変数sizeを拒否',
+        code:makeMainCode(`    int n = 5;\n    int a[n];\n    return 0;`),
+        expect:{ variables:['n = 5'], arrayCount:0, warningMin:1, hintsInclude:['変数や計算式は現在未対応'] }
+      },
+      {
+        name:'Stage1A 計算式sizeを拒否',
+        code:makeMainCode(`    int a[2 + 3];\n    return 0;`),
+        expect:{ arrayCount:0, warningMin:1, hintsInclude:['変数や計算式は現在未対応'] }
+      },
+      {
+        name:'Stage1A scalar宣言後の同名arrayを拒否',
+        code:makeMainCode(`    int a = 5;\n    int a[2];\n    return 0;`),
+        expect:{ variables:['a = 5'], arrayCount:0, warningMin:1, hintsInclude:['同じ名前がすでに使われています'] }
+      },
+      {
+        name:'Stage1A array宣言後の同名scalarを拒否',
+        code:makeMainCode(`    int a[2];\n    int a = 5;\n    return 0;`),
+        expect:{ variablesExclude:['a ='], arrays:[{ name:'a', values:['—', '—'] }], warningMin:1, hintsInclude:['同じ名前がすでに使われています'] }
+      },
+      {
+        name:'Stage1A array再宣言を拒否',
+        code:makeMainCode(`    int a[2] = {1, 2};\n    int a[3];\n    return 0;`),
+        expect:{ arrays:[{ name:'a', values:['1', '2'] }], arrayCount:1, warningMin:1, hintsInclude:['同じ名前がすでに使われています'] }
+      },
+      {
+        name:'Stage1A 閉じ角かっこ不足を拒否',
+        code:makeMainCode(`    int a[5;\n    return 0;`),
+        expect:{ arrayCount:0, warningMin:1, hintsInclude:['配列宣言の書き方を確認'] }
+      },
+      {
+        name:'Stage1A 二重角かっこを拒否',
+        code:makeMainCode(`    int a[[5]];\n    return 0;`),
+        expect:{ arrayCount:0, warningMin:1, hintsInclude:['配列宣言の書き方を確認'] }
+      },
+      {
+        name:'Stage1A 2次元配列を拒否',
+        code:makeMainCode(`    int a[2][3];\n    return 0;`),
+        expect:{ arrayCount:0, warningMin:1, hintsInclude:['2次元以上の配列は未対応'] }
+      },
+      {
+        name:'Stage1A char配列を拒否',
+        code:makeMainCode(`    char a[5];\n    return 0;`),
+        expect:{ arrayCount:0, warningMin:1, hintsInclude:['1次元int配列だけ'] }
+      },
+      {
+        name:'Stage1A float配列を拒否',
+        code:makeMainCode(`    float a[5];\n    return 0;`),
+        expect:{ arrayCount:0, warningMin:1, hintsInclude:['1次元int配列だけ'] }
+      },
+      {
+        name:'Stage1A double配列を拒否',
+        code:makeMainCode(`    double a[5];\n    return 0;`),
+        expect:{ arrayCount:0, warningMin:1, hintsInclude:['1次元int配列だけ'] }
+      },
+      {
+        name:'Stage1A 未実行if内の配列宣言を構造拒否',
+        code:makeMainCode(`    if(0){\n        int a[5];\n    }\n    return 0;`),
+        expect:{ arrayCount:0, warningMin:1, hintsInclude:['分岐内の配列宣言は未対応'], executedExcludes:['int a[5];'] }
+      },
+      {
+        name:'Stage1A 0回for内の配列宣言を初期化前に拒否',
+        code:makeMainCode(`    int i = 9;\n    for(i = 0; i < 0; i++){\n        int a[5];\n    }\n    return 0;`),
+        expect:{ variables:['i = 9'], arrayCount:0, warningMin:1, hintsInclude:['for文内の変数宣言は未対応'], stepCounts:{ 'for文の初期化':0 } }
+      },
+      {
+        name:'Stage1A 0回while内の配列宣言を条件判定前に拒否',
+        code:makeMainCode(`    int i = 9;\n    while(i < 0){\n        int a[5];\n    }\n    return 0;`),
+        expect:{ variables:['i = 9'], arrayCount:0, warningMin:1, hintsInclude:['while文内の変数宣言は未対応'], stepCounts:{ 'while文の条件':0 } }
+      },
+      {
+        name:'Stage1A 固定添字への代入は未対応',
+        code:makeMainCode(`    int a[2];\n    a[0] = 10;\n    printf("WRONG");\n    return 0;`),
+        expect:{ arrays:[{ name:'a', values:['—', '—'] }], output:'出力はまだありません。', warningMin:1, hintsInclude:['配列要素のread／writeはまだ未対応'], executedExcludes:['printf("WRONG'] }
+      },
+      {
+        name:'Stage1A 変数添字への代入は未対応',
+        code:makeMainCode(`    int i = 0;\n    int a[2];\n    a[i] = 10;\n    return 0;`),
+        expect:{ variables:['i = 0'], arrays:[{ name:'a', values:['—', '—'] }], warningMin:1, hintsInclude:['配列要素のread／writeはまだ未対応'] }
+      },
+      {
+        name:'Stage1A printfでの配列要素readは未対応',
+        code:makeMainCode(`    int a[2] = {10, 20};\n    printf("%d", a[0]);\n    return 0;`),
+        expect:{ arrays:[{ name:'a', values:['10', '20'] }], output:'出力はまだありません。', warningMin:1, hintsInclude:['配列要素のread／writeはまだ未対応'] }
+      },
+      {
+        name:'Stage1A 配列要素postfix更新は未対応',
+        code:makeMainCode(`    int a[2] = {10, 20};\n    a[0]++;\n    return 0;`),
+        expect:{ arrays:[{ name:'a', values:['10', '20'] }], warningMin:1, hintsInclude:['配列要素のread／writeはまだ未対応'] }
+      },
+      {
+        name:'Stage1A 配列要素compound更新は未対応',
+        code:makeMainCode(`    int a[2] = {10, 20};\n    a[0] += 1;\n    return 0;`),
+        expect:{ arrays:[{ name:'a', values:['10', '20'] }], warningMin:1, hintsInclude:['配列要素のread／writeはまだ未対応'] }
+      },
+      {
+        name:'Stage1A trailing comma initializerを拒否',
+        code:makeMainCode(`    int a[3] = {1, 2,};\n    return 0;`),
+        expect:{ arrayCount:0, warningMin:1, hintsInclude:['末尾にはカンマを付けない'] }
+      },
+      {
+        name:'Stage1A empty initializerを拒否',
+        code:makeMainCode(`    int a[3] = {};\n    return 0;`),
+        expect:{ arrayCount:0, warningMin:1, hintsInclude:['整数を1つ以上'] }
+      },
+      {
+        name:'Stage1A size省略配列を拒否',
+        code:makeMainCode(`    int a[] = {1, 2};\n    return 0;`),
+        expect:{ arrayCount:0, warningMin:1, hintsInclude:['10進正整数'] }
+      },
+      {
+        name:'Stage1A 変数initializerを拒否',
+        code:makeMainCode(`    int value = 3;\n    int a[2] = {value, 2};\n    return 0;`),
+        expect:{ variables:['value = 3'], arrayCount:0, warningMin:1, hintsInclude:['単純な符号付き整数'] }
+      },
+      {
+        name:'Stage1A designated initializerを拒否',
+        code:makeMainCode(`    int a[3] = {[1] = 5};\n    return 0;`),
+        expect:{ arrayCount:0, warningMin:1, hintsInclude:['単純な符号付き整数'] }
+      },
+      {
+        name:'Stage1A 複数行initializerを拒否',
+        code:makeMainCode(`    int a[3] = {1,\n        2, 3};\n    return 0;`),
+        expect:{ arrayCount:0, warningMin:1, hintsInclude:['1行で宣言'] }
+      }
+    ];
+
+    testCases.push(...stage1AArrayTests);
+
     function normalizeText(value){
       return String(value || '').replace(/\r\n/g, '\n').trim();
     }
@@ -3047,11 +3233,20 @@
         if(lineNo) analysisByLine[lineNo] = normalizeText(lineAnalysis);
       }
 
+      const arrays = [...document.querySelectorAll('#variableState .array-card')].map(card => ({
+        name:normalizeText(card.querySelector('.array-name')?.textContent),
+        type:normalizeText(card.querySelector('.array-type')?.textContent),
+        values:[...card.querySelectorAll('.array-value')].map(element => normalizeText(element.textContent)),
+        indexes:[...card.querySelectorAll('.array-index')].map(element => normalizeText(element.textContent)),
+        legend:normalizeText(card.querySelector('.array-legend')?.textContent)
+      }));
+
       return {
         codeInputValue:document.getElementById('codeInput').value,
         scanfInputValue:document.getElementById('scanfInput').value,
         output:normalizeText(document.getElementById('outputResult').textContent),
         variables:[...document.querySelectorAll('#variableState .variable-chip')].map(element => normalizeText(element.textContent)),
+        arrays,
         hints:normalizeText(document.getElementById('hintResult').textContent),
         warningCount:document.querySelectorAll('#hintResult .warning-line').length,
         steps:normalizeText(document.getElementById('stepResult').textContent),
@@ -3134,6 +3329,43 @@
 
       for(const text of expected.variablesExclude || []){
         if(actual.variables.some(variable => variable.includes(text))) failures.push(`変数に「${text}」を含めない`);
+      }
+
+      if(expected.arrayCount !== undefined && actual.arrays.length !== expected.arrayCount){
+        failures.push(`配列card数: 期待${expected.arrayCount}件 / 実際${actual.arrays.length}件`);
+      }
+
+      if(expected.arrayOrder){
+        const actualOrder = actual.arrays.map(array => array.name);
+        if(JSON.stringify(actualOrder) !== JSON.stringify(expected.arrayOrder)){
+          failures.push(`配列順序: 期待「${expected.arrayOrder.join(', ')}」/ 実際「${actualOrder.join(', ')}」`);
+        }
+      }
+
+      for(const expectedArray of expected.arrays || []){
+        const actualArray = actual.arrays.find(array => array.name === expectedArray.name);
+        if(!actualArray){
+          failures.push(`配列「${expectedArray.name}」がない`);
+          continue;
+        }
+        if(expectedArray.type !== undefined && actualArray.type !== expectedArray.type){
+          failures.push(`配列${expectedArray.name}の型表示: 期待「${expectedArray.type}」/ 実際「${actualArray.type}」`);
+        }
+        if(expectedArray.values && JSON.stringify(actualArray.values) !== JSON.stringify(expectedArray.values)){
+          failures.push(`配列${expectedArray.name}の値: 期待「${expectedArray.values.join(', ')}」/ 実際「${actualArray.values.join(', ')}」`);
+        }
+        if(expectedArray.valueCount !== undefined && actualArray.values.length !== expectedArray.valueCount){
+          failures.push(`配列${expectedArray.name}の要素数: 期待${expectedArray.valueCount} / 実際${actualArray.values.length}`);
+        }
+        if(expectedArray.firstIndex !== undefined && actualArray.indexes[0] !== expectedArray.firstIndex){
+          failures.push(`配列${expectedArray.name}の先頭添字: 期待「${expectedArray.firstIndex}」/ 実際「${actualArray.indexes[0]}」`);
+        }
+        if(expectedArray.lastIndex !== undefined && actualArray.indexes.at(-1) !== expectedArray.lastIndex){
+          failures.push(`配列${expectedArray.name}の末尾添字: 期待「${expectedArray.lastIndex}」/ 実際「${actualArray.indexes.at(-1)}」`);
+        }
+        if(expectedArray.legendIncludes !== undefined && !actualArray.legend.includes(expectedArray.legendIncludes)){
+          failures.push(`配列${expectedArray.name}の凡例に「${expectedArray.legendIncludes}」がない`);
+        }
       }
 
       if(expected.warningMin !== undefined && actual.warningCount < expected.warningMin){

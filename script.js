@@ -20,6 +20,9 @@ const sampleScanfInputs = {
 // 数値の 0 と区別して、まだ値が入っていない状態を表します。
 const UNINITIALIZED = Symbol('uninitialized');
 
+// 学習用途とブラウザ上の表示負荷を考慮し、1次元配列の要素数を制限します。
+const MAX_ARRAY_LENGTH = 100;
+
 // ブラウザ停止を防ぐため、ソース上の各for文で本体へ入れる累計回数を制限します。
 const MAX_FOR_ITERATIONS = 500;
 
@@ -37,6 +40,127 @@ const LEADING_FOR_EXPLANATION_ITERATIONS = 3;
 // while文の説明も6反復までは全件を表示し、7反復以上は先頭3反復と最終反復へ圧縮します。
 const MAX_FULL_WHILE_EXPLANATION_ITERATIONS = 6;
 const LEADING_WHILE_EXPLANATION_ITERATIONS = 3;
+
+// Stage 1Aで扱う配列宣言らしい行かを、scalar宣言より先に見分けます。
+function looksLikeArrayDeclaration(text){
+  return /^(?:int|char|float|double)\s+[A-Za-z_]\w*\s*\[/.test(String(text).trim());
+}
+
+// 配列要素へのread／writeはStage 1B以降です。文字列やコメントを除いたコードに使用します。
+function containsArrayElementSyntax(text){
+  return /\b[A-Za-z_]\w*\s*\[/.test(String(text));
+}
+
+// Stage 1Aで正式対応する、main直下の1次元int配列宣言だけを読み取ります。
+function parseArrayDeclaration(text){
+  const trimmed = String(text).trim();
+  if(!looksLikeArrayDeclaration(trimmed)) return { matched:false };
+
+  const typeMatch = trimmed.match(/^(int|char|float|double)\b/);
+  if(typeMatch?.[1] !== 'int'){
+    return {
+      matched:true,
+      ok:false,
+      title:'この型の配列は未対応',
+      message:'現在のVisualizerでは、基本的な1次元int配列だけに対応しています。'
+    };
+  }
+
+  if(/\]\s*\[/.test(trimmed)){
+    return {
+      matched:true,
+      ok:false,
+      title:'2次元以上の配列は未対応',
+      message:'現在のVisualizerでは、角かっこを1組だけ使う基本的な1次元int配列に対応しています。'
+    };
+  }
+
+  const match = trimmed.match(
+    /^int\s+([A-Za-z_]\w*)\s*\[\s*([^\]]*)\s*\]\s*(?:=\s*\{([^{}]*)\})?\s*;$/
+  );
+  if(!match){
+    return {
+      matched:true,
+      ok:false,
+      title:'配列宣言の書き方を確認',
+      message:'配列は <code>int a[5];</code> または <code>int a[5] = {10, 2};</code> のように、1行で宣言してください。'
+    };
+  }
+
+  const name = match[1];
+  const sizeText = match[2].trim();
+  const initializerText = match[3];
+  if(!/^\d+$/.test(sizeText)){
+    return {
+      matched:true,
+      ok:false,
+      title:'配列の要素数を確認',
+      message:`配列の要素数には、1～${MAX_ARRAY_LENGTH}の10進正整数を直接書いてください。変数や計算式は現在未対応です。`
+    };
+  }
+
+  const length = Number(sizeText);
+  if(length < 1 || length > MAX_ARRAY_LENGTH){
+    return {
+      matched:true,
+      ok:false,
+      title:'配列の要素数が範囲外',
+      message:`現在のVisualizerで扱える配列の要素数は1～${MAX_ARRAY_LENGTH}です。これはC言語自体の制限ではありません。`
+    };
+  }
+
+  if(initializerText === undefined){
+    return {
+      matched:true,
+      ok:true,
+      name,
+      length,
+      values:Array(length).fill(UNINITIALIZED),
+      initializerCount:0,
+      hasInitializer:false
+    };
+  }
+
+  const rawItems = initializerText.split(',');
+  const items = rawItems.map(item => item.trim());
+  if(items.length === 0 || items.some(item => item === '')){
+    return {
+      matched:true,
+      ok:false,
+      title:'initializerの値を確認',
+      message:'initializerには整数を1つ以上書き、末尾にはカンマを付けないでください。'
+    };
+  }
+  if(items.some(item => !isSimpleIntegerLiteral(item))){
+    return {
+      matched:true,
+      ok:false,
+      title:'initializerは整数だけに対応',
+      message:'現在のinitializerでは、変数や計算式ではなく、単純な符号付き整数を使用してください。'
+    };
+  }
+  if(items.length > length){
+    return {
+      matched:true,
+      ok:false,
+      title:'initializerの値が多すぎます',
+      message:`配列 <code>${name}</code> の要素数は${length}ですが、initializerには${items.length}個の値があります。配列は作らず、ここで停止します。`
+    };
+  }
+
+  const values = items.map(item => Number(item));
+  while(values.length < length) values.push(0);
+
+  return {
+    matched:true,
+    ok:true,
+    name,
+    length,
+    values,
+    initializerCount:items.length,
+    hasInitializer:true
+  };
+}
 
 function escapeHtml(str){
   return String(str)
@@ -1105,6 +1229,8 @@ function visualizeCode(){
   const warningLines = new Set();
   const variables = {};
   const variableOrder = [];
+  const arrays = {};
+  const arrayOrder = [];
   const steps = [];
   // 同じソース上のfor文が親ループから複数回呼ばれても、本体進入回数を累積します。
   const forEnteredIterationTotals = new Map();
@@ -1130,6 +1256,17 @@ function visualizeCode(){
   function rememberVariable(name, value){
     if(!(name in variables)) variableOrder.push(name);
     variables[name] = value;
+  }
+
+  function getSymbolKind(name){
+    if(name in variables) return 'scalar';
+    if(name in arrays) return 'array';
+    return null;
+  }
+
+  function rememberArray(name, arrayState){
+    if(!(name in arrays)) arrayOrder.push(name);
+    arrays[name] = arrayState;
   }
 
   function addStep(lineNo, text, markAsExecuted = true){
@@ -1222,6 +1359,78 @@ function visualizeCode(){
     }
 
     const structuralCode = codeOutsideStringAndLineComment(trimmed);
+
+    function stopArrayLine(title, message){
+      addAnalysis(analysis, lineNo, `${message} この行でプログラムの実行を停止します。`);
+      addHint(hints, lineNo, title, message);
+      warningLines.add(lineNo);
+      addStep(lineNo, '配列に関するこの処理は実行できないため、プログラムの実行を停止します。', false);
+      return 'array-error';
+    }
+
+    const arrayDeclaration = parseArrayDeclaration(structuralCode.trim());
+    if(arrayDeclaration.matched){
+      if(!arrayDeclaration.ok){
+        return stopArrayLine(arrayDeclaration.title, arrayDeclaration.message);
+      }
+      if(insideIf || insideLoop){
+        const location = insideLoop ? `${loopLabel}の本体` : 'if側・else側';
+        return stopArrayLine(
+          'この場所の配列宣言は未対応',
+          `現在のVisualizerでは、配列宣言はmain直下だけに対応しています。${location}では配列を作りません。`
+        );
+      }
+
+      const existingKind = getSymbolKind(arrayDeclaration.name);
+      if(existingKind){
+        const existingLabel = existingKind === 'array' ? '配列' : '変数';
+        return stopArrayLine(
+          '同じ名前がすでに使われています',
+          `<code>${arrayDeclaration.name}</code> は、すでに${existingLabel}の名前として宣言されています。scalar変数と配列には同じ名前を使用できません。`
+        );
+      }
+
+      rememberArray(arrayDeclaration.name, {
+        type:'int',
+        length:arrayDeclaration.length,
+        values:[...arrayDeclaration.values]
+      });
+
+      if(!arrayDeclaration.hasInitializer){
+        addAnalysis(
+          analysis,
+          lineNo,
+          `整数を${arrayDeclaration.length}個入れられる配列 <code>${arrayDeclaration.name}</code> を用意しました。各要素には、まだ値が代入されていません。`
+        );
+        addStep(
+          lineNo,
+          `整数を${arrayDeclaration.length}個入れられる配列 ${arrayDeclaration.name} を用意しました。各要素には、まだ値が代入されていません。`
+        );
+        return;
+      }
+
+      const omittedCount = arrayDeclaration.length - arrayDeclaration.initializerCount;
+      const omittedExplanation = omittedCount > 0
+        ? ` 指定されなかった残り${omittedCount}個の要素は0で初期化されました。`
+        : '';
+      addAnalysis(
+        analysis,
+        lineNo,
+        `配列 <code>${arrayDeclaration.name}</code> の箱を${arrayDeclaration.length}個用意し、0番から順番に値を入れました。${omittedExplanation}`
+      );
+      addStep(
+        lineNo,
+        `配列 ${arrayDeclaration.name} の箱を${arrayDeclaration.length}個用意し、0番から順番に値を入れました。${omittedExplanation}`
+      );
+      return;
+    }
+
+    if(containsArrayElementSyntax(structuralCode)){
+      return stopArrayLine(
+        '配列要素のread／writeはまだ未対応',
+        'このStageでは配列の宣言とinitializerだけに対応しています。<code>a[0]</code> や <code>a[i]</code> を使う処理はまだ実行しません。'
+      );
+    }
 
     const hasScanfCall = /^scanf\b/.test(structuralCode) || /\bscanf\s*\(/.test(structuralCode);
     if(insideLoop && hasScanfCall){
@@ -1366,6 +1575,12 @@ function visualizeCode(){
       }
       const name = declMatch[1];
       const expr = declMatch[2];
+      if(getSymbolKind(name) === 'array'){
+        return stopArrayLine(
+          '同じ名前がすでに使われています',
+          `<code>${name}</code> は、すでに配列の名前として宣言されています。scalar変数と配列には同じ名前を使用できません。`
+        );
+      }
       if(expr === undefined){
         rememberVariable(name, UNINITIALIZED);
         addAnalysis(analysis, lineNo, `整数型の変数 <code>${name}</code> を作りました。まだ値は代入されていません。`);
@@ -1651,6 +1866,20 @@ function visualizeCode(){
           );
         }
 
+        if(looksLikeArrayDeclaration(structuralCode)){
+          return failure(
+            '分岐内の配列宣言は未対応',
+            '配列宣言はmain直下だけに対応しています。未実行側を含め、配列宣言がある外側のif文全体は実行しません。'
+          );
+        }
+
+        if(containsArrayElementSyntax(structuralCode)){
+          return failure(
+            '配列要素のread／writeはまだ未対応',
+            'このStageでは配列要素へアクセスできないため、外側のif文全体は実行しません。'
+          );
+        }
+
         const unsupportedControl = unsupportedControlInfo(structuralCode);
         if(unsupportedControl){
           return failure(
@@ -1687,6 +1916,12 @@ function visualizeCode(){
         return depth > 1
           ? unsupportedNestedIfForm(structuralCode)
           : failure('if文の書き方を確認', '対応範囲を確定できないif文のため、処理全体は実行しません。');
+      }
+      if(containsArrayElementSyntax(headerMatch[1])){
+        return failure(
+          'if条件での配列要素readはまだ未対応',
+          'このStageでは配列要素を条件式で使用できないため、if文全体は実行しません。'
+        );
       }
 
       const ifBranch = parseBranch(ifIndex + 1, depth);
@@ -2240,6 +2475,12 @@ function visualizeCode(){
     if(!header.ok){
       return failure(`${header.error} C言語として正しい形であっても、現在のVisualizerの対応範囲外である場合は実行しません。`);
     }
+    if(containsArrayElementSyntax(structuralCode)){
+      return failure(
+        'このStageではwhile条件で配列要素を使用できません。while文全体を条件判定前に停止します。',
+        'while条件での配列要素readはまだ未対応'
+      );
+    }
     if(!range.closed){
       return failure('while文を閉じる波かっこを確認できないため、条件判定を含めて実行しません。', 'while文の終わりを確認');
     }
@@ -2328,6 +2569,9 @@ function visualizeCode(){
       }
       if(/^int\b/.test(structuralBodyCode)){
         return failure('while文の本体内で変数を宣言する形は現在未対応です。while文全体を実行しません。', 'while文内の変数宣言は未対応');
+      }
+      if(containsArrayElementSyntax(structuralBodyCode)){
+        return failure('このStageではwhile文の本体から配列要素へアクセスできません。while文全体を条件判定前に停止します。', '配列要素のread／writeはまだ未対応');
       }
       if(/^break\b/.test(structuralBodyCode)){
         return failure('while文の本体内にbreakがあります。現在のVisualizerではbreakに対応していないため、while文全体を実行しません。', 'breakは未対応');
@@ -2653,6 +2897,12 @@ function visualizeCode(){
     if(!header.ok){
       return failure(`${header.error} C言語として正しい形であっても、現在のVisualizerの対応範囲外である場合は実行しません。`);
     }
+    if(containsArrayElementSyntax(structuralCode)){
+      return failure(
+        'このStageではforヘッダで配列要素を使用できません。外側のfor文全体を初期化前に停止します。',
+        'forヘッダでの配列要素read／writeはまだ未対応'
+      );
+    }
     if(forDepth > MAX_FOR_NESTING_DEPTH){
       return failure(
         `for文の入れ子は最大${MAX_FOR_NESTING_DEPTH}階層まで対応しています。外側のfor文全体を初期化前に停止します。`,
@@ -2784,6 +3034,9 @@ function visualizeCode(){
       }
       if(/^int\b/.test(structuralBodyCode)){
         return failure('for文の本体内で変数を宣言する形は現在未対応です。for文全体を実行しません。', 'for文内の変数宣言は未対応');
+      }
+      if(containsArrayElementSyntax(structuralBodyCode)){
+        return failure('このStageではfor文の本体から配列要素へアクセスできません。for文全体を初期化前に停止します。', '配列要素のread／writeはまだ未対応');
       }
 
       const variableUpdate = parseVariableUpdate(structuralBodyCode, true);
@@ -3356,6 +3609,14 @@ function visualizeCode(){
         scanfStopIndex = index;
         break;
       }
+      if(result === 'array-error'){
+        executionStop = {
+          index,
+          stopKind:'array-error',
+          reason:'配列に関する未対応または不正な処理で実行を停止したため、この行は実行されませんでした。'
+        };
+        break;
+      }
       continue;
     }
 
@@ -3452,11 +3713,44 @@ function visualizeCode(){
     `;
   }).join('');
 
-  const variableHtml = variableOrder.length
-    ? variableOrder.map(name => {
-      const value = variables[name] === UNINITIALIZED ? '未初期化' : String(variables[name]);
-      return `<div class="variable-chip">${escapeHtml(name)} = ${escapeHtml(value)}</div>`;
-    }).join('')
+  const scalarVariableHtml = variableOrder.map(name => {
+    const value = variables[name] === UNINITIALIZED ? '未初期化' : String(variables[name]);
+    return `<div class="variable-chip">${escapeHtml(name)} = ${escapeHtml(value)}</div>`;
+  }).join('');
+
+  const arrayHtml = arrayOrder.map(name => {
+    const array = arrays[name];
+    const hasUninitialized = array.values.some(value => value === UNINITIALIZED);
+    const cells = array.values.map((value, index) => {
+      const displayValue = value === UNINITIALIZED ? '—' : String(value);
+      const valueLabel = value === UNINITIALIZED ? 'まだ値が入っていません' : `値 ${value}`;
+      return `
+        <div class="array-cell" aria-label="${escapeHtml(name)}[${index}]：${escapeHtml(valueLabel)}">
+          <div class="array-value">${escapeHtml(displayValue)}</div>
+          <div class="array-index">[${index}]</div>
+        </div>
+      `;
+    }).join('');
+    const legend = hasUninitialized
+      ? `<div class="array-legend">—：まだ値を入れていない要素</div>`
+      : '';
+
+    return `
+      <section class="array-card" aria-label="配列 ${escapeHtml(name)}">
+        <div class="array-card-header">
+          <strong>配列 <code class="array-name">${escapeHtml(name)}</code></strong>
+          <span class="array-type">int[${array.length}]</span>
+        </div>
+        <div class="array-scroll" tabindex="0" aria-label="配列 ${escapeHtml(name)} の要素一覧">
+          <div class="array-row">${cells}</div>
+        </div>
+        ${legend}
+      </section>
+    `;
+  }).join('');
+
+  const variableHtml = scalarVariableHtml || arrayHtml
+    ? `${scalarVariableHtml}${arrayHtml}`
     : `<div class="note">変数の状態はまだありません。</div>`;
 
   // 圧縮後もSTEP番号が連番になるよう、最終表示の直前に振り直します。

@@ -380,6 +380,83 @@ button:hover{
   font-size:0.95rem;
 }
 
+/* 配列は通常変数とは分け、番号付きの箱が横に並ぶ形で表示します。 */
+.array-card{
+  flex:1 1 100%;
+  min-width:0;
+  padding:12px;
+  background:#101820;
+  border:1px solid #244457;
+  border-radius:10px;
+  color:#c7ecff;
+}
+
+.array-card-header{
+  display:flex;
+  justify-content:space-between;
+  align-items:baseline;
+  gap:12px;
+  margin-bottom:10px;
+}
+
+.array-card-header strong{color:#e7f6ff;}
+.array-name{color:#62c6ff;}
+
+.array-type{
+  flex:0 0 auto;
+  color:#8eb3c7;
+  font-family:Consolas, Monaco, "Courier New", monospace;
+  font-size:0.82rem;
+}
+
+.array-scroll{
+  max-width:100%;
+  overflow-x:auto;
+  padding:2px 0 6px;
+  overscroll-behavior-inline:contain;
+}
+
+.array-scroll:focus-visible{
+  outline:2px solid #4fc3f7;
+  outline-offset:3px;
+}
+
+.array-row{
+  display:inline-flex;
+  min-width:max-content;
+  font-family:Consolas, Monaco, "Courier New", monospace;
+}
+
+.array-cell{
+  flex:0 0 58px;
+  text-align:center;
+}
+
+.array-value{
+  display:grid;
+  place-items:center;
+  min-height:42px;
+  padding:7px 5px;
+  background:#0d151c;
+  border:1px solid #356078;
+  color:#e7f6ff;
+  font-weight:bold;
+}
+
+.array-cell + .array-cell .array-value{border-left:0;}
+
+.array-index{
+  padding-top:5px;
+  color:#8eb3c7;
+  font-size:0.78rem;
+}
+
+.array-legend{
+  margin-top:5px;
+  color:#8eb3c7;
+  font-size:0.78rem;
+}
+
 .step-list{
   display:grid;
   gap:10px;
@@ -635,6 +712,8 @@ hr{height:1px;border:0;border-top:1px solid #bdbdbd7d;}
   .code-line-number{flex:0 0 22px;}
   .line-analysis{padding:10px 12px 12px;}
   .execution-summary{grid-template-columns:1fr;}
+  .array-card{padding:11px 10px;}
+  .array-cell{flex-basis:54px;}
   .back-to-top{
     right:16px;
     bottom:18px;
