@@ -1282,9 +1282,9 @@ function visualizeCode(){
   const hints = [];
   const executedLines = new Set();
   const warningLines = new Set();
-  const variables = {};
+  const variables = Object.create(null);
   const variableOrder = [];
-  const arrays = {};
+  const arrays = Object.create(null);
   const arrayOrder = [];
   const steps = [];
   // 同じソース上のfor文が親ループから複数回呼ばれても、本体進入回数を累積します。
@@ -1678,7 +1678,8 @@ function visualizeCode(){
       )];
       const isSimpleReadStatement =
         /^[A-Za-z_]\w*\s*=/.test(trimmed) ||
-        /^printf\s*\(/.test(trimmed);
+        /^printf\s*\(/.test(trimmed) ||
+        (!insideIf && !insideLoop && /^int\s+[A-Za-z_]\w*\s*=/.test(trimmed));
 
       if(supportedAccessMatches.length !== 1 || !isSimpleReadStatement){
         return stopArrayLine(
@@ -1837,13 +1838,31 @@ function visualizeCode(){
         return;
       }
 
-      const result = evaluateExpression(expr, variables);
+      const result = evaluateExpression(
+        expr,
+        variables,
+        hasSupportedArrayRead ? resolveArrayRead : null
+      );
       if(result.ok){
         rememberVariable(name, result.value);
         const explanation = makeInitialValueExplanation(name, expr, result);
-        addAnalysis(analysis, lineNo, explanation.analysis);
-        addStep(lineNo, explanation.step);
+        const resolutionExplanation = describeVariableIndexResolution(result.arrayAccess);
+        addAnalysis(analysis, lineNo, `${escapeHtml(resolutionExplanation)}${explanation.analysis}`);
+        addStep(
+          lineNo,
+          `${escapeHtml(resolutionExplanation)}${explanation.step}`,
+          true,
+          result.arrayAccess ? [makeArrayView(result.arrayAccess)] : []
+        );
       }else{
+        if(hasSupportedArrayRead){
+          const arrayView = result.access ? makeArrayView(result.access) : null;
+          return stopArrayLine(
+            result.access ? '配列要素を参照できません' : '配列要素の参照を解決できません',
+            escapeHtml(result.error || '配列要素を含む式を計算できませんでした。'),
+            arrayView ? [arrayView] : []
+          );
+        }
         addAnalysis(analysis, lineNo, `変数 <code>${name}</code> の初期化を読み取ろうとしましたが、式を計算できませんでした。`);
         addHint(hints, lineNo, '式を計算できません', escapeHtml(result.error));
         warningLines.add(lineNo);
