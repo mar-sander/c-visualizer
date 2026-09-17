@@ -3656,6 +3656,51 @@
 
     testCases.push(...stage3CReviewFixTests);
 
+    const stage3DArraySizeTests = [
+      {
+        name:'Stage3D 正規形decimal size 10を許可',
+        code:makeMainCode(`    int a[10];\n    return 0;`),
+        expect:{ arrays:[{ name:'a', type:'int[10]', valueCount:10, firstIndex:'[0]', lastIndex:'[9]' }], arrayCount:1, warningMax:0 }
+      },
+      {
+        name:'Stage3D leading-zero size 01を拒否',
+        code:makeMainCode(`    int a[01];\n    return 0;`),
+        expect:{ arrayCount:0, warningMin:1, hintsInclude:['10進正整数'] }
+      },
+      {
+        name:'Stage3D leading-zero size 05を拒否',
+        code:makeMainCode(`    int a[05];\n    return 0;`),
+        expect:{ arrayCount:0, warningMin:1, hintsInclude:['10進正整数'] }
+      },
+      {
+        name:'Stage3D leading-zero size 010を拒否',
+        code:makeMainCode(`    int a[010];\n    return 0;`),
+        expect:{ arrayCount:0, warningMin:1, hintsInclude:['10進正整数'] }
+      },
+      {
+        name:'Stage3D leading-zero size 09を拒否',
+        code:makeMainCode(`    int a[09];\n    return 0;`),
+        expect:{ arrayCount:0, warningMin:1, hintsInclude:['10進正整数'] }
+      },
+      {
+        name:'Stage3D leading-zero size 00を拒否',
+        code:makeMainCode(`    int a[00];\n    return 0;`),
+        expect:{ arrayCount:0, warningMin:1, hintsInclude:['10進正整数'] }
+      },
+      {
+        name:'Stage3D leading-zero size 001を拒否',
+        code:makeMainCode(`    int a[001];\n    return 0;`),
+        expect:{ arrayCount:0, warningMin:1, hintsInclude:['10進正整数'] }
+      },
+      {
+        name:'Stage3D initializer付きleading-zero sizeを同じ経路で拒否',
+        code:makeMainCode(`    int a[05] = {1, 2};\n    return 0;`),
+        expect:{ arrayCount:0, warningMin:1, hintsInclude:['10進正整数'] }
+      }
+    ];
+
+    testCases.push(...stage3DArraySizeTests);
+
     function normalizeText(value){
       return String(value || '').replace(/\r\n/g, '\n').trim();
     }

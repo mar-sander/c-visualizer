@@ -109,7 +109,16 @@ function parseArrayDeclaration(text){
   const name = match[1];
   const sizeText = match[2].trim();
   const initializerText = match[3];
-  if(!/^\d+$/.test(sizeText)){
+  if(sizeText === '0'){
+    return {
+      matched:true,
+      ok:false,
+      title:'配列の要素数が範囲外',
+      message:`現在のVisualizerで扱える配列の要素数は1～${MAX_ARRAY_LENGTH}です。これはC言語自体の制限ではありません。`
+    };
+  }
+
+  if(!/^[1-9][0-9]*$/.test(sizeText)){
     return {
       matched:true,
       ok:false,
@@ -119,7 +128,7 @@ function parseArrayDeclaration(text){
   }
 
   const length = Number(sizeText);
-  if(length < 1 || length > MAX_ARRAY_LENGTH){
+  if(length > MAX_ARRAY_LENGTH){
     return {
       matched:true,
       ok:false,
