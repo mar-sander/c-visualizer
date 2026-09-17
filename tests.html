@@ -3551,6 +3551,51 @@
 
     testCases.push(...stage2BArrayForTests);
 
+    const stage3BReviewFixTests = [
+      {
+        name:'Stage3B initializer付きarray宣言より1行複数文guardを優先',
+        code:makeMainCode(`    int a[2] = {1, 2}; printf("x");\n    return 0;`),
+        expect:{ arrayCount:0, output:'出力はまだありません。', warningMin:1, hintsInclude:['1行に複数の文があります'], hintsExclude:['配列宣言の書き方を確認'] }
+      },
+      {
+        name:'Stage3B initializerなしarray宣言より1行複数文guardを優先',
+        code:makeMainCode(`    int a[2]; printf("x");\n    return 0;`),
+        expect:{ arrayCount:0, output:'出力はまだありません。', warningMin:1, hintsInclude:['1行に複数の文があります'], hintsExclude:['配列宣言の書き方を確認'] }
+      },
+      {
+        name:'Stage3B array writeより1行複数文guardを優先',
+        code:makeMainCode(`    int a[2] = {1, 2};\n    a[0] = 10; printf("x");\n    return 0;`),
+        expect:{ arrays:[{ name:'a', values:['1', '2'] }], output:'出力はまだありません。', warningMin:1, hintsInclude:['1行に複数の文があります'], hintsExclude:['代入する式を計算できません'] }
+      },
+      {
+        name:'Stage3B 正常なarray宣言とwriteは従来どおり実行',
+        code:makeMainCode(`    int a[2] = {1, 2};\n    a[0] = 10;\n    return 0;`),
+        expect:{ arrays:[{ name:'a', values:['10', '2'] }], warningMax:0, stepArrays:[{ name:'a', activeIndex:'[0]', accessLabel:'代入' }] }
+      },
+      {
+        name:'Stage3B toStringをarray名として使用可能',
+        code:makeMainCode(`    int toString[2] = {1, 2};\n    return 0;`),
+        expect:{ arrays:[{ name:'toString', values:['1', '2'] }], arrayCount:1, warningMax:0 }
+      },
+      {
+        name:'Stage3B constructorをarray名として使用可能',
+        code:makeMainCode(`    int constructor[2];\n    return 0;`),
+        expect:{ arrays:[{ name:'constructor', values:['—', '—'] }], arrayCount:1, warningMax:0 }
+      },
+      {
+        name:'Stage3B valueOfをscalar名として使用可能',
+        code:makeMainCode(`    int valueOf = 10;\n    return 0;`),
+        expect:{ variables:['valueOf = 10'], warningMax:0 }
+      },
+      {
+        name:'Stage3B 実際に宣言済みのprototype同名array再宣言は拒否',
+        code:makeMainCode(`    int toString[2] = {1, 2};\n    int toString[1];\n    return 0;`),
+        expect:{ arrays:[{ name:'toString', values:['1', '2'] }], arrayCount:1, warningMin:1, hintsInclude:['同じ名前がすでに使われています'] }
+      }
+    ];
+
+    testCases.push(...stage3BReviewFixTests);
+
     function normalizeText(value){
       return String(value || '').replace(/\r\n/g, '\n').trim();
     }

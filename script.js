@@ -544,6 +544,11 @@ function hasMultipleStatementsOnOneLine(trimmed){
   return countSemicolonsOutsideString(trimmed) >= 2;
 }
 
+// symbol tableでは、Object.prototypeではなく実際に宣言した名前だけを確認します。
+function hasOwnSymbol(symbolTable, name){
+  return Object.prototype.hasOwnProperty.call(symbolTable, name);
+}
+
 // ++ / -- / += / -= を、for専用ではない共通の変数更新として読み取ります。
 function parseVariableUpdate(text, requiresSemicolon){
   const trimmed = String(text).trim();
@@ -1045,7 +1050,7 @@ function evaluateArithmeticExpression(expr, variables, resolveArrayAccess = null
     }
 
     if(/^[A-Za-z_]\w*$/.test(token)){
-      if(!(token in variables)){
+      if(!hasOwnSymbol(variables, token)){
         return { ok:false, error:`変数 ${token} は宣言されていません。` };
       }
       if(variables[token] === UNINITIALIZED){
@@ -1304,18 +1309,18 @@ function visualizeCode(){
   }
 
   function rememberVariable(name, value){
-    if(!(name in variables)) variableOrder.push(name);
+    if(!hasOwnSymbol(variables, name)) variableOrder.push(name);
     variables[name] = value;
   }
 
   function getSymbolKind(name){
-    if(name in variables) return 'scalar';
-    if(name in arrays) return 'array';
+    if(hasOwnSymbol(variables, name)) return 'scalar';
+    if(hasOwnSymbol(arrays, name)) return 'array';
     return null;
   }
 
   function rememberArray(name, arrayState){
-    if(!(name in arrays)) arrayOrder.push(name);
+    if(!hasOwnSymbol(arrays, name)) arrayOrder.push(name);
     arrays[name] = arrayState;
   }
 
@@ -1429,7 +1434,7 @@ function visualizeCode(){
     const analysisPrefix = contextLabel ? `<strong>${escapeHtml(contextLabel)}：</strong> ` : '';
     const stepPrefix = contextLabel ? `${contextLabel}：` : '';
 
-    if(!(name in variables)){
+    if(!hasOwnSymbol(variables, name)){
       addAnalysis(analysis, lineNo, `${analysisPrefix}変数 <code>${name}</code> に代入しようとしています。`);
       addHint(hints, lineNo, '宣言前の代入かも', `変数 <code>${name}</code> が先に <code>int ${name};</code> のように宣言されているか確認してみましょう。`);
       warningLines.add(lineNo);
@@ -1484,7 +1489,7 @@ function visualizeCode(){
     const stepPrefix = contextLabel ? `${contextLabel}：` : '';
     const name = update.name;
 
-    if(!(name in variables)){
+    if(!hasOwnSymbol(variables, name)){
       addAnalysis(analysis, lineNo, `${analysisPrefix}変数 <code>${name}</code> を更新しようとしています。`);
       addHint(hints, lineNo, '宣言前の更新かも', `変数 <code>${name}</code> が先に <code>int ${name};</code> のように宣言されているか確認してみましょう。`);
       warningLines.add(lineNo);
@@ -1526,6 +1531,14 @@ function visualizeCode(){
     }
 
     const structuralCode = codeOutsideStringAndLineComment(trimmed);
+
+    if(hasMultipleStatementsOnOneLine(trimmed)){
+      const message = '1行に複数の文があります。文の終わりで改行してください。';
+      addAnalysis(analysis, lineNo, message);
+      addHint(hints, lineNo, '改行の確認', message);
+      warningLines.add(lineNo);
+      return;
+    }
 
     function stopArrayLine(title, message, arrayViews = []){
       addAnalysis(analysis, lineNo, `${message} この行でプログラムの実行を停止します。`);
@@ -1709,7 +1722,7 @@ function visualizeCode(){
       }
 
       const name = scanfMatch[1];
-      if(!(name in variables)){
+      if(!hasOwnSymbol(variables, name)){
         return stopScanf(
           'scanfの変数が宣言されていません',
           `変数 <code>${name}</code> が先に <code>int ${name};</code> のように宣言されているか確認してください。`
@@ -1736,14 +1749,6 @@ function visualizeCode(){
       rememberVariable(name, inputValue);
       addAnalysis(analysis, lineNo, `入力値 <code>${escapeHtml(inputText)}</code> を整数として受け取り、変数 <code>${name}</code> に代入します。`);
       addStep(lineNo, `入力値 ${escapeHtml(inputText)} を整数として受け取り、変数 ${name} に代入しました。`);
-      return;
-    }
-
-    if(hasMultipleStatementsOnOneLine(trimmed)){
-      const message = '1行に複数の文があります。文の終わりで改行してください。';
-      addAnalysis(analysis, lineNo, message);
-      addHint(hints, lineNo, '改行の確認', message);
-      warningLines.add(lineNo);
       return;
     }
 
