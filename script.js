@@ -5,6 +5,7 @@ const samples = {
   ifElse: `#include <stdio.h>\n\nint main(void){\n    int score = 45;\n    if(score >= 60){\n        printf("合格です\\n");\n    }else{\n        printf("もう一度挑戦\\n");\n    }\n    return 0;\n}`,
   nestedIf: `#include <stdio.h>\n\nint main(void){\n    int score = 75;\n\n    if(score >= 60){\n        if(score >= 80){\n            printf("高得点です\\n");\n        }else{\n            printf("合格です\\n");\n        }\n    }\n\n    return 0;\n}`,
   forBasic: `#include <stdio.h>\n\nint main(void){\n    int i;\n\n    for(i = 0; i < 5; i++){\n        printf("%d\\n", i);\n    }\n\n    return 0;\n}`,
+  arrayFor: `#include <stdio.h>\n\nint main(void){\n    int a[5] = {10, 20, 30, 40, 50};\n    int i;\n\n    for(i = 0; i < 5; i++){\n        printf("%d\\n", a[i]);\n    }\n\n    return 0;\n}`,
   forIf: `#include <stdio.h>\n\nint main(void){\n    int i;\n\n    for(i = 0; i < 10; i++){\n        if(i % 2 == 0){\n            printf("%d\\n", i);\n        }\n    }\n\n    return 0;\n}`,
   nestedFor: `#include <stdio.h>\n\nint main(void){\n    int i;\n    int j;\n\n    for(i = 1; i <= 3; i++){\n        for(j = 1; j <= i; j++){\n            printf("*");\n        }\n        printf("\\n");\n    }\n\n    return 0;\n}`,
   whileBasic: `#include <stdio.h>\n\nint main(void){\n    int i = 1;\n\n    while(i <= 5){\n        printf("%d\\n", i);\n        i++;\n    }\n\n    return 0;\n}`,
@@ -1352,7 +1353,7 @@ function visualizeCode(){
       if(indexKind === 'array'){
         return {
           ok:false,
-          error:`${access.indexVariable} は配列です。添字には初期化済みのscalar変数を使用してください。`
+          error:`${access.indexVariable} は配列です。添字には、値が代入されているint変数を使用してください。`
         };
       }
       if(variables[access.indexVariable] === UNINITIALIZED){
@@ -1557,7 +1558,7 @@ function visualizeCode(){
         const existingLabel = existingKind === 'array' ? '配列' : '変数';
         return stopArrayLine(
           '同じ名前がすでに使われています',
-          `<code>${arrayDeclaration.name}</code> は、すでに${existingLabel}の名前として宣言されています。scalar変数と配列には同じ名前を使用できません。`
+          `<code>${arrayDeclaration.name}</code> は、すでに${existingLabel}の名前として宣言されています。int変数と配列には同じ名前を使用できません。`
         );
       }
 
@@ -1600,8 +1601,8 @@ function visualizeCode(){
     if(containsArrayElementSyntax(structuralCode)){
       if(insideIf || insideWhile){
         return stopArrayLine(
-          '制御構造内の配列accessは未対応',
-          '現在のVisualizerでは、配列要素の参照・代入はmain直下、または対応範囲内のfor文のdirect bodyだけで実行できます。if／while内では実行しません。'
+          'この場所の配列操作は未対応',
+          '現在のVisualizerでは、配列要素の参照・代入はmain直下、またはmain直下にあるfor文の本体へ直接書いた文だけで実行できます。if／while内では実行しません。'
         );
       }
 
@@ -1613,7 +1614,7 @@ function visualizeCode(){
         const expr = arrayWriteMatch[2].trim();
         if(containsArrayElementSyntax(codeOutsideStringAndLineComment(expr))){
           return stopArrayLine(
-            '同じ文での配列read／writeは未対応',
+            '同じ文での配列参照／代入は未対応',
             '配列要素へ代入する式の中で、別の配列要素を参照する形は現在未対応です。'
           );
         }
@@ -1668,8 +1669,8 @@ function visualizeCode(){
 
       if(supportedAccessMatches.length !== 1 || !isSimpleReadStatement){
         return stopArrayLine(
-          'この配列accessは未対応',
-          '現在はmain直下で、整数literalまたは単一scalar変数の添字を1つだけ使う単純な文に対応しています。添字の計算式・複数access・要素更新はまだ実行しません。'
+          'この配列要素の使い方は未対応',
+          '添字には、整数または宣言済みのint変数を1つだけ使用できます。<code>a[i + 1]</code>のような計算式、1つの文で複数要素を使う形、配列要素の更新演算はまだ実行しません。'
         );
       }
       hasSupportedArrayRead = true;
@@ -1821,7 +1822,7 @@ function visualizeCode(){
       if(getSymbolKind(name) === 'array'){
         return stopArrayLine(
           '同じ名前がすでに使われています',
-          `<code>${name}</code> は、すでに配列の名前として宣言されています。scalar変数と配列には同じ名前を使用できません。`
+          `<code>${name}</code> は、すでに配列の名前として宣言されています。int変数と配列には同じ名前を使用できません。`
         );
       }
       if(expr === undefined){
@@ -1954,7 +1955,7 @@ function visualizeCode(){
 
     addAnalysis(analysis, lineNo, '現在のVisualizerでは説明未対応のコードです。');
     if(trimmed !== ''){
-      addHint(hints, lineNo, '未対応コード', 'この行は現在の可視化対象外です。まずは int、代入、整数演算、比較、printf、main直下の単純なscanf、対応範囲内のif・if〜else、main直下の基本while、最大3階層までの直接的な入れ子forの範囲で試してみましょう。');
+      addHint(hints, lineNo, '未対応コード', 'この行は現在の可視化対象外です。まずは int、代入、整数演算、比較、printf、main直下の単純なscanf、対応範囲内のif・if〜else、for・while、基本的な1次元int配列の範囲で試してみましょう。');
       warningLines.add(lineNo);
     }
     return insideLoop ? 'execution-error' : undefined;
@@ -2148,7 +2149,7 @@ function visualizeCode(){
 
         if(containsArrayElementSyntax(structuralCode)){
           return failure(
-            '配列要素のread／writeはまだ未対応',
+            'この場所での配列要素の参照／代入は未対応',
             'このStageでは配列要素へアクセスできないため、外側のif文全体は実行しません。'
           );
         }
@@ -2844,7 +2845,7 @@ function visualizeCode(){
         return failure('while文の本体内で変数を宣言する形は現在未対応です。while文全体を実行しません。', 'while文内の変数宣言は未対応');
       }
       if(containsArrayElementSyntax(structuralBodyCode)){
-        return failure('このStageではwhile文の本体から配列要素へアクセスできません。while文全体を条件判定前に停止します。', '配列要素のread／writeはまだ未対応');
+        return failure('現在はwhile文の本体から配列要素を参照・代入できません。while文全体を条件判定前に停止します。', 'while文内の配列操作は未対応');
       }
       if(/^break\b/.test(structuralBodyCode)){
         return failure('while文の本体内にbreakがあります。現在のVisualizerではbreakに対応していないため、while文全体を実行しません。', 'breakは未対応');
@@ -3173,7 +3174,7 @@ function visualizeCode(){
     if(containsArrayElementSyntax(structuralCode)){
       return failure(
         'このStageではforヘッダで配列要素を使用できません。外側のfor文全体を初期化前に停止します。',
-        'forヘッダでの配列要素read／writeはまだ未対応'
+        'forヘッダでの配列要素の参照／代入は未対応'
       );
     }
     if(forDepth > MAX_FOR_NESTING_DEPTH){
@@ -3244,8 +3245,8 @@ function visualizeCode(){
       if(forDepth !== 1){
         return {
           ok:false,
-          title:'nested for内の配列accessは未対応',
-          message:'現在はmain直下にあるfor文のdirect bodyだけが配列要素へアクセスできます。nested for内では実行しません。'
+          title:'入れ子for内の配列操作は未対応',
+          message:'現在はmain直下にあるfor文の本体へ直接書いた文だけが配列要素を使えます。入れ子for内では実行しません。'
         };
       }
 
@@ -3256,7 +3257,7 @@ function visualizeCode(){
         if(containsArrayElementSyntax(codeOutsideStringAndLineComment(arrayWriteMatch[2]))){
           return {
             ok:false,
-            title:'同じ文での配列read／writeは未対応',
+            title:'同じ文での配列参照／代入は未対応',
             message:'for文の1つのstatement内で、配列要素をreadしながら別の配列要素へwriteする形は現在未対応です。'
           };
         }
@@ -3272,8 +3273,8 @@ function visualizeCode(){
       if(supportedAccessMatches.length !== 1 || !isSupportedReadStatement){
         return {
           ok:false,
-          title:'for文本体の配列accessは未対応',
-          message:'for文のdirect bodyでは、整数literalまたは単一scalar変数の添字を1つだけ使うread／writeに対応しています。添字式・複数access・要素更新は実行しません。'
+          title:'for文本体の配列操作は未対応',
+          message:'for文の本体へ直接書いた文では、整数または宣言済みのint変数を添字にして、配列要素を1つ参照または代入できます。添字の計算式・複数要素の使用・要素更新は実行しません。'
         };
       }
       return { ok:true, matched:true };
@@ -3745,7 +3746,7 @@ function visualizeCode(){
               status:'execution-stopped',
               stopKind:'array-error',
               stopIndex:index,
-              reason:'for文の本体で配列accessを継続できず、この行は実行されませんでした。'
+              reason:'for文の本体で配列操作を継続できず、この行は実行されませんでした。'
             };
           }
           continue;
