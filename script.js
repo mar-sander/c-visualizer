@@ -1598,10 +1598,10 @@ function visualizeCode(){
 
     let hasSupportedArrayRead = false;
     if(containsArrayElementSyntax(structuralCode)){
-      if(insideIf || insideLoop){
+      if(insideIf || insideWhile){
         return stopArrayLine(
           '制御構造内の配列accessは未対応',
-          '現在のVisualizerでは、配列要素の参照・代入はmain直下の単純な文だけに対応しています。if／for／while内では実行しません。'
+          '現在のVisualizerでは、配列要素の参照・代入はmain直下、または対応範囲内のfor文のdirect bodyだけで実行できます。if／while内では実行しません。'
         );
       }
 
@@ -3239,6 +3239,46 @@ function visualizeCode(){
       return { ok:true };
     }
 
+    function validateDirectArrayStatement(trimmed, structuralBodyCode){
+      if(!containsArrayElementSyntax(structuralBodyCode)) return { ok:true, matched:false };
+      if(forDepth !== 1){
+        return {
+          ok:false,
+          title:'nested for内の配列accessは未対応',
+          message:'現在はmain直下にあるfor文のdirect bodyだけが配列要素へアクセスできます。nested for内では実行しません。'
+        };
+      }
+
+      const arrayWriteMatch = trimmed.match(
+        /^([A-Za-z_]\w*\s*\[\s*(?:[+-]?\d+|[A-Za-z_]\w*)\s*\])\s*=\s*(.+);$/
+      );
+      if(arrayWriteMatch){
+        if(containsArrayElementSyntax(codeOutsideStringAndLineComment(arrayWriteMatch[2]))){
+          return {
+            ok:false,
+            title:'同じ文での配列read／writeは未対応',
+            message:'for文の1つのstatement内で、配列要素をreadしながら別の配列要素へwriteする形は現在未対応です。'
+          };
+        }
+        return { ok:true, matched:true };
+      }
+
+      const supportedAccessMatches = [...structuralBodyCode.matchAll(
+        /\b[A-Za-z_]\w*\s*\[\s*(?:[+-]?\d+|[A-Za-z_]\w*)\s*\]/g
+      )];
+      const isSupportedReadStatement =
+        /^[A-Za-z_]\w*\s*=\s*.+;$/.test(structuralBodyCode) ||
+        matchSimplePrintfStatement(trimmed) !== null;
+      if(supportedAccessMatches.length !== 1 || !isSupportedReadStatement){
+        return {
+          ok:false,
+          title:'for文本体の配列accessは未対応',
+          message:'for文のdirect bodyでは、整数literalまたは単一scalar変数の添字を1つだけ使うread／writeに対応しています。添字式・複数access・要素更新は実行しません。'
+        };
+      }
+      return { ok:true, matched:true };
+    }
+
     for(let index = startIndex + 1; index < safeEndIndex; index++){
       const trimmed = executableLines[index].trim();
       const structuralBodyCode = codeOutsideStringAndLineComment(executableLines[index]).trim();
@@ -3308,8 +3348,9 @@ function visualizeCode(){
       if(/^int\b/.test(structuralBodyCode)){
         return failure('for文の本体内で変数を宣言する形は現在未対応です。for文全体を実行しません。', 'for文内の変数宣言は未対応');
       }
-      if(containsArrayElementSyntax(structuralBodyCode)){
-        return failure('このStageではfor文の本体から配列要素へアクセスできません。for文全体を初期化前に停止します。', '配列要素のread／writeはまだ未対応');
+      const arrayStatement = validateDirectArrayStatement(trimmed, structuralBodyCode);
+      if(!arrayStatement.ok){
+        return failure(arrayStatement.message, arrayStatement.title);
       }
 
       const variableUpdate = parseVariableUpdate(structuralBodyCode, true);
@@ -3327,7 +3368,8 @@ function visualizeCode(){
         /^return\s+0\s*;?$/.test(structuralBodyCode) ||
         variableUpdate !== null ||
         /^[A-Za-z_]\w*\s*=\s*.+;$/.test(structuralBodyCode) ||
-        printfMatch !== null;
+        printfMatch !== null ||
+        arrayStatement.matched;
       if(!supportedSimpleStatement){
         return failure('for文の本体に、現在のVisualizerでは実行できない文があります。本体を部分実行せず、この地点で停止します。', 'for文本体の文は未対応');
       }
@@ -3694,6 +3736,16 @@ function visualizeCode(){
               stopKind:'runtime-error',
               stopIndex:index,
               reason:'for文の本体で実行を停止したため、この行は実行されませんでした。'
+            };
+          }
+          if(bodyResult === 'array-error'){
+            explanationHistory.finishIteration(activeIteration);
+            explanationHistory.finalize();
+            return {
+              status:'execution-stopped',
+              stopKind:'array-error',
+              stopIndex:index,
+              reason:'for文の本体で配列accessを継続できず、この行は実行されませんでした。'
             };
           }
           continue;
