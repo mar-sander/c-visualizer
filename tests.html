@@ -3756,6 +3756,46 @@
 
     testCases.push(...stage3EIntDivisionTests);
 
+    const stage3GArrayErrorMetadataTests = [
+      {
+        name:'Stage3G assignmentのarray read後0除算でもmetadata保持',
+        code:makeMainCode(`    int a[2] = {10, 20};\n    int x;\n    x = a[0] / 0;\n    printf("WRONG");\n    return 0;`),
+        expect:{ variables:['x = 未初期化'], output:'出力はまだありません。', warningMin:1, hintsInclude:['配列要素を含む式を計算できません', '0で割ろうとしています'], hintsExclude:['配列要素を参照できません'], stepArrays:[{ name:'a', activeIndex:'[0]', accessLabel:'参照', sourceIndex:'0', resolvedIndex:0 }], executedExcludes:['printf("WRONG'] }
+      },
+      {
+        name:'Stage3G scalar initializerのarray read後0除算でもmetadata保持',
+        code:makeMainCode(`    int a[2] = {10, 20};\n    int x = a[0] / 0;\n    printf("WRONG");\n    return 0;`),
+        expect:{ variablesExclude:['x ='], output:'出力はまだありません。', warningMin:1, hintsInclude:['配列要素を含む式を計算できません', '0で割ろうとしています'], hintsExclude:['配列要素を参照できません'], stepArrays:[{ name:'a', activeIndex:'[0]', accessLabel:'参照' }], executedExcludes:['printf("WRONG'] }
+      },
+      {
+        name:'Stage3G array read後の未宣言variable errorでもmetadata保持',
+        code:makeMainCode(`    int a[2] = {10, 20};\n    int x;\n    x = a[0] + missing;\n    return 0;`),
+        expect:{ variables:['x = 未初期化'], warningMin:1, hintsInclude:['配列要素を含む式を計算できません', '変数 missing は宣言されていません'], hintsExclude:['配列要素を参照できません'], stepArrays:[{ name:'a', activeIndex:'[0]', accessLabel:'参照' }] }
+      },
+      {
+        name:'Stage3G array read前のerrorではfake metadataを作らない',
+        code:makeMainCode(`    int a[2] = {10, 20};\n    int x;\n    x = missing + a[0];\n    return 0;`),
+        expect:{ variables:['x = 未初期化'], warningMin:1, hintsInclude:['式を計算できません', '変数 missing は宣言されていません'], stepArrayCount:0 }
+      },
+      {
+        name:'Stage3G printfのarray read後errorでもmetadata保持',
+        code:makeMainCode(`    int a[2] = {10, 20};\n    printf("%d", a[0] / 0);\n    return 0;`),
+        expect:{ output:'出力はまだありません。', warningMin:1, hintsInclude:['配列要素を含む式を計算できません', '0で割ろうとしています'], hintsExclude:['配列要素を参照できません'], stepArrays:[{ name:'a', activeIndex:'[0]', accessLabel:'参照' }] }
+      },
+      {
+        name:'Stage3G variable index read後errorでもsourceとresolvedを保持',
+        code:makeMainCode(`    int i = 1;\n    int a[2] = {10, 20};\n    int x;\n    x = a[i] / 0;\n    return 0;`),
+        expect:{ variables:['i = 1', 'x = 未初期化'], warningMin:1, hintsInclude:['0で割ろうとしています'], stepArrays:[{ name:'a', activeIndex:'[1]', accessLabel:'参照', sourceIndex:'i', resolvedIndex:1, resolutionIncludes:'a[i]→a[1]' }] }
+      },
+      {
+        name:'Stage3G comparison右辺errorでも左辺array metadata保持',
+        code:makeMainCode(`    int a[2] = {10, 20};\n    int x;\n    x = a[0] < missing;\n    return 0;`),
+        expect:{ variables:['x = 未初期化'], warningMin:1, hintsInclude:['配列要素を含む式を計算できません', '変数 missing は宣言されていません'], stepArrays:[{ name:'a', activeIndex:'[0]', accessLabel:'参照' }] }
+      }
+    ];
+
+    testCases.push(...stage3GArrayErrorMetadataTests);
+
     function normalizeText(value){
       return String(value || '').replace(/\r\n/g, '\n').trim();
     }

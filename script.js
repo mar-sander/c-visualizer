@@ -982,6 +982,15 @@ function evaluateArithmeticExpression(expr, variables, resolveArrayAccess = null
   const usedVars = [];
   const arrayAccesses = [];
 
+  // 配列要素のread後に式の別部分で失敗しても、read済みの情報を失わないようにします。
+  // 配列要素そのものの解決失敗（access）は、既存のerror metadataを優先します。
+  function preserveResolvedArrayAccess(result){
+    if(result.ok || result.access || result.arrayAccess || arrayAccesses.length === 0){
+      return result;
+    }
+    return { ...result, arrayAccess:arrayAccesses[0] };
+  }
+
   function peek(){ return tokens[pos]; }
   function consume(){ return tokens[pos++]; }
 
@@ -1082,9 +1091,9 @@ function evaluateArithmeticExpression(expr, variables, resolveArrayAccess = null
   }
 
   const result = parseExpression();
-  if(!result.ok) return result;
+  if(!result.ok) return preserveResolvedArrayAccess(result);
   if(pos < tokens.length){
-    return { ok:false, error:'式の途中に読み取れない部分があります。' };
+    return preserveResolvedArrayAccess({ ok:false, error:'式の途中に読み取れない部分があります。' });
   }
 
   return {
@@ -1169,7 +1178,12 @@ function evaluateExpression(expr, variables, resolveArrayAccess = null){
   const left = evaluateArithmeticExpression(leftExpr, variables, resolveArrayAccess);
   if(!left.ok) return left;
   const right = evaluateArithmeticExpression(rightExpr, variables, resolveArrayAccess);
-  if(!right.ok) return right;
+  if(!right.ok){
+    if(left.arrayAccess && !right.access && !right.arrayAccess){
+      return { ...right, arrayAccess:left.arrayAccess };
+    }
+    return right;
+  }
   if(left.arrayAccess && right.arrayAccess){
     return { ok:false, error:'1つの式で複数の配列要素を参照する形は現在未対応です。' };
   }
@@ -1462,7 +1476,12 @@ function visualizeCode(){
         addHint(hints, lineNo, '式を計算できません', escapeHtml(result.error));
         warningLines.add(lineNo);
       }
-      return { ok:false, error:result.error, arrayAccess:result.access || null };
+      return {
+        ok:false,
+        error:result.error,
+        access:result.access || null,
+        arrayAccess:result.arrayAccess || null
+      };
     }
 
     const before = variables[name];
@@ -1561,6 +1580,16 @@ function visualizeCode(){
         arrayViews
       );
       return 'array-error';
+    }
+
+    function getArrayExpressionErrorContext(result){
+      if(result.access){
+        return { title:'配列要素を参照できません', access:result.access };
+      }
+      if(result.arrayAccess){
+        return { title:'配列要素を含む式を計算できません', access:result.arrayAccess };
+      }
+      return { title:'式を計算できません', access:null };
     }
 
     const arrayDeclaration = parseArrayDeclaration(structuralCode.trim());
@@ -1866,11 +1895,11 @@ function visualizeCode(){
         );
       }else{
         if(hasSupportedArrayRead){
-          const arrayView = result.access ? makeArrayView(result.access) : null;
+          const errorContext = getArrayExpressionErrorContext(result);
           return stopArrayLine(
-            result.access ? '配列要素を参照できません' : '配列要素の参照を解決できません',
+            errorContext.title,
             escapeHtml(result.error || '配列要素を含む式を計算できませんでした。'),
-            arrayView ? [arrayView] : []
+            errorContext.access ? [makeArrayView(errorContext.access)] : []
           );
         }
         addAnalysis(analysis, lineNo, `変数 <code>${name}</code> の初期化を読み取ろうとしましたが、式を計算できませんでした。`);
@@ -1886,13 +1915,11 @@ function visualizeCode(){
       const expr = assignMatch[2];
       const result = executeAssignment(name, expr, lineNo, '', hasSupportedArrayRead);
       if(hasSupportedArrayRead && !result.ok){
-        const arrayViews = result.arrayAccess
-          ? [makeArrayView(result.arrayAccess)]
-          : [];
+        const errorContext = getArrayExpressionErrorContext(result);
         return stopArrayLine(
-          result.arrayAccess ? '未初期化の配列要素は参照できません' : '配列要素を参照できません',
+          errorContext.title,
           escapeHtml(result.error || '配列要素を含む式を計算できませんでした。'),
-          arrayViews
+          errorContext.access ? [makeArrayView(errorContext.access)] : []
         );
       }
       return !result.ok && insideLoop ? 'execution-error' : undefined;
@@ -1916,7 +1943,7 @@ function visualizeCode(){
       const readableArgs = [];
       let ok = true;
       let error = '';
-      let failedArrayAccess = null;
+      let failedResult = null;
 
       for(const arg of args){
         const result = evaluateExpression(
@@ -1931,7 +1958,7 @@ function visualizeCode(){
         }else{
           ok = false;
           error = result.error;
-          failedArrayAccess = result.access || null;
+          failedResult = result;
           break;
         }
       }
@@ -1968,10 +1995,11 @@ function visualizeCode(){
         }
       }else{
         if(hasSupportedArrayRead){
+          const errorContext = getArrayExpressionErrorContext(failedResult || {});
           return stopArrayLine(
-            failedArrayAccess ? '未初期化の配列要素は参照できません' : '配列要素を参照できません',
+            errorContext.title,
             escapeHtml(error),
-            failedArrayAccess ? [makeArrayView(failedArrayAccess)] : []
+            errorContext.access ? [makeArrayView(errorContext.access)] : []
           );
         }
         addAnalysis(analysis, lineNo, 'printfで表示しようとしましたが、表示する値を計算できませんでした。');
