@@ -3796,6 +3796,36 @@
 
     testCases.push(...stage3GArrayErrorMetadataTests);
 
+    const stage3HPrintfArrayErrorMetadataTests = [
+      {
+        name:'Stage3H printf先行argumentのarray read後missingでもmetadata保持',
+        code:makeMainCode(`    int a[2] = {10, 20};\n    printf("%d %d", a[0], missing);\n    return 0;`),
+        expect:{ output:'出力はまだありません。', warningMin:1, hintsInclude:['式を計算できません', '変数 missing は宣言されていません'], hintsExclude:['配列要素を参照できません', '配列要素を含む式を計算できません'], stepArrays:[{ name:'a', activeIndex:'[0]', accessLabel:'参照', sourceIndex:'0', resolvedIndex:0 }] }
+      },
+      {
+        name:'Stage3H printf先行argumentのarray read後0除算でもmetadata保持',
+        code:makeMainCode(`    int a[2] = {10, 20};\n    printf("%d %d", a[0], 1 / 0);\n    return 0;`),
+        expect:{ output:'出力はまだありません。', warningMin:1, hintsInclude:['式を計算できません', '0で割ろうとしています'], hintsExclude:['配列要素を参照できません', '配列要素を含む式を計算できません'], stepArrays:[{ name:'a', activeIndex:'[0]', accessLabel:'参照' }] }
+      },
+      {
+        name:'Stage3H printf array read前errorではfake metadataを作らない',
+        code:makeMainCode(`    int a[2] = {10, 20};\n    printf("%d %d", missing, a[0]);\n    return 0;`),
+        expect:{ output:'出力はまだありません。', warningMin:1, hintsInclude:['変数 missing は宣言されていません'], stepArrayCount:0 }
+      },
+      {
+        name:'Stage3H printf failing argument自身のarrayAccessを優先',
+        code:makeMainCode(`    int a[2] = {10, 20};\n    printf("%d %d", 99, a[0] / 0);\n    return 0;`),
+        expect:{ output:'出力はまだありません。', warningMin:1, hintsInclude:['配列要素を含む式を計算できません', '0で割ろうとしています'], hintsExclude:['配列要素を参照できません'], stepArrays:[{ name:'a', activeIndex:'[0]', accessLabel:'参照' }] }
+      },
+      {
+        name:'Stage3H printf先行variable index read metadataを保持',
+        code:makeMainCode(`    int i = 1;\n    int a[2] = {10, 20};\n    printf("%d %d", a[i], missing);\n    return 0;`),
+        expect:{ variables:['i = 1'], output:'出力はまだありません。', warningMin:1, hintsInclude:['変数 missing は宣言されていません'], hintsExclude:['配列要素を参照できません'], stepArrays:[{ name:'a', activeIndex:'[1]', accessLabel:'参照', sourceIndex:'i', resolvedIndex:1, resolutionIncludes:'a[i]→a[1]' }] }
+      }
+    ];
+
+    testCases.push(...stage3HPrintfArrayErrorMetadataTests);
+
     function normalizeText(value){
       return String(value || '').replace(/\r\n/g, '\n').trim();
     }

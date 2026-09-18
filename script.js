@@ -1996,10 +1996,12 @@ function visualizeCode(){
       }else{
         if(hasSupportedArrayRead){
           const errorContext = getArrayExpressionErrorContext(failedResult || {});
+          const priorArrayAccess = results.find(result => result.arrayAccess)?.arrayAccess || null;
+          const displayAccess = errorContext.access || priorArrayAccess;
           return stopArrayLine(
             errorContext.title,
             escapeHtml(error),
-            errorContext.access ? [makeArrayView(errorContext.access)] : []
+            displayAccess ? [makeArrayView(displayAccess)] : []
           );
         }
         addAnalysis(analysis, lineNo, 'printfで表示しようとしましたが、表示する値を計算できませんでした。');
