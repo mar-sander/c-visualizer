@@ -48,9 +48,9 @@ Avoid:
 - adding many features at once
 - changing the core design without reason
 
-## Supported scope for Ver.0.10.0_0917
+## Supported scope for Ver.0.10.0_0918
 
-Last updated: 2026-09-17
+Last updated: 2026-09-18
 
 Currently supported:
 
@@ -391,7 +391,7 @@ Rules:
 - on a safety stop, retain the 500th iteration and the true condition that would require the 501st entry; never create a 501st body explanation
 - keep explanation histories independent across multiple while statements and independent from for explanation histories
 
-## Unsupported scope for Ver.0.10.0_0917
+## Unsupported scope for Ver.0.10.0_0918
 
 Do not implement these unless explicitly requested:
 
@@ -450,7 +450,7 @@ Do not implement these unless explicitly requested:
 
 ## Input rule
 
-In Ver.0.10.0_0917, assume one C statement per line.
+In Ver.0.10.0_0918, assume one C statement per line.
 
 If multiple statements are written on one line, show a warning instead of trying to parse them automatically.
 
