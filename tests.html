@@ -3701,6 +3701,61 @@
 
     testCases.push(...stage3DArraySizeTests);
 
+    const stage3EIntDivisionTests = [
+      {
+        name:'Stage3E int除算 3÷2は1',
+        code:makeMainCode(`    int x = 3 / 2;\n    return 0;`),
+        expect:{ variables:['x = 1'], warningMax:0 }
+      },
+      {
+        name:'Stage3E int除算 5÷2は2',
+        code:makeMainCode(`    int x = 5 / 2;\n    return 0;`),
+        expect:{ variables:['x = 2'], warningMax:0 }
+      },
+      {
+        name:'Stage3E int除算 -3÷2は-1',
+        code:makeMainCode(`    int x = -3 / 2;\n    return 0;`),
+        expect:{ variables:['x = -1'], warningMax:0 }
+      },
+      {
+        name:'Stage3E int除算 3÷-2は-1',
+        code:makeMainCode(`    int x = 3 / -2;\n    return 0;`),
+        expect:{ variables:['x = -1'], warningMax:0 }
+      },
+      {
+        name:'Stage3E int除算 -3÷-2は1',
+        code:makeMainCode(`    int x = -3 / -2;\n    return 0;`),
+        expect:{ variables:['x = 1'], warningMax:0 }
+      },
+      {
+        name:'Stage3E assignment経路でもint除算',
+        code:makeMainCode(`    int x;\n    x = 3 / 2;\n    return 0;`),
+        expect:{ variables:['x = 1'], warningMax:0 }
+      },
+      {
+        name:'Stage3E int除算結果を後続演算と連続除算へ渡す',
+        code:makeMainCode(`    int x = 3 / 2 + 5;\n    int y = 7 / 2 / 2;\n    return 0;`),
+        expect:{ variables:['x = 6', 'y = 1'], warningMax:0 }
+      },
+      {
+        name:'Stage3E int除算結果をarray index readへ接続',
+        code:makeMainCode(`    int i = 3 / 2;\n    int a[2] = {10, 20};\n    printf("%d", a[i]);\n    return 0;`),
+        expect:{ variables:['i = 1'], arrays:[{ name:'a', values:['10', '20'] }], output:'20', warningMax:0, stepArrays:[{ name:'a', activeIndex:'[1]', accessLabel:'参照', sourceIndex:'i', resolvedIndex:1, resolutionIncludes:'a[i]→a[1]' }] }
+      },
+      {
+        name:'Stage3E int除算結果をarray index writeへ接続',
+        code:makeMainCode(`    int i = 3 / 2;\n    int a[2] = {0, 0};\n    a[i] = 9;\n    return 0;`),
+        expect:{ variables:['i = 1'], arrays:[{ name:'a', values:['0', '9'] }], warningMax:0, stepArrays:[{ name:'a', activeIndex:'[1]', accessLabel:'代入', sourceIndex:'i', resolvedIndex:1 }] }
+      },
+      {
+        name:'Stage3E 0除算は値を保存せず既存policyで拒否',
+        code:makeMainCode(`    int x = 5 / 0;\n    return 0;`),
+        expect:{ variablesExclude:['x ='], warningMin:1, hintsInclude:['0で割ろうとしています'] }
+      }
+    ];
+
+    testCases.push(...stage3EIntDivisionTests);
+
     function normalizeText(value){
       return String(value || '').replace(/\r\n/g, '\n').trim();
     }

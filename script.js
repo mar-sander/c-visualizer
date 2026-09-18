@@ -1014,6 +1014,7 @@ function evaluateArithmeticExpression(expr, variables, resolveArrayAccess = null
       }
       let value;
       if(op === '*') value = left.value * right.value;
+      // Cのint除算と同じく、正負どちらも小数部分を0方向へ切り捨てます。
       if(op === '/') value = Math.trunc(left.value / right.value);
       if(op === '%') value = left.value % right.value;
       left = {
