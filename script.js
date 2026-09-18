@@ -5,6 +5,7 @@ const samples = {
   ifElse: `#include <stdio.h>\n\nint main(void){\n    int score = 45;\n    if(score >= 60){\n        printf("合格です\\n");\n    }else{\n        printf("もう一度挑戦\\n");\n    }\n    return 0;\n}`,
   nestedIf: `#include <stdio.h>\n\nint main(void){\n    int score = 75;\n\n    if(score >= 60){\n        if(score >= 80){\n            printf("高得点です\\n");\n        }else{\n            printf("合格です\\n");\n        }\n    }\n\n    return 0;\n}`,
   forBasic: `#include <stdio.h>\n\nint main(void){\n    int i;\n\n    for(i = 0; i < 5; i++){\n        printf("%d\\n", i);\n    }\n\n    return 0;\n}`,
+  arrayFor: `#include <stdio.h>\n\nint main(void){\n    int a[5] = {10, 20, 30, 40, 50};\n    int i;\n\n    for(i = 0; i < 5; i++){\n        printf("%d\\n", a[i]);\n    }\n\n    return 0;\n}`,
   forIf: `#include <stdio.h>\n\nint main(void){\n    int i;\n\n    for(i = 0; i < 10; i++){\n        if(i % 2 == 0){\n            printf("%d\\n", i);\n        }\n    }\n\n    return 0;\n}`,
   nestedFor: `#include <stdio.h>\n\nint main(void){\n    int i;\n    int j;\n\n    for(i = 1; i <= 3; i++){\n        for(j = 1; j <= i; j++){\n            printf("*");\n        }\n        printf("\\n");\n    }\n\n    return 0;\n}`,
   whileBasic: `#include <stdio.h>\n\nint main(void){\n    int i = 1;\n\n    while(i <= 5){\n        printf("%d\\n", i);\n        i++;\n    }\n\n    return 0;\n}`,
@@ -19,6 +20,9 @@ const sampleScanfInputs = {
 
 // 数値の 0 と区別して、まだ値が入っていない状態を表します。
 const UNINITIALIZED = Symbol('uninitialized');
+
+// 学習用途とブラウザ上の表示負荷を考慮し、1次元配列の要素数を制限します。
+const MAX_ARRAY_LENGTH = 100;
 
 // ブラウザ停止を防ぐため、ソース上の各for文で本体へ入れる累計回数を制限します。
 const MAX_FOR_ITERATIONS = 500;
@@ -37,6 +41,154 @@ const LEADING_FOR_EXPLANATION_ITERATIONS = 3;
 // while文の説明も6反復までは全件を表示し、7反復以上は先頭3反復と最終反復へ圧縮します。
 const MAX_FULL_WHILE_EXPLANATION_ITERATIONS = 6;
 const LEADING_WHILE_EXPLANATION_ITERATIONS = 3;
+
+// Stage 1Aで扱う配列宣言らしい行かを、scalar宣言より先に見分けます。
+function looksLikeArrayDeclaration(text){
+  return /^(?:int|char|float|double)\s+[A-Za-z_]\w*\s*\[/.test(String(text).trim());
+}
+
+// 配列要素らしい記述を、文字列やコメントを除いたコードから見つけます。
+function containsArrayElementSyntax(text){
+  return /\b[A-Za-z_]\w*\s*\[/.test(String(text));
+}
+
+// 添字は、符号付き整数literalまたは単一のscalar identifierだけを許可します。
+function parseSupportedArrayAccess(text){
+  const match = String(text).trim().match(
+    /^([A-Za-z_]\w*)\s*\[\s*([+-]?\d+|[A-Za-z_]\w*)\s*\]$/
+  );
+  if(!match) return null;
+  const sourceIndex = match[2];
+  const isFixedIndex = /^[+-]?\d+$/.test(sourceIndex);
+  return {
+    source:match[0],
+    name:match[1],
+    sourceIndex,
+    indexKind:isFixedIndex ? 'fixed' : 'variable',
+    indexVariable:isFixedIndex ? null : sourceIndex,
+    resolvedIndex:isFixedIndex ? Number(sourceIndex) : null
+  };
+}
+
+// Stage 1Aで正式対応する、main直下の1次元int配列宣言だけを読み取ります。
+function parseArrayDeclaration(text){
+  const trimmed = String(text).trim();
+  if(!looksLikeArrayDeclaration(trimmed)) return { matched:false };
+
+  const typeMatch = trimmed.match(/^(int|char|float|double)\b/);
+  if(typeMatch?.[1] !== 'int'){
+    return {
+      matched:true,
+      ok:false,
+      title:'この型の配列は未対応',
+      message:'現在のVisualizerでは、基本的な1次元int配列だけに対応しています。'
+    };
+  }
+
+  if(/\]\s*\[/.test(trimmed)){
+    return {
+      matched:true,
+      ok:false,
+      title:'2次元以上の配列は未対応',
+      message:'現在のVisualizerでは、角かっこを1組だけ使う基本的な1次元int配列に対応しています。'
+    };
+  }
+
+  const match = trimmed.match(
+    /^int\s+([A-Za-z_]\w*)\s*\[\s*([^\]]*)\s*\]\s*(?:=\s*\{([^{}]*)\})?\s*;$/
+  );
+  if(!match){
+    return {
+      matched:true,
+      ok:false,
+      title:'配列宣言の書き方を確認',
+      message:'配列は <code>int a[5];</code> または <code>int a[5] = {10, 2};</code> のように、1行で宣言してください。'
+    };
+  }
+
+  const name = match[1];
+  const sizeText = match[2].trim();
+  const initializerText = match[3];
+  if(sizeText === '0'){
+    return {
+      matched:true,
+      ok:false,
+      title:'配列の要素数が範囲外',
+      message:`現在のVisualizerで扱える配列の要素数は1～${MAX_ARRAY_LENGTH}です。これはC言語自体の制限ではありません。`
+    };
+  }
+
+  if(!/^[1-9][0-9]*$/.test(sizeText)){
+    return {
+      matched:true,
+      ok:false,
+      title:'配列の要素数を確認',
+      message:`配列の要素数には、1～${MAX_ARRAY_LENGTH}の10進正整数を直接書いてください。変数や計算式は現在未対応です。`
+    };
+  }
+
+  const length = Number(sizeText);
+  if(length > MAX_ARRAY_LENGTH){
+    return {
+      matched:true,
+      ok:false,
+      title:'配列の要素数が範囲外',
+      message:`現在のVisualizerで扱える配列の要素数は1～${MAX_ARRAY_LENGTH}です。これはC言語自体の制限ではありません。`
+    };
+  }
+
+  if(initializerText === undefined){
+    return {
+      matched:true,
+      ok:true,
+      name,
+      length,
+      values:Array(length).fill(UNINITIALIZED),
+      initializerCount:0,
+      hasInitializer:false
+    };
+  }
+
+  const rawItems = initializerText.split(',');
+  const items = rawItems.map(item => item.trim());
+  if(items.length === 0 || items.some(item => item === '')){
+    return {
+      matched:true,
+      ok:false,
+      title:'initializerの値を確認',
+      message:'initializerには整数を1つ以上書き、末尾にはカンマを付けないでください。'
+    };
+  }
+  if(items.some(item => !isSimpleIntegerLiteral(item))){
+    return {
+      matched:true,
+      ok:false,
+      title:'initializerは整数だけに対応',
+      message:'現在のinitializerでは、変数や計算式ではなく、単純な符号付き整数を使用してください。'
+    };
+  }
+  if(items.length > length){
+    return {
+      matched:true,
+      ok:false,
+      title:'initializerの値が多すぎます',
+      message:`配列 <code>${name}</code> の要素数は${length}ですが、initializerには${items.length}個の値があります。配列は作らず、ここで停止します。`
+    };
+  }
+
+  const values = items.map(item => Number(item));
+  while(values.length < length) values.push(0);
+
+  return {
+    matched:true,
+    ok:true,
+    name,
+    length,
+    values,
+    initializerCount:items.length,
+    hasInitializer:true
+  };
+}
 
 function escapeHtml(str){
   return String(str)
@@ -399,6 +551,11 @@ function countSemicolonsOutsideString(text){
 function hasMultipleStatementsOnOneLine(trimmed){
   if(/^for\s*\(/.test(trimmed)) return false;
   return countSemicolonsOutsideString(trimmed) >= 2;
+}
+
+// symbol tableでは、Object.prototypeではなく実際に宣言した名前だけを確認します。
+function hasOwnSymbol(symbolTable, name){
+  return Object.prototype.hasOwnProperty.call(symbolTable, name);
 }
 
 // ++ / -- / += / -= を、for専用ではない共通の変数更新として読み取ります。
@@ -799,7 +956,7 @@ function splitArgs(text){
 
 function tokenizeExpression(expr){
   const tokens = [];
-  const regex = /\s*([A-Za-z_]\w*|\d+|[()+\-*/%])\s*/g;
+  const regex = /\s*([A-Za-z_]\w*\s*\[\s*(?:[+-]?\d+|[A-Za-z_]\w*)\s*\]|[A-Za-z_]\w*|\d+|[()+\-*/%])\s*/g;
   let match;
   let consumed = '';
   while((match = regex.exec(expr)) !== null){
@@ -812,7 +969,7 @@ function tokenizeExpression(expr){
   return { ok:true, tokens };
 }
 
-function evaluateArithmeticExpression(expr, variables){
+function evaluateArithmeticExpression(expr, variables, resolveArrayAccess = null){
   if(/\+\+|--/.test(expr)){
     return { ok:false, error:'式の中で使う ++ と -- は現在未対応です。値を1増減するときは、単独の更新文として使用してください。' };
   }
@@ -823,6 +980,16 @@ function evaluateArithmeticExpression(expr, variables){
   const tokens = tokenResult.tokens;
   let pos = 0;
   const usedVars = [];
+  const arrayAccesses = [];
+
+  // 配列要素のread後に式の別部分で失敗しても、read済みの情報を失わないようにします。
+  // 配列要素そのものの解決失敗（access）は、既存のerror metadataを優先します。
+  function preserveResolvedArrayAccess(result){
+    if(result.ok || result.access || result.arrayAccess || arrayAccesses.length === 0){
+      return result;
+    }
+    return { ...result, arrayAccess:arrayAccesses[0] };
+  }
 
   function peek(){ return tokens[pos]; }
   function consume(){ return tokens[pos++]; }
@@ -856,6 +1023,7 @@ function evaluateArithmeticExpression(expr, variables){
       }
       let value;
       if(op === '*') value = left.value * right.value;
+      // Cのint除算と同じく、正負どちらも小数部分を0方向へ切り捨てます。
       if(op === '/') value = Math.trunc(left.value / right.value);
       if(op === '%') value = left.value % right.value;
       left = {
@@ -882,8 +1050,26 @@ function evaluateArithmeticExpression(expr, variables){
       return { ok:true, value:Number(token), readable:token };
     }
 
+    const arrayAccess = parseSupportedArrayAccess(token);
+    if(arrayAccess){
+      if(!resolveArrayAccess){
+        return { ok:false, error:'この場所での配列要素の参照は現在未対応です。' };
+      }
+      if(arrayAccesses.length >= 1){
+        return { ok:false, error:'1つの式で複数の配列要素を参照する形は現在未対応です。' };
+      }
+      const resolved = resolveArrayAccess(arrayAccess);
+      if(!resolved.ok) return resolved;
+      arrayAccesses.push(resolved.access);
+      return {
+        ok:true,
+        value:resolved.value,
+        readable:`${arrayAccess.name}[${arrayAccess.sourceIndex}](${resolved.value})`
+      };
+    }
+
     if(/^[A-Za-z_]\w*$/.test(token)){
-      if(!(token in variables)){
+      if(!hasOwnSymbol(variables, token)){
         return { ok:false, error:`変数 ${token} は宣言されていません。` };
       }
       if(variables[token] === UNINITIALIZED){
@@ -905,12 +1091,18 @@ function evaluateArithmeticExpression(expr, variables){
   }
 
   const result = parseExpression();
-  if(!result.ok) return result;
+  if(!result.ok) return preserveResolvedArrayAccess(result);
   if(pos < tokens.length){
-    return { ok:false, error:'式の途中に読み取れない部分があります。' };
+    return preserveResolvedArrayAccess({ ok:false, error:'式の途中に読み取れない部分があります。' });
   }
 
-  return { ok:true, value:result.value, readable:result.readable, usedVars };
+  return {
+    ok:true,
+    value:result.value,
+    readable:result.readable,
+    usedVars,
+    arrayAccess:arrayAccesses[0] || null
+  };
 }
 
 function findComparison(expr){
@@ -966,12 +1158,14 @@ function stripWrappingParentheses(expr){
   return stripped;
 }
 
-function evaluateExpression(expr, variables){
+function evaluateExpression(expr, variables, resolveArrayAccess = null){
   // 比較式全体を包む冗長な括弧だけを外し、内側の比較を見つけます。
   const normalizedExpr = stripWrappingParentheses(expr);
   const found = findComparison(normalizedExpr);
   if(!found.ok) return found;
-  if(!found.comparison) return evaluateArithmeticExpression(normalizedExpr, variables);
+  if(!found.comparison){
+    return evaluateArithmeticExpression(normalizedExpr, variables, resolveArrayAccess);
+  }
 
   const { operator, index } = found.comparison;
   const leftExpr = normalizedExpr.slice(0, index).trim();
@@ -981,10 +1175,18 @@ function evaluateExpression(expr, variables){
   }
 
   // 比較の左右は、これまでと同じ四則演算パーサーで先に計算します。
-  const left = evaluateArithmeticExpression(leftExpr, variables);
+  const left = evaluateArithmeticExpression(leftExpr, variables, resolveArrayAccess);
   if(!left.ok) return left;
-  const right = evaluateArithmeticExpression(rightExpr, variables);
-  if(!right.ok) return right;
+  const right = evaluateArithmeticExpression(rightExpr, variables, resolveArrayAccess);
+  if(!right.ok){
+    if(left.arrayAccess && !right.access && !right.arrayAccess){
+      return { ...right, arrayAccess:left.arrayAccess };
+    }
+    return right;
+  }
+  if(left.arrayAccess && right.arrayAccess){
+    return { ok:false, error:'1つの式で複数の配列要素を参照する形は現在未対応です。' };
+  }
 
   const conditions = {
     '<': left.value < right.value,
@@ -1001,6 +1203,7 @@ function evaluateExpression(expr, variables){
     value:conditionMet ? 1 : 0,
     readable:`${left.readable} ${operator} ${right.readable}`,
     usedVars:[...left.usedVars, ...right.usedVars],
+    arrayAccess:left.arrayAccess || right.arrayAccess || null,
     comparison:{
       operator,
       leftValue:left.value,
@@ -1103,8 +1306,10 @@ function visualizeCode(){
   const hints = [];
   const executedLines = new Set();
   const warningLines = new Set();
-  const variables = {};
+  const variables = Object.create(null);
   const variableOrder = [];
+  const arrays = Object.create(null);
+  const arrayOrder = [];
   const steps = [];
   // 同じソース上のfor文が親ループから複数回呼ばれても、本体進入回数を累積します。
   const forEnteredIterationTotals = new Map();
@@ -1128,50 +1333,183 @@ function visualizeCode(){
   }
 
   function rememberVariable(name, value){
-    if(!(name in variables)) variableOrder.push(name);
+    if(!hasOwnSymbol(variables, name)) variableOrder.push(name);
     variables[name] = value;
   }
 
-  function addStep(lineNo, text, markAsExecuted = true){
-    steps.push({ step:stepNo++, lineNo, text });
+  function getSymbolKind(name){
+    if(hasOwnSymbol(variables, name)) return 'scalar';
+    if(hasOwnSymbol(arrays, name)) return 'array';
+    return null;
+  }
+
+  function rememberArray(name, arrayState){
+    if(!hasOwnSymbol(arrays, name)) arrayOrder.push(name);
+    arrays[name] = arrayState;
+  }
+
+  function makeArrayView(access){
+    const array = arrays[access.name];
+    if(!array) return null;
+    return {
+      name:access.name,
+      type:array.type,
+      length:array.length,
+      values:[...array.values],
+      accesses:[{ ...access }]
+    };
+  }
+
+  function resolveArrayLocation(access){
+    const symbolKind = getSymbolKind(access.name);
+    if(symbolKind === null){
+      return { ok:false, error:`配列 ${access.name} は宣言されていません。` };
+    }
+    if(symbolKind === 'scalar'){
+      return { ok:false, error:`${access.name} は配列ではなく、通常の変数です。添字を付けて参照できません。` };
+    }
+
+    const array = arrays[access.name];
+    let resolvedIndex = access.resolvedIndex;
+    if(access.indexKind === 'variable'){
+      const indexKind = getSymbolKind(access.indexVariable);
+      if(indexKind === null){
+        return {
+          ok:false,
+          error:`添字に使われている変数 ${access.indexVariable} が宣言されていません。`
+        };
+      }
+      if(indexKind === 'array'){
+        return {
+          ok:false,
+          error:`${access.indexVariable} は配列です。添字には、値が代入されているint変数を使用してください。`
+        };
+      }
+      if(variables[access.indexVariable] === UNINITIALIZED){
+        return {
+          ok:false,
+          error:`添字に使われている変数 ${access.indexVariable} には、まだ値が代入されていません。`
+        };
+      }
+      if(!Number.isSafeInteger(variables[access.indexVariable])){
+        return {
+          ok:false,
+          error:`添字に使われている変数 ${access.indexVariable} の値は、安全な整数として扱えません。`
+        };
+      }
+      resolvedIndex = variables[access.indexVariable];
+    }
+
+    const resolvedAccess = {
+      ...access,
+      index:resolvedIndex,
+      resolvedIndex
+    };
+    if(resolvedIndex < 0 || resolvedIndex >= array.length){
+      const resolution = access.indexKind === 'variable'
+        ? `${access.indexVariable}の値は${resolvedIndex}なので、${access.name}[${access.sourceIndex}]は${access.name}[${resolvedIndex}]を表します。`
+        : '';
+      return {
+        ok:false,
+        access:resolvedAccess,
+        error:`${resolution}配列${access.name}の有効な添字は0～${array.length - 1}です。${access.name}[${resolvedIndex}]は存在しません。`
+      };
+    }
+
+    return { ok:true, array, access:resolvedAccess };
+  }
+
+  function resolveArrayRead(access){
+    const location = resolveArrayLocation(access);
+    if(!location.ok) return location;
+
+    const resolvedAccess = {
+      ...location.access,
+      mode:'read',
+      value:location.array.values[location.access.resolvedIndex]
+    };
+    if(resolvedAccess.value === UNINITIALIZED){
+      const resolution = access.indexKind === 'variable'
+        ? `${access.indexVariable}の値は${resolvedAccess.resolvedIndex}なので、${access.name}[${access.sourceIndex}]は${access.name}[${resolvedAccess.resolvedIndex}]を表します。`
+        : '';
+      return {
+        ok:false,
+        access:resolvedAccess,
+        error:`${resolution}${access.name}[${resolvedAccess.resolvedIndex}]には、まだ値が代入されていないため参照できません。`
+      };
+    }
+    return { ok:true, value:resolvedAccess.value, access:resolvedAccess };
+  }
+
+  function describeVariableIndexResolution(access){
+    if(!access || access.indexKind !== 'variable') return '';
+    return `${access.indexVariable}の値は${access.resolvedIndex}です。そのため、${access.name}[${access.sourceIndex}]は${access.name}[${access.resolvedIndex}]を表します。`;
+  }
+
+  function addStep(lineNo, text, markAsExecuted = true, arrayViews = []){
+    const step = { step:stepNo++, lineNo, text };
+    if(arrayViews.length) step.arrayViews = arrayViews;
+    steps.push(step);
     if(markAsExecuted) executedLines.add(lineNo);
   }
 
   // main直下・for初期化・for更新で同じ代入処理を共有します。
-  function executeAssignment(name, expr, lineNo, contextLabel = ''){
+  function executeAssignment(name, expr, lineNo, contextLabel = '', allowArrayRead = false){
     const analysisPrefix = contextLabel ? `<strong>${escapeHtml(contextLabel)}：</strong> ` : '';
     const stepPrefix = contextLabel ? `${contextLabel}：` : '';
 
-    if(!(name in variables)){
+    if(!hasOwnSymbol(variables, name)){
       addAnalysis(analysis, lineNo, `${analysisPrefix}変数 <code>${name}</code> に代入しようとしています。`);
       addHint(hints, lineNo, '宣言前の代入かも', `変数 <code>${name}</code> が先に <code>int ${name};</code> のように宣言されているか確認してみましょう。`);
       warningLines.add(lineNo);
       return { ok:false };
     }
 
-    const result = evaluateExpression(expr, variables);
+    const result = evaluateExpression(
+      expr,
+      variables,
+      allowArrayRead ? resolveArrayRead : null
+    );
     if(!result.ok){
-      addAnalysis(analysis, lineNo, `${analysisPrefix}変数 <code>${name}</code> への代入を読み取ろうとしましたが、式を計算できませんでした。`);
-      addHint(hints, lineNo, '式を計算できません', escapeHtml(result.error));
-      warningLines.add(lineNo);
-      return { ok:false };
+      if(!allowArrayRead){
+        addAnalysis(analysis, lineNo, `${analysisPrefix}変数 <code>${name}</code> への代入を読み取ろうとしましたが、式を計算できませんでした。`);
+        addHint(hints, lineNo, '式を計算できません', escapeHtml(result.error));
+        warningLines.add(lineNo);
+      }
+      return {
+        ok:false,
+        error:result.error,
+        access:result.access || null,
+        arrayAccess:result.arrayAccess || null
+      };
     }
 
     const before = variables[name];
     rememberVariable(name, result.value);
+    const resolutionExplanation = describeVariableIndexResolution(result.arrayAccess);
     if(result.comparison){
       const cValue = result.comparison.conditionMet ? '成立を1' : '不成立を0';
-      addAnalysis(analysis, lineNo, `${analysisPrefix}${describeComparison(result)} C言語では条件の${cValue}として扱うため、<code>${name}</code> に <code>${result.value}</code> を代入しました。`);
+      addAnalysis(analysis, lineNo, `${analysisPrefix}${escapeHtml(resolutionExplanation)}${describeComparison(result)} C言語では条件の${cValue}として扱うため、<code>${name}</code> に <code>${result.value}</code> を代入しました。`);
     }else{
-      addAnalysis(analysis, lineNo, `${analysisPrefix}変数 <code>${name}</code> に、<code>${escapeHtml(expr)}</code> の計算結果 <code>${result.value}</code> を代入しました。`);
+      addAnalysis(analysis, lineNo, `${analysisPrefix}${escapeHtml(resolutionExplanation)}変数 <code>${name}</code> に、<code>${escapeHtml(expr)}</code> の計算結果 <code>${result.value}</code> を代入しました。`);
     }
 
     if(before === UNINITIALIZED){
-      addStep(lineNo, `${stepPrefix}${name} の中身に ${result.value} を代入しました。計算：${escapeHtml(result.readable)} = ${result.value}`);
+      addStep(
+        lineNo,
+        `${stepPrefix}${escapeHtml(resolutionExplanation)}${name} の中身に ${result.value} を代入しました。計算：${escapeHtml(result.readable)} = ${result.value}`,
+        true,
+        result.arrayAccess ? [makeArrayView(result.arrayAccess)] : []
+      );
     }else{
-      addStep(lineNo, `${stepPrefix}${name} の中身を ${before} から ${result.value} に変えました。計算：${escapeHtml(result.readable)} = ${result.value}`);
+      addStep(
+        lineNo,
+        `${stepPrefix}${escapeHtml(resolutionExplanation)}${name} の中身を ${before} から ${result.value} に変えました。計算：${escapeHtml(result.readable)} = ${result.value}`,
+        true,
+        result.arrayAccess ? [makeArrayView(result.arrayAccess)] : []
+      );
     }
-    return { ok:true, value:result.value };
+    return { ok:true, value:result.value, arrayAccess:result.arrayAccess || null };
   }
 
   // 許可された場所の ++ / -- / += / -= は、すべてこの共通処理で更新します。
@@ -1180,7 +1518,7 @@ function visualizeCode(){
     const stepPrefix = contextLabel ? `${contextLabel}：` : '';
     const name = update.name;
 
-    if(!(name in variables)){
+    if(!hasOwnSymbol(variables, name)){
       addAnalysis(analysis, lineNo, `${analysisPrefix}変数 <code>${name}</code> を更新しようとしています。`);
       addHint(hints, lineNo, '宣言前の更新かも', `変数 <code>${name}</code> が先に <code>int ${name};</code> のように宣言されているか確認してみましょう。`);
       warningLines.add(lineNo);
@@ -1223,6 +1561,174 @@ function visualizeCode(){
 
     const structuralCode = codeOutsideStringAndLineComment(trimmed);
 
+    if(hasMultipleStatementsOnOneLine(trimmed)){
+      const message = '1行に複数の文があります。文の終わりで改行してください。';
+      addAnalysis(analysis, lineNo, message);
+      addHint(hints, lineNo, '改行の確認', message);
+      warningLines.add(lineNo);
+      return;
+    }
+
+    function stopArrayLine(title, message, arrayViews = []){
+      addAnalysis(analysis, lineNo, `${message} この行でプログラムの実行を停止します。`);
+      addHint(hints, lineNo, title, message);
+      warningLines.add(lineNo);
+      addStep(
+        lineNo,
+        '配列に関するこの処理は実行できないため、プログラムの実行を停止します。',
+        false,
+        arrayViews
+      );
+      return 'array-error';
+    }
+
+    function getArrayExpressionErrorContext(result){
+      if(result.access){
+        return { title:'配列要素を参照できません', access:result.access };
+      }
+      if(result.arrayAccess){
+        return { title:'配列要素を含む式を計算できません', access:result.arrayAccess };
+      }
+      return { title:'式を計算できません', access:null };
+    }
+
+    const arrayDeclaration = parseArrayDeclaration(structuralCode.trim());
+    if(arrayDeclaration.matched){
+      if(!arrayDeclaration.ok){
+        return stopArrayLine(arrayDeclaration.title, arrayDeclaration.message);
+      }
+      if(insideIf || insideLoop){
+        const location = insideLoop ? `${loopLabel}の本体` : 'if側・else側';
+        return stopArrayLine(
+          'この場所の配列宣言は未対応',
+          `現在のVisualizerでは、配列宣言はmain直下だけに対応しています。${location}では配列を作りません。`
+        );
+      }
+
+      const existingKind = getSymbolKind(arrayDeclaration.name);
+      if(existingKind){
+        const existingLabel = existingKind === 'array' ? '配列' : '変数';
+        return stopArrayLine(
+          '同じ名前がすでに使われています',
+          `<code>${arrayDeclaration.name}</code> は、すでに${existingLabel}の名前として宣言されています。int変数と配列には同じ名前を使用できません。`
+        );
+      }
+
+      rememberArray(arrayDeclaration.name, {
+        type:'int',
+        length:arrayDeclaration.length,
+        values:[...arrayDeclaration.values]
+      });
+
+      if(!arrayDeclaration.hasInitializer){
+        addAnalysis(
+          analysis,
+          lineNo,
+          `整数を${arrayDeclaration.length}個入れられる配列 <code>${arrayDeclaration.name}</code> を用意しました。各要素には、まだ値が代入されていません。`
+        );
+        addStep(
+          lineNo,
+          `整数を${arrayDeclaration.length}個入れられる配列 ${arrayDeclaration.name} を用意しました。各要素には、まだ値が代入されていません。`
+        );
+        return;
+      }
+
+      const omittedCount = arrayDeclaration.length - arrayDeclaration.initializerCount;
+      const omittedExplanation = omittedCount > 0
+        ? ` 指定されなかった残り${omittedCount}個の要素は0で初期化されました。`
+        : '';
+      addAnalysis(
+        analysis,
+        lineNo,
+        `配列 <code>${arrayDeclaration.name}</code> の箱を${arrayDeclaration.length}個用意し、0番から順番に値を入れました。${omittedExplanation}`
+      );
+      addStep(
+        lineNo,
+        `配列 ${arrayDeclaration.name} の箱を${arrayDeclaration.length}個用意し、0番から順番に値を入れました。${omittedExplanation}`
+      );
+      return;
+    }
+
+    let hasSupportedArrayRead = false;
+    if(containsArrayElementSyntax(structuralCode)){
+      if(insideIf || insideWhile){
+        return stopArrayLine(
+          'この場所の配列操作は未対応',
+          '現在のVisualizerでは、配列要素の参照・代入はmain直下、またはmain直下にあるfor文の本体へ直接書いた文だけで実行できます。if／while内では実行しません。'
+        );
+      }
+
+      const arrayWriteMatch = trimmed.match(
+        /^([A-Za-z_]\w*\s*\[\s*(?:[+-]?\d+|[A-Za-z_]\w*)\s*\])\s*=\s*(.+);$/
+      );
+      if(arrayWriteMatch){
+        const access = parseSupportedArrayAccess(arrayWriteMatch[1]);
+        const expr = arrayWriteMatch[2].trim();
+        if(containsArrayElementSyntax(codeOutsideStringAndLineComment(expr))){
+          return stopArrayLine(
+            '同じ文での配列参照／代入は未対応',
+            '配列要素へ代入する式の中で、別の配列要素を参照する形は現在未対応です。'
+          );
+        }
+
+        const location = resolveArrayLocation(access);
+        if(!location.ok){
+          const errorView = location.access
+            ? makeArrayView({ ...location.access, mode:'write', value:undefined })
+            : null;
+          return stopArrayLine(
+            '配列の添字を解決できません',
+            escapeHtml(location.error),
+            errorView ? [errorView] : []
+          );
+        }
+
+        const result = evaluateExpression(expr, variables);
+        if(!result.ok){
+          return stopArrayLine(
+            '代入する式を計算できません',
+            `配列要素へ代入する式を計算できませんでした。${escapeHtml(result.error)}`
+          );
+        }
+
+        location.array.values[location.access.resolvedIndex] = result.value;
+        const writeAccess = {
+          ...location.access,
+          mode:'write',
+          value:result.value
+        };
+        const resolutionExplanation = describeVariableIndexResolution(writeAccess);
+        addAnalysis(
+          analysis,
+          lineNo,
+          `${escapeHtml(resolutionExplanation)}<code>${access.name}[${writeAccess.resolvedIndex}]</code> は配列 <code>${access.name}</code> の${writeAccess.resolvedIndex}番の要素です。その要素へ <code>${result.value}</code> を代入しました。`
+        );
+        addStep(
+          lineNo,
+          `${escapeHtml(resolutionExplanation)}${access.name}[${writeAccess.resolvedIndex}]は、配列${access.name}の${writeAccess.resolvedIndex}番の要素です。その要素へ${result.value}を代入しました。`,
+          true,
+          [makeArrayView(writeAccess)]
+        );
+        return;
+      }
+
+      const supportedAccessMatches = [...structuralCode.matchAll(
+        /\b[A-Za-z_]\w*\s*\[\s*(?:[+-]?\d+|[A-Za-z_]\w*)\s*\]/g
+      )];
+      const isSimpleReadStatement =
+        /^[A-Za-z_]\w*\s*=/.test(trimmed) ||
+        /^printf\s*\(/.test(trimmed) ||
+        (!insideIf && !insideLoop && /^int\s+[A-Za-z_]\w*\s*=/.test(trimmed));
+
+      if(supportedAccessMatches.length !== 1 || !isSimpleReadStatement){
+        return stopArrayLine(
+          'この配列要素の使い方は未対応',
+          '添字には、整数または宣言済みのint変数を1つだけ使用できます。<code>a[i + 1]</code>のような計算式、1つの文で複数要素を使う形、配列要素の更新演算はまだ実行しません。'
+        );
+      }
+      hasSupportedArrayRead = true;
+    }
+
     const hasScanfCall = /^scanf\b/.test(structuralCode) || /\bscanf\s*\(/.test(structuralCode);
     if(insideLoop && hasScanfCall){
       addAnalysis(analysis, lineNo, `${loopLabel}の本体内でscanfを使う形は現在未対応です。`);
@@ -1256,7 +1762,7 @@ function visualizeCode(){
       }
 
       const name = scanfMatch[1];
-      if(!(name in variables)){
+      if(!hasOwnSymbol(variables, name)){
         return stopScanf(
           'scanfの変数が宣言されていません',
           `変数 <code>${name}</code> が先に <code>int ${name};</code> のように宣言されているか確認してください。`
@@ -1283,14 +1789,6 @@ function visualizeCode(){
       rememberVariable(name, inputValue);
       addAnalysis(analysis, lineNo, `入力値 <code>${escapeHtml(inputText)}</code> を整数として受け取り、変数 <code>${name}</code> に代入します。`);
       addStep(lineNo, `入力値 ${escapeHtml(inputText)} を整数として受け取り、変数 ${name} に代入しました。`);
-      return;
-    }
-
-    if(hasMultipleStatementsOnOneLine(trimmed)){
-      const message = '1行に複数の文があります。文の終わりで改行してください。';
-      addAnalysis(analysis, lineNo, message);
-      addHint(hints, lineNo, '改行の確認', message);
-      warningLines.add(lineNo);
       return;
     }
 
@@ -1366,6 +1864,12 @@ function visualizeCode(){
       }
       const name = declMatch[1];
       const expr = declMatch[2];
+      if(getSymbolKind(name) === 'array'){
+        return stopArrayLine(
+          '同じ名前がすでに使われています',
+          `<code>${name}</code> は、すでに配列の名前として宣言されています。int変数と配列には同じ名前を使用できません。`
+        );
+      }
       if(expr === undefined){
         rememberVariable(name, UNINITIALIZED);
         addAnalysis(analysis, lineNo, `整数型の変数 <code>${name}</code> を作りました。まだ値は代入されていません。`);
@@ -1373,13 +1877,31 @@ function visualizeCode(){
         return;
       }
 
-      const result = evaluateExpression(expr, variables);
+      const result = evaluateExpression(
+        expr,
+        variables,
+        hasSupportedArrayRead ? resolveArrayRead : null
+      );
       if(result.ok){
         rememberVariable(name, result.value);
         const explanation = makeInitialValueExplanation(name, expr, result);
-        addAnalysis(analysis, lineNo, explanation.analysis);
-        addStep(lineNo, explanation.step);
+        const resolutionExplanation = describeVariableIndexResolution(result.arrayAccess);
+        addAnalysis(analysis, lineNo, `${escapeHtml(resolutionExplanation)}${explanation.analysis}`);
+        addStep(
+          lineNo,
+          `${escapeHtml(resolutionExplanation)}${explanation.step}`,
+          true,
+          result.arrayAccess ? [makeArrayView(result.arrayAccess)] : []
+        );
       }else{
+        if(hasSupportedArrayRead){
+          const errorContext = getArrayExpressionErrorContext(result);
+          return stopArrayLine(
+            errorContext.title,
+            escapeHtml(result.error || '配列要素を含む式を計算できませんでした。'),
+            errorContext.access ? [makeArrayView(errorContext.access)] : []
+          );
+        }
         addAnalysis(analysis, lineNo, `変数 <code>${name}</code> の初期化を読み取ろうとしましたが、式を計算できませんでした。`);
         addHint(hints, lineNo, '式を計算できません', escapeHtml(result.error));
         warningLines.add(lineNo);
@@ -1391,7 +1913,15 @@ function visualizeCode(){
     if(assignMatch){
       const name = assignMatch[1];
       const expr = assignMatch[2];
-      const result = executeAssignment(name, expr, lineNo);
+      const result = executeAssignment(name, expr, lineNo, '', hasSupportedArrayRead);
+      if(hasSupportedArrayRead && !result.ok){
+        const errorContext = getArrayExpressionErrorContext(result);
+        return stopArrayLine(
+          errorContext.title,
+          escapeHtml(result.error || '配列要素を含む式を計算できませんでした。'),
+          errorContext.access ? [makeArrayView(errorContext.access)] : []
+        );
+      }
       return !result.ok && insideLoop ? 'execution-error' : undefined;
     }
 
@@ -1413,9 +1943,14 @@ function visualizeCode(){
       const readableArgs = [];
       let ok = true;
       let error = '';
+      let failedResult = null;
 
       for(const arg of args){
-        const result = evaluateExpression(arg, variables);
+        const result = evaluateExpression(
+          arg,
+          variables,
+          hasSupportedArrayRead ? resolveArrayRead : null
+        );
         if(result.ok){
           values.push(result.value);
           results.push(result);
@@ -1423,6 +1958,7 @@ function visualizeCode(){
         }else{
           ok = false;
           error = result.error;
+          failedResult = result;
           break;
         }
       }
@@ -1444,13 +1980,30 @@ function visualizeCode(){
         }else{
           explanation = `printfで文字列「${escapeHtml(visibleText)}」を画面に表示しました。`;
         }
-        addAnalysis(analysis, lineNo, explanation);
-        addStep(lineNo, `画面に「${escapeHtml(visibleText)}」を表示しました。`);
+        const arrayAccess = results.find(result => result.arrayAccess)?.arrayAccess || null;
+        const resolutionExplanation = describeVariableIndexResolution(arrayAccess);
+        addAnalysis(analysis, lineNo, `${escapeHtml(resolutionExplanation)}${explanation}`);
+        addStep(
+          lineNo,
+          `${escapeHtml(resolutionExplanation)}画面に「${escapeHtml(visibleText)}」を表示しました。`,
+          true,
+          arrayAccess ? [makeArrayView(arrayAccess)] : []
+        );
         if((format.match(/%d/g) || []).length !== args.length){
           addHint(hints, lineNo, 'printfの指定と値の数を確認', '書式指定子 <code>%d</code> の数と、後ろに並べる値の数が合っているか確認してみましょう。');
           warningLines.add(lineNo);
         }
       }else{
+        if(hasSupportedArrayRead){
+          const errorContext = getArrayExpressionErrorContext(failedResult || {});
+          const priorArrayAccess = results.find(result => result.arrayAccess)?.arrayAccess || null;
+          const displayAccess = errorContext.access || priorArrayAccess;
+          return stopArrayLine(
+            errorContext.title,
+            escapeHtml(error),
+            displayAccess ? [makeArrayView(displayAccess)] : []
+          );
+        }
         addAnalysis(analysis, lineNo, 'printfで表示しようとしましたが、表示する値を計算できませんでした。');
         addHint(hints, lineNo, 'printfの値を確認', escapeHtml(error));
         warningLines.add(lineNo);
@@ -1466,7 +2019,7 @@ function visualizeCode(){
 
     addAnalysis(analysis, lineNo, '現在のVisualizerでは説明未対応のコードです。');
     if(trimmed !== ''){
-      addHint(hints, lineNo, '未対応コード', 'この行は現在の可視化対象外です。まずは int、代入、整数演算、比較、printf、main直下の単純なscanf、対応範囲内のif・if〜else、main直下の基本while、最大3階層までの直接的な入れ子forの範囲で試してみましょう。');
+      addHint(hints, lineNo, '未対応コード', 'この行は現在の可視化対象外です。まずは int、代入、整数演算、比較、printf、main直下の単純なscanf、対応範囲内のif・if〜else、for・while、基本的な1次元int配列の範囲で試してみましょう。');
       warningLines.add(lineNo);
     }
     return insideLoop ? 'execution-error' : undefined;
@@ -1651,6 +2204,20 @@ function visualizeCode(){
           );
         }
 
+        if(looksLikeArrayDeclaration(structuralCode)){
+          return failure(
+            '分岐内の配列宣言は未対応',
+            '配列宣言はmain直下だけに対応しています。未実行側を含め、配列宣言がある外側のif文全体は実行しません。'
+          );
+        }
+
+        if(containsArrayElementSyntax(structuralCode)){
+          return failure(
+            'この場所での配列要素の参照／代入は未対応',
+            'このStageでは配列要素へアクセスできないため、外側のif文全体は実行しません。'
+          );
+        }
+
         const unsupportedControl = unsupportedControlInfo(structuralCode);
         if(unsupportedControl){
           return failure(
@@ -1687,6 +2254,12 @@ function visualizeCode(){
         return depth > 1
           ? unsupportedNestedIfForm(structuralCode)
           : failure('if文の書き方を確認', '対応範囲を確定できないif文のため、処理全体は実行しません。');
+      }
+      if(containsArrayElementSyntax(headerMatch[1])){
+        return failure(
+          'if条件での配列要素readはまだ未対応',
+          'このStageでは配列要素を条件式で使用できないため、if文全体は実行しません。'
+        );
       }
 
       const ifBranch = parseBranch(ifIndex + 1, depth);
@@ -2240,6 +2813,12 @@ function visualizeCode(){
     if(!header.ok){
       return failure(`${header.error} C言語として正しい形であっても、現在のVisualizerの対応範囲外である場合は実行しません。`);
     }
+    if(containsArrayElementSyntax(structuralCode)){
+      return failure(
+        'このStageではwhile条件で配列要素を使用できません。while文全体を条件判定前に停止します。',
+        'while条件での配列要素readはまだ未対応'
+      );
+    }
     if(!range.closed){
       return failure('while文を閉じる波かっこを確認できないため、条件判定を含めて実行しません。', 'while文の終わりを確認');
     }
@@ -2328,6 +2907,9 @@ function visualizeCode(){
       }
       if(/^int\b/.test(structuralBodyCode)){
         return failure('while文の本体内で変数を宣言する形は現在未対応です。while文全体を実行しません。', 'while文内の変数宣言は未対応');
+      }
+      if(containsArrayElementSyntax(structuralBodyCode)){
+        return failure('現在はwhile文の本体から配列要素を参照・代入できません。while文全体を条件判定前に停止します。', 'while文内の配列操作は未対応');
       }
       if(/^break\b/.test(structuralBodyCode)){
         return failure('while文の本体内にbreakがあります。現在のVisualizerではbreakに対応していないため、while文全体を実行しません。', 'breakは未対応');
@@ -2653,6 +3235,12 @@ function visualizeCode(){
     if(!header.ok){
       return failure(`${header.error} C言語として正しい形であっても、現在のVisualizerの対応範囲外である場合は実行しません。`);
     }
+    if(containsArrayElementSyntax(structuralCode)){
+      return failure(
+        'このStageではforヘッダで配列要素を使用できません。外側のfor文全体を初期化前に停止します。',
+        'forヘッダでの配列要素の参照／代入は未対応'
+      );
+    }
     if(forDepth > MAX_FOR_NESTING_DEPTH){
       return failure(
         `for文の入れ子は最大${MAX_FOR_NESTING_DEPTH}階層まで対応しています。外側のfor文全体を初期化前に停止します。`,
@@ -2714,6 +3302,46 @@ function visualizeCode(){
         );
       }
       return { ok:true };
+    }
+
+    function validateDirectArrayStatement(trimmed, structuralBodyCode){
+      if(!containsArrayElementSyntax(structuralBodyCode)) return { ok:true, matched:false };
+      if(forDepth !== 1){
+        return {
+          ok:false,
+          title:'入れ子for内の配列操作は未対応',
+          message:'現在はmain直下にあるfor文の本体へ直接書いた文だけが配列要素を使えます。入れ子for内では実行しません。'
+        };
+      }
+
+      const arrayWriteMatch = trimmed.match(
+        /^([A-Za-z_]\w*\s*\[\s*(?:[+-]?\d+|[A-Za-z_]\w*)\s*\])\s*=\s*(.+);$/
+      );
+      if(arrayWriteMatch){
+        if(containsArrayElementSyntax(codeOutsideStringAndLineComment(arrayWriteMatch[2]))){
+          return {
+            ok:false,
+            title:'同じ文での配列参照／代入は未対応',
+            message:'for文の1つのstatement内で、配列要素をreadしながら別の配列要素へwriteする形は現在未対応です。'
+          };
+        }
+        return { ok:true, matched:true };
+      }
+
+      const supportedAccessMatches = [...structuralBodyCode.matchAll(
+        /\b[A-Za-z_]\w*\s*\[\s*(?:[+-]?\d+|[A-Za-z_]\w*)\s*\]/g
+      )];
+      const isSupportedReadStatement =
+        /^[A-Za-z_]\w*\s*=\s*.+;$/.test(structuralBodyCode) ||
+        matchSimplePrintfStatement(trimmed) !== null;
+      if(supportedAccessMatches.length !== 1 || !isSupportedReadStatement){
+        return {
+          ok:false,
+          title:'for文本体の配列操作は未対応',
+          message:'for文の本体へ直接書いた文では、整数または宣言済みのint変数を添字にして、配列要素を1つ参照または代入できます。添字の計算式・複数要素の使用・要素更新は実行しません。'
+        };
+      }
+      return { ok:true, matched:true };
     }
 
     for(let index = startIndex + 1; index < safeEndIndex; index++){
@@ -2785,6 +3413,10 @@ function visualizeCode(){
       if(/^int\b/.test(structuralBodyCode)){
         return failure('for文の本体内で変数を宣言する形は現在未対応です。for文全体を実行しません。', 'for文内の変数宣言は未対応');
       }
+      const arrayStatement = validateDirectArrayStatement(trimmed, structuralBodyCode);
+      if(!arrayStatement.ok){
+        return failure(arrayStatement.message, arrayStatement.title);
+      }
 
       const variableUpdate = parseVariableUpdate(structuralBodyCode, true);
       if(/\+\+|--/.test(structuralBodyCode) && variableUpdate === null){
@@ -2801,7 +3433,8 @@ function visualizeCode(){
         /^return\s+0\s*;?$/.test(structuralBodyCode) ||
         variableUpdate !== null ||
         /^[A-Za-z_]\w*\s*=\s*.+;$/.test(structuralBodyCode) ||
-        printfMatch !== null;
+        printfMatch !== null ||
+        arrayStatement.matched;
       if(!supportedSimpleStatement){
         return failure('for文の本体に、現在のVisualizerでは実行できない文があります。本体を部分実行せず、この地点で停止します。', 'for文本体の文は未対応');
       }
@@ -3170,6 +3803,16 @@ function visualizeCode(){
               reason:'for文の本体で実行を停止したため、この行は実行されませんでした。'
             };
           }
+          if(bodyResult === 'array-error'){
+            explanationHistory.finishIteration(activeIteration);
+            explanationHistory.finalize();
+            return {
+              status:'execution-stopped',
+              stopKind:'array-error',
+              stopIndex:index,
+              reason:'for文の本体で配列操作を継続できず、この行は実行されませんでした。'
+            };
+          }
           continue;
         }
 
@@ -3356,6 +3999,14 @@ function visualizeCode(){
         scanfStopIndex = index;
         break;
       }
+      if(result === 'array-error'){
+        executionStop = {
+          index,
+          stopKind:'array-error',
+          reason:'配列に関する未対応または不正な処理で実行を停止したため、この行は実行されませんでした。'
+        };
+        break;
+      }
       continue;
     }
 
@@ -3452,11 +4103,63 @@ function visualizeCode(){
     `;
   }).join('');
 
-  const variableHtml = variableOrder.length
-    ? variableOrder.map(name => {
-      const value = variables[name] === UNINITIALIZED ? '未初期化' : String(variables[name]);
-      return `<div class="variable-chip">${escapeHtml(name)} = ${escapeHtml(value)}</div>`;
-    }).join('')
+  const scalarVariableHtml = variableOrder.map(name => {
+    const value = variables[name] === UNINITIALIZED ? '未初期化' : String(variables[name]);
+    return `<div class="variable-chip">${escapeHtml(name)} = ${escapeHtml(value)}</div>`;
+  }).join('');
+
+  function renderArrayCard(name, array, accesses = []){
+    const hasUninitialized = array.values.some(value => value === UNINITIALIZED);
+    const cells = array.values.map((value, index) => {
+      const displayValue = value === UNINITIALIZED ? '—' : String(value);
+      const valueLabel = value === UNINITIALIZED ? 'まだ値が入っていません' : `値 ${value}`;
+      const access = accesses.find(item => item.index === index) || null;
+      const accessLabel = access?.mode === 'read'
+        ? '参照'
+        : access?.mode === 'write'
+          ? '代入'
+          : '';
+      const accessClass = access ? ` array-cell-active array-cell-${access.mode}` : '';
+      const accessAttributes = access
+        ? ` data-source-index="${escapeHtml(access.sourceIndex)}" data-resolved-index="${access.resolvedIndex}"`
+        : '';
+      return `
+        <div class="array-cell${accessClass}"${accessAttributes} aria-label="${escapeHtml(name)}[${index}]：${escapeHtml(valueLabel)}${accessLabel ? `、${accessLabel}` : ''}">
+          ${accessLabel ? `<div class="array-access-label">${accessLabel}</div>` : ''}
+          <div class="array-value">${escapeHtml(displayValue)}</div>
+          <div class="array-index">[${index}]</div>
+        </div>
+      `;
+    }).join('');
+    const legend = hasUninitialized
+      ? `<div class="array-legend">—：まだ値を入れていない要素</div>`
+      : '';
+    const variableAccess = accesses.find(access => access.indexKind === 'variable');
+    const resolution = variableAccess && Number.isInteger(variableAccess.resolvedIndex)
+      ? `<div class="array-access-resolution"><code>${escapeHtml(name)}[${escapeHtml(variableAccess.sourceIndex)}]</code><span aria-hidden="true">→</span><code>${escapeHtml(name)}[${variableAccess.resolvedIndex}]</code></div>`
+      : '';
+
+    return `
+      <section class="array-card" aria-label="配列 ${escapeHtml(name)}">
+        <div class="array-card-header">
+          <strong>配列 <code class="array-name">${escapeHtml(name)}</code></strong>
+          <span class="array-type">int[${array.length}]</span>
+        </div>
+        ${resolution}
+        <div class="array-scroll" tabindex="0" aria-label="配列 ${escapeHtml(name)} の要素一覧">
+          <div class="array-row">${cells}</div>
+        </div>
+        ${legend}
+      </section>
+    `;
+  }
+
+  const arrayHtml = arrayOrder
+    .map(name => renderArrayCard(name, arrays[name]))
+    .join('');
+
+  const variableHtml = scalarVariableHtml || arrayHtml
+    ? `${scalarVariableHtml}${arrayHtml}`
     : `<div class="note">変数の状態はまだありません。</div>`;
 
   // 圧縮後もSTEP番号が連番になるよう、最終表示の直前に振り直します。
@@ -3465,7 +4168,18 @@ function visualizeCode(){
   });
 
   const stepHtml = steps.length
-    ? steps.map(item => `<div class="step-card"><strong>STEP ${item.step}</strong> <span class="dim">${item.lineNo}行目</span><br>${item.text}</div>`).join('')
+    ? steps.map(item => {
+      const arrayViewsHtml = (item.arrayViews || [])
+        .filter(Boolean)
+        .map(view => renderArrayCard(view.name, view, view.accesses))
+        .join('');
+      return `
+        <div class="step-card">
+          <strong>STEP ${item.step}</strong> <span class="dim">${item.lineNo}行目</span><br>${item.text}
+          ${arrayViewsHtml ? `<div class="step-array-views">${arrayViewsHtml}</div>` : ''}
+        </div>
+      `;
+    }).join('')
     : `<div class="note">まだ実行できるステップはありません。</div>`;
 
   document.getElementById('outputResult').textContent = output || '出力はまだありません。';

@@ -48,9 +48,9 @@ Avoid:
 - adding many features at once
 - changing the core design without reason
 
-## Supported scope for Ver.0.9_0820
+## Supported scope for Ver.0.10.0_0918
 
-Last updated: 2026-08-20
+Last updated: 2026-09-18
 
 Currently supported:
 
@@ -118,6 +118,16 @@ Currently supported:
 - complete structural validation before the first while condition evaluation, including zero-iteration bodies and unselected if/else branches
 - explanation compression after six while iterations without omitting execution, output, variable updates, or stop paths
 - an independent 500-entry safety limit for each main-level while statement, separate from every for safety counter
+- one-dimensional int array declarations directly inside main with literal lengths from 1 through 100
+- full and partial integer-literal array initializers, including `{0}`, with omitted elements initialized to zero
+- uninitialized array elements represented independently with the existing `UNINITIALIZED` sentinel
+- fixed integer indexes and single initialized scalar-int variable indexes
+- one array read or one array write per supported main-level simple statement
+- one array read or one array write per direct body statement of a main-level for
+- bounds checking and deterministic safe stopping for an uninitialized element read
+- per-access array snapshots, resolved-index metadata, read/write labels, and active-cell display in retained steps
+- `a[i] → a[resolved index]` display without leaving an active cell in the final state
+- array-step integration with existing for explanation compression without compressing execution, output, or final state
 - sequential execution
 - line-by-line explanations
 - variable state display
@@ -149,6 +159,42 @@ Rules:
 - keep variables and output produced before a scanf error
 - if any branch of an outer if or if-else contains scanf, skip the complete outer structure without consuming input
 - `&variable` is recognized only as part of the supported scanf syntax; it does not mean general address-operator or pointer support
+
+## Basic one-dimensional int array specification
+
+Supported declarations:
+
+```c
+int a[5];
+int b[5] = {10, 20, 30, 40, 50};
+int c[5] = {10, 20};
+int d[5] = {0};
+```
+
+Rules:
+
+- declare arrays only as direct child statements of main
+- support only one-dimensional `int` arrays with a decimal integer-literal length from 1 through 100
+- keep arrays separate from scalar variables while sharing one identifier namespace
+- initialize every element to `UNINITIALIZED` when no initializer is present
+- accept only signed integer literals in an initializer
+- initialize omitted elements in a partial initializer to zero
+- reject an empty initializer, trailing comma, omitted size, or too many initializer values without creating a partial array
+- allow a fixed signed integer literal or one declared and initialized scalar-int identifier as the index
+- reject a negative or too-large resolved index with a clear valid-range message
+- stop safely when reading an `UNINITIALIZED` element; never substitute zero or a random value
+- permit one array read or one array write in a supported main-level simple statement
+- permit one array read or one array write in a direct body statement of a main-level for
+- use the existing scalar expression range for a write RHS, but do not allow an array read on that RHS
+- permit array reads in scalar assignment arithmetic and simple printf arguments within the supported statement locations
+- deep-copy only the accessed array into that step's `arrayViews`
+- store array name, source index, resolved index, mode, and value as step-specific access metadata
+- show the post-write snapshot for writes and the current snapshot for reads
+- display `a[i] → a[resolved index]` for variable indexes and keep the resolved index fixed in history
+- show active read/write state only in an access step; never leave an active cell in the final state
+- preserve array metadata only for for iterations retained by existing explanation compression
+- reject array access in if, while, for headers, for-inside-if, if-inside-for, or nested-for bodies before partial execution
+- reject multiple array accesses, read-plus-write in one statement, index expressions, element updates, and array scanf
 
 ## Simple if and nested-if/if-else specification
 
@@ -245,7 +291,7 @@ Rules:
 - support an ordinary assignment such as `i = i + 2` in the update clause
 - require braces and require the opening brace on the for header line
 - allow multiple supported statements and an empty body
-- directly supported body statements are ordinary assignment, standalone updates, printf, and `return 0;`
+- directly supported body statements are ordinary assignment, standalone updates, printf, `return 0;`, and one supported array read or write for a main-level for
 - allow a direct child for node as a body item through source depth 3
 - allow supported if/if-else nodes as body items instead of creating for-specific if execution
 - allow multiple independent if statements in one for body
@@ -345,7 +391,7 @@ Rules:
 - on a safety stop, retain the 500th iteration and the true condition that would require the 501st entry; never create a 501st body explanation
 - keep explanation histories independent across multiple while statements and independent from for explanation histories
 
-## Unsupported scope for Ver.0.9_0820
+## Unsupported scope for Ver.0.10.0_0918
 
 Do not implement these unless explicitly requested:
 
@@ -378,7 +424,14 @@ Do not implement these unless explicitly requested:
 - break and continue
 - do while
 - switch
-- arrays
+- array index expressions such as `a[i + 1]`
+- multiple array accesses or array read-plus-write in one statement
+- array element `++`, `--`, `+=`, and `-=`
+- array scanf
+- array access in if, while, for headers, for-inside-if, or nested-for bodies
+- array declarations outside main, non-literal array lengths, omitted lengths, and lengths outside 1 through 100
+- two-dimensional arrays and non-int arrays
+- `sizeof` for array length
 - float, char, and string variables
 - user-defined functions
 - printf `%%`
@@ -397,7 +450,7 @@ Do not implement these unless explicitly requested:
 
 ## Input rule
 
-In Ver.0.9_0820, assume one C statement per line.
+In Ver.0.10.0_0918, assume one C statement per line.
 
 If multiple statements are written on one line, show a warning instead of trying to parse them automatically.
 
