@@ -4041,6 +4041,47 @@
 
     testCases.push(...stageS2MultipleArrayReadTests);
 
+    const stageT1MultipleScalarTests = [
+      { name:'T1 未初期化3変数', body:'int a, b, c;', expect:{ variables:['a = 未初期化', 'b = 未初期化', 'c = 未初期化'], warningMax:0, stepsInOrder:['a という整数の箱', 'b という整数の箱', 'c という整数の箱'] } },
+      { name:'T1 初期化2変数', body:'int a = 1, b = 2;', expect:{ variables:['a = 1', 'b = 2'], warningMax:0, stepsInOrder:['a という整数の箱', 'b という整数の箱'] } },
+      { name:'T1 初期化と未初期化の混在', body:'int a, b = 2, c;', expect:{ variables:['a = 未初期化', 'b = 2', 'c = 未初期化'], warningMax:0 } },
+      { name:'T1 左側の初期化変数を参照', body:'int a = 1, b = a + 1;', expect:{ variables:['a = 1', 'b = 2'], warningMax:0 } },
+      { name:'T1 同一行の参照連鎖', body:'int a = 1, b = a + 1, c = b + 1;', expect:{ variables:['a = 1', 'b = 2', 'c = 3'], warningMax:0, stepsInOrder:['a という整数の箱', 'b という整数の箱', 'c という整数の箱'] } },
+      { name:'T1 単一未初期化宣言の回帰', body:'int a;', expect:{ variables:['a = 未初期化'], warningMax:0 } },
+      { name:'T1 単一初期化宣言の回帰', body:'int a = 10;', expect:{ variables:['a = 10'], warningMax:0 } },
+      { name:'T1 複数宣言後の代入とprintf', body:'int a, b = 2;\n    a = b + 3;\n    printf("%d", a);', expect:{ variables:['a = 5', 'b = 2'], output:'5', warningMax:0 } },
+      { name:'T1 複数宣言で四則演算', body:'int a = 7 / 2, b = a * 3 - 1, c = b % 4;', expect:{ variables:['a = 3', 'b = 8', 'c = 0'], warningMax:0 } },
+      { name:'T1 負数int除算', body:'int a = -7 / 2, b = 7 / 2;', expect:{ variables:['a = -3', 'b = 3'], warningMax:0 } },
+      { name:'T1 式の括弧内にカンマがあっても誤分割しない', body:'int a = 1, b = (2, 3);', expect:{ variablesExclude:['a =', 'b ='], warningMin:1, stepsExclude:['a という整数の箱'] } },
+      { name:'T1 同一行で先に未宣言の変数を参照', body:'int a = b + 1, b = 2;', expect:{ variablesExclude:['a =', 'b ='], warningMin:1, hintsInclude:['変数 b は宣言されていません'], stepsExclude:['a という整数の箱'] } },
+      { name:'T1 未初期化の左変数を参照', body:'int a, b = a + 1;', expect:{ variablesExclude:['a =', 'b ='], warningMin:1, hintsInclude:['まだ値が代入されていません'], stepsExclude:['a という整数の箱'] } },
+      { name:'T1 中間の未宣言参照は全体を破棄', body:'int a = 1, b = unknown + 1, c = 3;', expect:{ variablesExclude:['a =', 'b =', 'c ='], warningMin:1, stepsExclude:['a という整数の箱', 'b という整数の箱'], analysisByLineExcludes:{ 4:['整数型の変数 <code>a</code> を作りました'] } } },
+      { name:'T1 後半のゼロ除算は全体を破棄', body:'int a = 1, b = 2 / 0, c = 3;', expect:{ variablesExclude:['a =', 'b =', 'c ='], warningMin:1, hintsInclude:['0で割ろうとしています'], stepsExclude:['a という整数の箱'] } },
+      { name:'T1 同一宣言文の名前重複', body:'int a = 1, a = 2;', expect:{ variablesExclude:['a ='], warningMin:1, hintsInclude:['同じ宣言文で2回'], stepsExclude:['a という整数の箱'] } },
+      { name:'T1 既存scalarを再宣言する文の失敗は元の値を維持', body:'int a = 9;\n    int a = 1, b = unknown;', expect:{ variables:['a = 9'], variablesExclude:['b ='], warningMin:1, stepsExclude:['a という整数の箱を作り、1 を代入'] } },
+      { name:'T1 空宣言子', body:'int a,,b;', expect:{ variablesExclude:['a =', 'b ='], warningMin:1, stepsExclude:['a という整数の箱'] } },
+      { name:'T1 末尾カンマ', body:'int a, b,;', expect:{ variablesExclude:['a =', 'b ='], warningMin:1, stepsExclude:['a という整数の箱'] } },
+      { name:'T1 先頭カンマ', body:'int ,a;', expect:{ variablesExclude:['a ='], warningMin:1, stepsExclude:['a という整数の箱'] } },
+      { name:'T1 既存配列名との衝突', body:'int a[3];\n    int a, b;', expect:{ arrays:[{ name:'a', valueCount:3 }], variablesExclude:['a =', 'b ='], warningMin:1, hintsInclude:['同じ名前がすでに使われています'] } },
+      { name:'T1 後半の既存配列名との衝突', body:'int a[3];\n    int b = 1, a = 2;', expect:{ arrays:[{ name:'a', valueCount:3 }], variablesExclude:['a =', 'b ='], warningMin:1, stepsExclude:['b という整数の箱'] } },
+      { name:'T1 scalarとarrayの混在を拒否', body:'int a, b[3];', expect:{ variablesExclude:['a =', 'b ='], arrayCount:0, warningMin:1, hintsInclude:['混ぜる形は現在未対応'] } },
+      { name:'T1 arrayとscalarの混在を拒否', body:'int a[3], b;', expect:{ variablesExclude:['a =', 'b ='], arrayCount:0, warningMin:1 } },
+      { name:'T1 配列readを別々のinitializerで実行', body:'int a[2] = {10, 20};\n    int x = a[0], y = a[1];', expect:{ variables:['x = 10', 'y = 20'], warningMax:0, stepArrayCount:2, stepArrays:[{ name:'a', activeIndex:'[0]', accessLabel:'参照' }, { name:'a', activeIndex:'[1]', accessLabel:'参照' }] } },
+      { name:'T1 同一initializerで2配列read', body:'int a[2] = {10, 20};\n    int x = a[0] + a[1], y = x + 1;', expect:{ variables:['x = 30', 'y = 31'], warningMax:0, stepArrayCount:1, stepArrays:[{ name:'a', activeIndexes:['[0]', '[1]'], accessLabels:['参照', '参照'] }] } },
+      { name:'T1 配列添字が同じ宣言文の前方変数', body:'int a[2] = {10, 20};\n    int i = 1, x = a[i];', expect:{ variables:['i = 1', 'x = 20'], warningMax:0, stepArrays:[{ name:'a', sourceIndex:'i', resolvedIndex:'1', activeIndex:'[1]' }] } },
+      { name:'T1 宣言文の前方変数を添字式に使用', body:'int a[3] = {10, 20, 30};\n    int i = 1, x = a[i + 1];', expect:{ variables:['i = 1', 'x = 30'], warningMax:0, stepArrays:[{ name:'a', sourceIndex:'i + 1', resolvedIndex:'2', activeIndex:'[2]' }] } },
+      { name:'T1 複数宣言の配列read STEP snapshotを保持', body:'int a[2] = {10, 20};\n    int x = a[0], y = a[1];\n    a[0] = 99;', expect:{ variables:['x = 10', 'y = 20'], arrays:[{ name:'a', values:['99', '20'] }], stepArrays:[{ name:'a', values:['10', '20'], activeIndex:'[0]' }, { name:'a', values:['10', '20'], activeIndex:'[1]' }, { name:'a', values:['99', '20'], activeIndex:'[0]' }] } },
+      { name:'T1 後半の配列bounds errorは全体を破棄', body:'int a[2] = {10, 20};\n    int x = a[0], y = a[5];', expect:{ variablesExclude:['x =', 'y ='], warningMin:1, hintsInclude:['有効な添字は0～1'], stepsExclude:['x という整数の箱'] } },
+      { name:'T1 配列read済みの後半expression error metadata', body:'int a[2] = {10, 20};\n    int x = 1, y = a[0] + a[1] + missing;', expect:{ variablesExclude:['x =', 'y ='], warningMin:1, stepArrays:[{ name:'a', activeIndexes:['[0]', '[1]'], accessLabels:['参照', '参照'] }], stepsExclude:['x という整数の箱'] } },
+      { name:'T1 for条件に複数宣言変数を使用', body:'int i = 0, total = 0;\n    for(i = 0; i < 3; i++){\n        total = total + i;\n    }', expect:{ variables:['i = 3', 'total = 3'], warningMax:0 } },
+      { name:'T1 while条件に複数宣言変数を使用', body:'int i = 0, limit = 2;\n    while(i < limit){\n        i++;\n    }', expect:{ variables:['i = 2', 'limit = 2'], warningMax:0 } },
+      { name:'T1 if条件に複数宣言変数を使用', body:'int a = 1, b = 2;\n    if(a < b){\n        a = b;\n    }', expect:{ variables:['a = 2', 'b = 2'], warningMax:0 } },
+      { name:'T1 従来の別文scalar再宣言挙動を維持', body:'int a = 1;\n    int a = 2, b = a + 1;', expect:{ variables:['a = 2', 'b = 3'], warningMax:0 } }
+    ];
+    testCases.push(...stageT1MultipleScalarTests.map(({ name, body, expect }) => ({
+      name, code:makeMainCode(`    ${body}\n    return 0;`), expect
+    })));
+
     function normalizeText(value){
       return String(value || '').replace(/\r\n/g, '\n').trim();
     }

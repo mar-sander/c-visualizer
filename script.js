@@ -567,6 +567,50 @@ function hasOwnSymbol(symbolTable, name){
   return Object.prototype.hasOwnProperty.call(symbolTable, name);
 }
 
+// 宣言子の境界は、括弧などの外側にあるカンマだけで判定します。
+function splitScalarDeclarators(text){
+  const parts = [];
+  const stack = [];
+  let start = 0;
+  const closing = { ')':'(', ']':'[', '}':'{' };
+  for(let index = 0; index < text.length; index++){
+    const ch = text[index];
+    if('([{'.includes(ch)) stack.push(ch);
+    else if(hasOwnSymbol(closing, ch)){
+      if(stack.pop() !== closing[ch]) return null;
+    }else if(ch === ',' && stack.length === 0){
+      parts.push(text.slice(start, index).trim());
+      start = index + 1;
+    }
+  }
+  if(stack.length) return null;
+  parts.push(text.slice(start).trim());
+  return parts;
+}
+
+// 単一宣言の従来経路は維持し、複数宣言だけを専用経路へ渡します。
+function parseMultipleScalarDeclaration(text){
+  const match = String(text).trim().match(/^int\s+([\s\S]*);$/);
+  if(!match) return { matched:false };
+  const parts = splitScalarDeclarators(match[1]);
+  if(parts?.length === 1) return { matched:false };
+  if(!parts || parts.some(part => part === '')){
+    return { matched:true, ok:false, message:'宣言する変数をカンマの前後に1つずつ書いてください。' };
+  }
+  const declarators = [];
+  for(const part of parts){
+    if(/^[A-Za-z_]\w*\s*\[/.test(part)){
+      return { matched:true, ok:false, message:'通常の変数と配列を同じ宣言文に混ぜる形は現在未対応です。' };
+    }
+    const declarator = part.match(/^([A-Za-z_]\w*)\s*(?:=\s*(.+))?$/);
+    if(!declarator){
+      return { matched:true, ok:false, message:'int変数の宣言の書き方を確認してください。' };
+    }
+    declarators.push({ name:declarator[1], expr:declarator[2] });
+  }
+  return { matched:true, ok:true, declarators };
+}
+
 // ++ / -- / += / -= を、for専用ではない共通の変数更新として読み取ります。
 function parseVariableUpdate(text, requiresSemicolon){
   const trimmed = String(text).trim();
@@ -1402,8 +1446,10 @@ function visualizeCode(){
     return makeArrayViews([access])[0] || null;
   }
 
-  function resolveArrayLocation(access){
-    const symbolKind = getSymbolKind(access.name);
+  function resolveArrayLocation(access, scalarEnvironment = variables){
+    const symbolKind = hasOwnSymbol(scalarEnvironment, access.name)
+      ? 'scalar'
+      : hasOwnSymbol(arrays, access.name) ? 'array' : null;
     if(symbolKind === null){
       return { ok:false, error:`配列 ${access.name} は宣言されていません。` };
     }
@@ -1415,7 +1461,9 @@ function visualizeCode(){
     let resolvedIndex = access.resolvedIndex;
     let indexReadable = null;
     if(access.indexKind === 'variable'){
-      const indexKind = getSymbolKind(access.indexVariable);
+      const indexKind = hasOwnSymbol(scalarEnvironment, access.indexVariable)
+        ? 'scalar'
+        : hasOwnSymbol(arrays, access.indexVariable) ? 'array' : null;
       if(indexKind === null){
         return {
           ok:false,
@@ -1428,23 +1476,23 @@ function visualizeCode(){
           error:`${access.indexVariable} は配列です。添字には、値が代入されているint変数を使用してください。`
         };
       }
-      if(variables[access.indexVariable] === UNINITIALIZED){
+      if(scalarEnvironment[access.indexVariable] === UNINITIALIZED){
         return {
           ok:false,
           error:`添字に使われている変数 ${access.indexVariable} には、まだ値が代入されていません。`
         };
       }
-      if(!Number.isSafeInteger(variables[access.indexVariable])){
+      if(!Number.isSafeInteger(scalarEnvironment[access.indexVariable])){
         return {
           ok:false,
           error:`添字に使われている変数 ${access.indexVariable} の値は、安全な整数として扱えません。`
         };
       }
-      resolvedIndex = variables[access.indexVariable];
+      resolvedIndex = scalarEnvironment[access.indexVariable];
     }else if(access.indexKind === 'expression'){
       // 添字式も通常のint式と同じ規則（0方向へ切り捨てる除算を含む）で評価します。
       // resolveArrayAccessを渡さないことで、添字内部の配列参照は部分実行せず拒否します。
-      const indexResult = evaluateArithmeticExpression(access.indexExpression, variables);
+      const indexResult = evaluateArithmeticExpression(access.indexExpression, scalarEnvironment);
       if(!indexResult.ok){
         return {
           ok:false,
@@ -1484,8 +1532,8 @@ function visualizeCode(){
     return { ok:true, array, access:resolvedAccess };
   }
 
-  function resolveArrayRead(access){
-    const location = resolveArrayLocation(access);
+  function resolveArrayRead(access, scalarEnvironment = variables){
+    const location = resolveArrayLocation(access, scalarEnvironment);
     if(!location.ok) return location;
 
     const resolvedAccess = {
@@ -1741,6 +1789,95 @@ function visualizeCode(){
         lineNo,
         `配列 ${arrayDeclaration.name} の箱を${arrayDeclaration.length}個用意し、0番から順番に値を入れました。${omittedExplanation}`
       );
+      return;
+    }
+
+    const multipleDeclaration = parseMultipleScalarDeclaration(trimmed);
+    if(multipleDeclaration.matched){
+      if(insideIf || insideLoop){
+        const scopeLabel = insideLoop ? `${loopLabel}の本体` : 'if側・else側';
+        addAnalysis(analysis, lineNo, `${scopeLabel}で新しい変数を宣言する処理は、現在未対応です。この行は実行しません。`);
+        addHint(hints, lineNo, 'この場所の変数宣言は未対応', '変数はmain直下で宣言してください。');
+        warningLines.add(lineNo);
+        return insideLoop ? 'execution-error' : undefined;
+      }
+
+      function rejectDeclaration(title, message){
+        addAnalysis(analysis, lineNo, `複数の変数を宣言できませんでした。${escapeHtml(message)}`);
+        addHint(hints, lineNo, title, escapeHtml(message));
+        warningLines.add(lineNo);
+      }
+
+      if(!multipleDeclaration.ok){
+        if(multipleDeclaration.message.includes('配列')){
+          return stopArrayLine('この組み合わせの宣言は未対応', multipleDeclaration.message);
+        }
+        rejectDeclaration('宣言の書き方を確認', multipleDeclaration.message);
+        return;
+      }
+
+      const stagedVariables = Object.assign(Object.create(null), variables);
+      const pending = [];
+      const namesInStatement = new Set();
+      for(const { name, expr } of multipleDeclaration.declarators){
+        if(namesInStatement.has(name)){
+          rejectDeclaration('同じ名前が重複しています', `変数 ${name} が同じ宣言文で2回使われています。`);
+          return;
+        }
+        namesInStatement.add(name);
+        if(hasOwnSymbol(arrays, name)){
+          return stopArrayLine(
+            '同じ名前がすでに使われています',
+            `<code>${name}</code> は、すでに配列の名前として宣言されています。int変数と配列には同じ名前を使用できません。`
+          );
+        }
+
+        if(expr === undefined){
+          stagedVariables[name] = UNINITIALIZED;
+          pending.push({ name, value:UNINITIALIZED });
+          continue;
+        }
+
+        const hasArrayRead = containsArrayElementSyntax(codeOutsideStringAndLineComment(expr));
+        const result = evaluateExpression(
+          expr,
+          stagedVariables,
+          hasArrayRead ? access => resolveArrayRead(access, stagedVariables) : null
+        );
+        if(!result.ok){
+          if(hasArrayRead){
+            const errorContext = getArrayExpressionErrorContext(result);
+            return stopArrayLine(
+              errorContext.title,
+              escapeHtml(result.error || '配列要素を含む式を計算できませんでした。'),
+              makeArrayViews(errorContext.accesses)
+            );
+          }
+          rejectDeclaration('式を計算できません', result.error);
+          return;
+        }
+        stagedVariables[name] = result.value;
+        pending.push({ name, expr, result, value:result.value });
+      }
+
+      // 宣言文全体の評価が成功してから、変数・説明・STEPをまとめて確定します。
+      for(const item of pending){
+        rememberVariable(item.name, item.value);
+        if(item.expr === undefined){
+          addAnalysis(analysis, lineNo, `整数型の変数 <code>${item.name}</code> を作りました。まだ値は代入されていません。`);
+          addStep(lineNo, `${item.name} という整数の箱を作りました。中身はまだ入っていません。`);
+          continue;
+        }
+        const explanation = makeInitialValueExplanation(item.name, item.expr, item.result);
+        const resolution = describeArrayIndexResolutions(item.result.arrayAccesses);
+        addAnalysis(analysis, lineNo, `${escapeHtml(resolution)}${explanation.analysis}`);
+        addStep(
+          lineNo,
+          `${escapeHtml(resolution)}${explanation.step}`,
+          true,
+          makeArrayViews(item.result.arrayAccesses)
+        );
+      }
       return;
     }
 
