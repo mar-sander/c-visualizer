@@ -4114,6 +4114,236 @@
       expect:{ ...expect, scalarTypes:types }
     })));
 
+    // T3A 第1群：宣言・literal・型metadata・基本演算とint除算を確認します。
+    const stageT3AFirstTests = [
+      { name:'T3A-1 float未初期化宣言', body:'float a;', types:{ a:'float' }, expect:{ variables:['a = 未初期化'] } },
+      { name:'T3A-2 double未初期化宣言', body:'double a;', types:{ a:'double' }, expect:{ variables:['a = 未初期化'] } },
+      { name:'T3A-3 float小数literal', body:'float a = 1.5f;', types:{ a:'float' }, values:{ a:1.5 } },
+      { name:'T3A-4 double小数literal', body:'double a = 1.5;', types:{ a:'double' }, values:{ a:1.5 } },
+      { name:'T3A-5 float整数literal', body:'float a = 1;', types:{ a:'float' }, values:{ a:1 } },
+      { name:'T3A-6 double整数literal', body:'double a = 1;', types:{ a:'double' }, values:{ a:1 } },
+      { name:'T3A-7 float複数宣言と前方参照', body:'float a = 1.0f, b = a + 1.0f;', types:{ a:'float', b:'float' }, values:{ a:1, b:2 } },
+      { name:'T3A-8 double複数宣言と前方参照', body:'double a = 1.5, b = a * 2.0;', types:{ a:'double', b:'double' }, values:{ a:1.5, b:3 } },
+      { name:'T3A-9 int同士の加算', body:'int a = 1 + 2;', types:{ a:'int' }, values:{ a:3 } },
+      { name:'T3A-10 float同士の加算', body:'float a = 1.0f + 2.0f;', types:{ a:'float' }, values:{ a:3 } },
+      { name:'T3A-11 double同士の加算', body:'double a = 1.0 + 2.0;', types:{ a:'double' }, values:{ a:3 } },
+      { name:'T3A-12 intとdoubleの加算', body:'double a = 1 + 2.5;', types:{ a:'double' }, values:{ a:3.5 } },
+      { name:'T3A-13 intとfloatの加算', body:'float a = 1 + 2.5f;', types:{ a:'float' }, values:{ a:3.5 } },
+      { name:'T3A-14 floatとdoubleの加算', body:'double a = 1.0f + 2.0;', types:{ a:'double' }, values:{ a:3 } },
+      { name:'T3A-15 正のint除算', body:'int a = 7 / 2;', types:{ a:'int' }, values:{ a:3 } },
+      { name:'T3A-16 負のint除算', body:'int a = -7 / 2;', types:{ a:'int' }, values:{ a:-3 } },
+      { name:'T3A-17 double除算', body:'double a = 7.0 / 2;', types:{ a:'double' }, values:{ a:3.5 } },
+      { name:'T3A-18 float除算', body:'float a = 7.0f / 2;', types:{ a:'float' }, values:{ a:3.5 } }
+    ];
+    testCases.push(...stageT3AFirstTests.map(({ name, body, types, values, expect }) => ({
+      name,
+      code:makeMainCode(`    ${body}\n    return 0;`),
+      expect:{ ...expect, warningMax:0, scalarTypes:types, scalarValues:values }
+    })));
+
+    // T3A 第2群：右辺の式型と左辺の保存型を別々に検証します。
+    const stageT3AAssignmentTests = [
+      { name:'T3A代入-1 intからdouble', body:'double x;\n    x = 3;', expression:'3', expressionType:'int', expressionValue:3, type:'double', value:3 },
+      { name:'T3A代入-2 intからfloat', body:'float x;\n    x = 3;', expression:'3', expressionType:'int', expressionValue:3, type:'float', value:3 },
+      { name:'T3A代入-3 doubleからint', body:'int x;\n    x = 3.8;', expression:'3.8', expressionType:'double', expressionValue:3.8, type:'int', value:3 },
+      { name:'T3A代入-4 負のdoubleからint', body:'int x;\n    x = -3.8;', expression:'-3.8', expressionType:'double', expressionValue:-3.8, type:'int', value:-3 },
+      { name:'T3A代入-5 doubleからfloat', body:'float x = 0.0f;\n    x = 1.25;', expression:'1.25', expressionType:'double', expressionValue:1.25, type:'float', value:1.25 },
+      { name:'T3A代入-6 floatからdouble', body:'double x = 0.0;\n    x = 1.25f;', expression:'1.25f', expressionType:'float', expressionValue:1.25, type:'double', value:1.25 },
+      { name:'T3A代入-7 混合式からfloat', body:'float x = 0.0f;\n    x = 1 + 2.5;', expression:'1 + 2.5', expressionType:'double', expressionValue:3.5, type:'float', value:3.5 },
+      { name:'T3A代入-8 浮動小数点除算からint', body:'int x = 0;\n    x = 7.0 / 2;', expression:'7.0 / 2', expressionType:'double', expressionValue:3.5, type:'int', value:3 },
+      { name:'T3A代入-9 int除算からdouble', body:'double x = 0.0;\n    x = 7 / 2;', expression:'7 / 2', expressionType:'int', expressionValue:3, type:'double', value:3 },
+      { name:'T3A代入-10 int除算からfloat', body:'float x = 0.0f;\n    x = 7 / 2;', expression:'7 / 2', expressionType:'int', expressionValue:3, type:'float', value:3 }
+    ];
+    testCases.push(...stageT3AAssignmentTests.map(test => ({
+      name:test.name,
+      code:makeMainCode(`    ${test.body}\n    return 0;`),
+      expect:{
+        warningMax:0,
+        scalarTypes:{ x:test.type },
+        scalarValues:{ x:test.value },
+        scalarExpression:{ source:test.expression, type:test.expressionType, value:test.expressionValue }
+      }
+    })));
+
+    // T3A 第3群：比較前の両辺と、int型になる比較結果を個別に確認します。
+    const stageT3AComparisonTests = [
+      { name:'T3A比較-1 double小なり成立', left:['1.5', 'double', 1.5], operator:'<', right:['2.0', 'double', 2], value:1 },
+      { name:'T3A比較-2 double大なり不成立', left:['1.5', 'double', 1.5], operator:'>', right:['2.0', 'double', 2], value:0 },
+      { name:'T3A比較-3 float以下成立', left:['1.5f', 'float', 1.5], operator:'<=', right:['1.5f', 'float', 1.5], value:1 },
+      { name:'T3A比較-4 intとdouble', left:['1', 'int', 1], operator:'<', right:['1.5', 'double', 1.5], value:1 },
+      { name:'T3A比較-5 floatとdoubleの等値', left:['1.5f', 'float', 1.5], operator:'==', right:['1.5', 'double', 1.5], value:1 },
+      { name:'T3A比較-6 doubleとintの不等値', left:['2.5', 'double', 2.5], operator:'!=', right:['2', 'int', 2], value:1 },
+      { name:'T3A比較-7 int除算から比較', left:['7 / 2', 'int', 3], operator:'==', right:['3', 'int', 3], value:1 },
+      { name:'T3A比較-8 double除算から比較', left:['7.0 / 2', 'double', 3.5], operator:'==', right:['3.5', 'double', 3.5], value:1 },
+      { name:'T3A比較-9 負数同士', left:['-3.5', 'double', -3.5], operator:'<', right:['-2.0', 'double', -2], value:1 },
+      { name:'T3A比較-10 算術式同士', left:['1 + 2.5', 'double', 3.5], operator:'>', right:['3', 'int', 3], value:1 }
+    ];
+    testCases.push(...stageT3AComparisonTests.map(test => {
+      const expression = `${test.left[0]} ${test.operator} ${test.right[0]}`;
+      return {
+        name:test.name,
+        code:makeMainCode(`    int r = ${expression};\n    return 0;`),
+        expect:{
+          warningMax:0,
+          scalarTypes:{ r:'int' },
+          scalarValues:{ r:test.value },
+          scalarOperands:[
+            { source:test.left[0], type:test.left[1], value:test.left[2] },
+            { source:test.right[0], type:test.right[1], value:test.right[2] }
+          ],
+          scalarExpression:{ source:expression, type:'int', value:test.value }
+        }
+      };
+    }));
+
+    // T3A 第4群：値が整数に見えても、添字式の結果型はintに限定します。
+    const stageT3AIndexTests = [
+      { name:'T3A添字-1 int変数', body:'int i = 1;\n    int x = a[i];', types:{ i:'int', x:'int' }, values:{ i:1, x:20 }, index:['i', 'int', 1, { i:1 }, { i:'int' }], success:true },
+      { name:'T3A添字-2 float変数を拒否', body:'float i = 1.0f;\n    int x;\n    x = a[i];', types:{ i:'float', x:'int' }, values:{ i:1 }, index:['i', 'float', 1, { i:1 }, { i:'float' }] },
+      { name:'T3A添字-3 double変数を拒否', body:'double i = 1.0;\n    int x;\n    x = a[i];', types:{ i:'double', x:'int' }, values:{ i:1 }, index:['i', 'double', 1, { i:1 }, { i:'double' }] },
+      { name:'T3A添字-4 float literalを拒否', body:'int x;\n    x = a[1.0f];', types:{ x:'int' }, index:['1.0f', 'float', 1] },
+      { name:'T3A添字-5 double literalを拒否', body:'int x;\n    x = a[1.0];', types:{ x:'int' }, index:['1.0', 'double', 1] },
+      { name:'T3A添字-6 double式を拒否', body:'int x;\n    x = a[1 + 0.0];', types:{ x:'int' }, index:['1 + 0.0', 'double', 1] },
+      { name:'T3A添字-7 float式を拒否', body:'int x;\n    x = a[1 + 0.0f];', types:{ x:'int' }, index:['1 + 0.0f', 'float', 1] },
+      { name:'T3A添字-8 int除算式', body:'int x;\n    x = a[3 / 2];', types:{ x:'int' }, values:{ x:20 }, index:['3 / 2', 'int', 1], success:true }
+    ];
+    testCases.push(...stageT3AIndexTests.map(test => ({
+      name:test.name,
+      code:makeMainCode(`    int a[3] = {10, 20, 30};\n    ${test.body}\n    return 0;`),
+      expect:{
+        scalarTypes:test.types,
+        scalarValues:test.values,
+        scalarIndexExpression:{ source:test.index[0], type:test.index[1], value:test.index[2], variables:test.index[3], variableTypes:test.index[4] },
+        arrays:[{ name:'a', values:['10', '20', '30'] }],
+        variables:[test.success ? 'x = 20' : 'x = 未初期化'],
+        warningMin:test.success ? undefined : 1,
+        warningMax:test.success ? 0 : undefined,
+        hintsInclude:test.success ? [] : ['int型'],
+        stepArrayCount:test.success ? 1 : 0,
+        finalActiveCount:0,
+        executedExcludes:test.success ? [] : ['x = a[']
+      }
+    })));
+
+    // T3A 第5群：% のoperand型制約とint配列read後の型昇格を確認します。
+    const stageT3AModuloArrayTests = [
+      { name:'T3A剰余配列-1 int剰余', body:'int x = 7 % 2;', type:'int', value:1, expression:'7 % 2', expressionType:'int' },
+      { name:'T3A剰余配列-2 左double剰余を拒否', body:'double x;\n    x = 7.0 % 2;', type:'double', expression:'7.0 % 2', rejected:true },
+      { name:'T3A剰余配列-3 左float剰余を拒否', body:'float x;\n    x = 7.0f % 2;', type:'float', expression:'7.0f % 2', rejected:true },
+      { name:'T3A剰余配列-4 右double剰余を拒否', body:'double x;\n    x = 7 % 2.0;', type:'double', expression:'7 % 2.0', rejected:true },
+      { name:'T3A剰余配列-5 配列readとdouble除算', body:'int a[3] = {1, 2, 3};\n    double x = a[0] / 2.0;', type:'double', value:0.5, expression:'a[0] / 2.0', expressionType:'double', arrayValues:[1, 2, 3], readIndexes:[0] },
+      { name:'T3A剰余配列-6 配列readとfloat加算', body:'int a[3] = {1, 2, 3};\n    float x = a[1] + 0.5f;', type:'float', value:2.5, expression:'a[1] + 0.5f', expressionType:'float', arrayValues:[1, 2, 3], readIndexes:[1] },
+      { name:'T3A剰余配列-7 複数array readとdouble', body:'int a[2] = {2, 4};\n    double x = a[0] + a[1] * 0.5;', type:'double', value:4, expression:'a[0] + a[1] * 0.5', expressionType:'double', arrayValues:[2, 4], readIndexes:[0, 1] },
+      { name:'T3A剰余配列-8 配列readとint除算', body:'int a[2] = {3, 5};\n    int x = a[1] / 2;', type:'int', value:2, expression:'a[1] / 2', expressionType:'int', arrayValues:[3, 5], readIndexes:[1] }
+    ];
+    testCases.push(...stageT3AModuloArrayTests.map(test => ({
+      name:test.name,
+      code:makeMainCode(`    ${test.body}\n    return 0;`),
+      expect:{
+        scalarTypes:{ x:test.type },
+        scalarValues:test.rejected ? undefined : { x:test.value },
+        scalarExpression:test.rejected ? undefined : test.arrayValues ? undefined
+          : { source:test.expression, type:test.expressionType, value:test.value },
+        scalarExpressionError:test.rejected ? { source:test.expression, includes:'% はint同士' } : undefined,
+        scalarArrayExpression:test.arrayValues ? {
+          source:test.expression, type:test.expressionType, value:test.value,
+          values:test.arrayValues, indexes:test.readIndexes
+        } : undefined,
+        variables:[test.rejected ? 'x = 未初期化' : `x = ${test.value}`],
+        arrays:test.arrayValues ? [{ name:'a', values:test.arrayValues.map(String) }] : [],
+        stepArrayCount:test.arrayValues ? 1 : 0,
+        stepArrays:test.arrayValues ? [{ name:'a', activeIndexes:test.readIndexes.map(index => `[${index}]`), accessLabels:test.readIndexes.map(() => '参照') }] : [],
+        finalActiveCount:0,
+        warningMin:test.rejected ? 1 : undefined,
+        warningMax:test.rejected ? undefined : 0,
+        hintsInclude:test.rejected ? ['% はint同士'] : [],
+        executedExcludes:test.rejected ? [`x = ${test.expression}`] : []
+      }
+    })));
+
+    // T3A 第6群：既存%d入出力を維持し、float/doubleとの型不一致を拒否します。
+    const stageT3AIntIoTests = [
+      { name:'T3A入出力-1 int printf回帰', body:'int x = 10;\n    printf("%d", x);', types:{ x:'int' }, values:{ x:10 }, output:'10', warningMax:0 },
+      { name:'T3A入出力-2 int除算printf回帰', body:'printf("%d", 7 / 2);', types:{}, output:'3', warningMax:0, expression:{ source:'7 / 2', type:'int', value:3 } },
+      { name:'T3A入出力-3 floatをprintf %dへ渡さない', body:'float x = 1.5f;\n    printf("%d", x);', types:{ x:'float' }, values:{ x:1.5 }, output:'出力はまだありません。', hint:'%dにはint型', warningMin:1, noDisplayStep:true },
+      { name:'T3A入出力-4 doubleをprintf %dへ渡さない', body:'double x = 1.5;\n    printf("%d", x);', types:{ x:'double' }, values:{ x:1.5 }, output:'出力はまだありません。', hint:'%dにはint型', warningMin:1, noDisplayStep:true },
+      { name:'T3A入出力-5 int scanf回帰', body:'int x;\n    scanf("%d", &x);', input:'42', types:{ x:'int' }, values:{ x:42 }, warningMax:0 },
+      { name:'T3A入出力-6 floatをscanf %dへ渡さない', body:'float x;\n    scanf("%d", &x);', input:'42', types:{ x:'float' }, variable:'x = 未初期化', hint:'%d で入力できるのはint型', warningMin:1 },
+      { name:'T3A入出力-7 doubleをscanf %dへ渡さない', body:'double x;\n    scanf("%d", &x);', input:'42', types:{ x:'double' }, variable:'x = 未初期化', hint:'%d で入力できるのはint型', warningMin:1 }
+    ];
+    testCases.push(...stageT3AIntIoTests.map(test => ({
+      name:test.name,
+      code:makeMainCode(`    ${test.body}\n    return 0;`),
+      input:test.input,
+      expect:{
+        scalarTypes:test.types,
+        scalarValues:test.values,
+        scalarExpression:test.expression,
+        variables:test.variable ? [test.variable] : [],
+        output:test.output,
+        warningMin:test.warningMin,
+        warningMax:test.warningMax,
+        hintsInclude:test.hint ? [test.hint] : [],
+        stepsExclude:test.noDisplayStep ? ['画面に「'] : []
+      }
+    })));
+
+    // T3A 最終境界：更新・atomic性・有限値・条件・未対応構文を再現可能にします。
+    const stageT3AFinalTests = [
+      { name:'T3A最終 float後置++', body:'float x = 1.5f;\n    x++;', types:{ x:'float' }, values:{ x:2.5 } },
+      { name:'T3A最終 float後置--', body:'float x = 2.5f;\n    x--;', types:{ x:'float' }, values:{ x:1.5 } },
+      { name:'T3A最終 double後置++', body:'double x = 1.5;\n    x++;', types:{ x:'double' }, values:{ x:2.5 } },
+      { name:'T3A最終 double後置--', body:'double x = 1.5;\n    x--;', types:{ x:'double' }, values:{ x:0.5 } },
+      { name:'T3A最終 float += int', body:'float x = 1.5f;\n    x += 2;', types:{ x:'float' }, values:{ x:3.5 } },
+      { name:'T3A最終 double -= int', body:'double x = 5.5;\n    x -= 2;', types:{ x:'double' }, values:{ x:3.5 } },
+      { name:'T3A最終 int += double', body:'int x = 3;\n    x += 1.5;', types:{ x:'int' }, values:{ x:4 }, updateExpression:{ source:'x + 1.5', variables:{ x:3 }, variableTypes:{ x:'int' }, type:'double', value:4.5 } },
+      { name:'T3A最終 negative int += double', body:'int x = -3;\n    x += -1.5;', types:{ x:'int' }, values:{ x:-4 }, updateExpression:{ source:'x + -1.5', variables:{ x:-3 }, variableTypes:{ x:'int' }, type:'double', value:-4.5 } },
+      { name:'T3A最終 float += double', body:'float x = 1.5f;\n    x += 2.25;', types:{ x:'float' }, values:{ x:3.75 }, updateExpression:{ source:'x + 2.25', variables:{ x:1.5 }, variableTypes:{ x:'float' }, type:'double', value:3.75 } },
+      { name:'T3A最終 int更新回帰', body:'int x = 3;\n    x++;\n    int y = 5;\n    y -= 2;', types:{ x:'int', y:'int' }, values:{ x:4, y:3 } },
+      { name:'T3A最終 float左から宣言', body:'float a = 1.0f, b = a + 1.0f, c = b + 1.0f;', types:{ a:'float', b:'float', c:'float' }, values:{ a:1, b:2, c:3 } },
+      { name:'T3A最終 double左から宣言', body:'double a = 1.5, b = a * 2.0, c = b + 0.5;', types:{ a:'double', b:'double', c:'double' }, values:{ a:1.5, b:3, c:3.5 } },
+      { name:'T3A最終 float宣言atomic失敗', body:'int keep = 99;\n    float a = 1.0f, b = unknown + 1.0f, c = 3.0f;', types:{ keep:'int' }, values:{ keep:99 }, warningMin:1, absent:['a =', 'b =', 'c ='] },
+      { name:'T3A最終 double宣言atomic失敗', body:'int keep = 99;\n    double a = 1.0, b = unknown + 1.0, c = 3.0;', types:{ keep:'int' }, values:{ keep:99 }, warningMin:1, absent:['a =', 'b =', 'c ='] },
+      { name:'T3A最終 同一float宣言で重複拒否', body:'int keep = 99;\n    float x = 1.0f, x = 2.0f;', types:{ keep:'int' }, values:{ keep:99 }, warningMin:1, absent:['x ='] },
+      { name:'T3A最終 float未初期化read', body:'float x;\n    double y = x + 1.0;', types:{ x:'float' }, warningMin:1, absent:['y ='], hint:'まだ値が代入されていません' },
+      { name:'T3A最終 double未初期化read', body:'double x;\n    float y = x + 1.0f;', types:{ x:'double' }, warningMin:1, absent:['y ='], hint:'まだ値が代入されていません' },
+      { name:'T3A最終 0除算は既存値を保持', body:'float x = 1.5f;\n    x = 1.0 / 0;', types:{ x:'float' }, values:{ x:1.5 }, warningMin:1, hint:'0で割ろうとしています' },
+      { name:'T3A最終 unsafe int変換を拒否', body:'int x = 7;\n    x = 9007199254740991.0 * 2.0;', types:{ x:'int' }, values:{ x:7 }, warningMin:1, hint:'安全な整数として扱えません' },
+      { name:'T3A最終 float literalを単精度保存', body:'float x = 0.1f;', types:{ x:'float' }, exact:{ x:Math.fround(0.1) }, shown:['x = 0.1'] },
+      { name:'T3A最終 float演算結果を単精度保存', body:'float x = 0.1f + 0.2f;', types:{ x:'float' }, exact:{ x:Math.fround(Math.fround(0.1) + Math.fround(0.2)) }, shown:['x = 0.3'] },
+      { name:'T3A最終 大きすぎるfloat値を拒否', body:'float x = 1.0f;\n    x = 999999999999999999999999999999999999999.0;', types:{ x:'float' }, values:{ x:1 }, warningMin:1, hint:'floatで扱える範囲' },
+      { name:'T3A最終 float if条件', body:'float x = 1.5f;\n    int hit = 0;\n    if(x > 1.0f){\n        hit = 1;\n    }', types:{ x:'float', hit:'int' }, values:{ x:1.5, hit:1 } },
+      { name:'T3A最終 double if条件', body:'double x = 0.5;\n    int hit = 0;\n    if(x < 1.0){\n        hit = 1;\n    }', types:{ x:'double', hit:'int' }, values:{ x:0.5, hit:1 } },
+      { name:'T3A最終 float while条件', body:'float x = 0.5f;\n    while(x < 2.0f){\n        x++;\n    }', types:{ x:'float' }, values:{ x:2.5 } },
+      { name:'T3A最終 double for条件', body:'double x = 0.5;\n    for(x = 0.5; x < 2.0; x++){\n    }', types:{ x:'double' }, values:{ x:2.5 } },
+      { name:'T3A最終 大文字F suffix', body:'float x = 1.5F;', types:{ x:'float' }, values:{ x:1.5 } },
+      { name:'T3A最終 先頭小数点literal', body:'double x = .5;', types:{ x:'double' }, values:{ x:0.5 } },
+      { name:'T3A最終 末尾小数点literal', body:'double x = 1.;', types:{ x:'double' }, values:{ x:1 } },
+      { name:'T3A最終 指数表記は未対応', body:'double x = 1.0e3;', types:{}, warningMin:1, absent:['x ='] },
+      { name:'T3A最終 char未対応', body:'char x = 1;', types:{}, warningMin:1, absent:['x ='] },
+      { name:'T3A最終 long未対応', body:'long x = 1;', types:{}, warningMin:1, absent:['x ='] },
+      { name:'T3A最終 short未対応', body:'short x = 1;', types:{}, warningMin:1, absent:['x ='] },
+      { name:'T3A最終 unsigned未対応', body:'unsigned x = 1;', types:{}, warningMin:1, absent:['x ='] },
+      { name:'T3A最終 float配列未対応', body:'float x[2];', types:{}, warningMin:1, absent:['x ='], arrayCount:0 },
+      { name:'T3A最終 double配列未対応', body:'double x[2];', types:{}, warningMin:1, absent:['x ='], arrayCount:0 },
+      { name:'T3A最終 cast未対応', body:'int x = (float)1;', types:{}, warningMin:1, absent:['x ='] },
+      { name:'T3A最終 printf %f未対応', body:'float x = 1.5f;\n    printf("%f", x);', types:{ x:'float' }, values:{ x:1.5 }, output:'出力はまだありません。', warningMin:1 },
+      { name:'T3A最終 scanf %f未対応', body:'float x;\n    scanf("%f", &x);', types:{ x:'float' }, input:'42', warningMin:1, shown:['x = 未初期化'] }
+    ];
+    testCases.push(...stageT3AFinalTests.map(test => ({
+      name:test.name,
+      code:makeMainCode(`    ${test.body}\n    return 0;`),
+      input:test.input,
+      expect:{
+        scalarTypes:test.types, scalarValues:test.values, scalarValuesExact:test.exact,
+        scalarUpdateExpression:test.updateExpression,
+        variables:test.shown, variablesExclude:test.absent,
+        warningMin:test.warningMin, warningMax:test.warningMin === undefined ? 0 : undefined,
+        hintsInclude:test.hint ? [test.hint] : [], output:test.output,
+        arrayCount:test.arrayCount
+      }
+    })));
+
     function normalizeText(value){
       return String(value || '').replace(/\r\n/g, '\n').trim();
     }
@@ -4219,6 +4449,74 @@
             failures.push(`${name}の型metadata: 期待${expectedTypes[name]}`);
           }
           if(typeof scalarState.variables[name] === 'object') failures.push(`${name}の値tableにobjectが入った`);
+        }
+        for(const [name, value] of Object.entries(testCase.expect.scalarValues || {})){
+          const actualValue = scalarState.variables[name];
+          const type = expectedTypes[name];
+          const expectedValue = type === 'float' ? Math.fround(value) : value;
+          if(typeof actualValue !== 'number' || !Number.isFinite(actualValue) ||
+             (type === 'float' && Math.fround(actualValue) !== actualValue) ||
+             Math.abs(actualValue - expectedValue) > (type === 'float' ? 1e-6 : 0)){
+            failures.push(`${name}の内部値: 期待${type} ${expectedValue} / 実際${String(actualValue)}`);
+          }
+        }
+        for(const [name, expectedValue] of Object.entries(testCase.expect.scalarValuesExact || {})){
+          if(!Object.is(scalarState.variables[name], expectedValue)){
+            failures.push(`${name}の単精度内部値: 期待${expectedValue} / 実際${String(scalarState.variables[name])}`);
+          }
+        }
+        if(testCase.expect.scalarUpdateExpression){
+          const expression = testCase.expect.scalarUpdateExpression;
+          const variables = Object.assign(Object.create(null), expression.variables);
+          const types = Object.assign(Object.create(null), expression.variableTypes);
+          const result = evaluateExpression(expression.source, variables, null, types);
+          if(!result.ok || result.type !== expression.type || result.value !== expression.value){
+            failures.push(`更新前の式 ${expression.source}: 期待${expression.type} ${expression.value} / 実際${result.type || '型なし'} ${String(result.value)}${result.error ? ` (${result.error})` : ''}`);
+          }
+        }
+        if(testCase.expect.scalarExpression){
+          const expression = testCase.expect.scalarExpression;
+          const result = evaluateExpression(expression.source, Object.create(null), null, Object.create(null));
+          if(!result.ok || result.type !== expression.type || result.value !== expression.value){
+            failures.push(`右辺の式 ${expression.source}: 期待${expression.type} ${expression.value} / 実際${result.type || '型なし'} ${String(result.value)}${result.error ? ` (${result.error})` : ''}`);
+          }
+        }
+        for(const operand of testCase.expect.scalarOperands || []){
+          const result = evaluateArithmeticExpression(operand.source, Object.create(null), null, Object.create(null));
+          if(!result.ok || result.type !== operand.type || result.value !== operand.value){
+            failures.push(`比較のoperand ${operand.source}: 期待${operand.type} ${operand.value} / 実際${result.type || '型なし'} ${String(result.value)}${result.error ? ` (${result.error})` : ''}`);
+          }
+        }
+        if(testCase.expect.scalarIndexExpression){
+          const index = testCase.expect.scalarIndexExpression;
+          const variables = Object.assign(Object.create(null), index.variables || {});
+          const types = Object.assign(Object.create(null), index.variableTypes || {});
+          const result = evaluateArithmeticExpression(index.source, variables, null, types);
+          if(!result.ok || result.type !== index.type || result.value !== index.value){
+            failures.push(`添字式 ${index.source}: 期待${index.type} ${index.value} / 実際${result.type || '型なし'} ${String(result.value)}${result.error ? ` (${result.error})` : ''}`);
+          }
+        }
+        if(testCase.expect.scalarExpressionError){
+          const expectedError = testCase.expect.scalarExpressionError;
+          const result = evaluateExpression(expectedError.source, Object.create(null), null, Object.create(null));
+          if(result.ok || !result.error?.includes(expectedError.includes)){
+            failures.push(`式 ${expectedError.source}: 期待エラー「${expectedError.includes}」/ 実際${result.error || `${result.type} ${result.value}`}`);
+          }
+        }
+        if(testCase.expect.scalarArrayExpression){
+          const expectedArray = testCase.expect.scalarArrayExpression;
+          const resolver = access => {
+            const index = Number(access.sourceIndex);
+            const value = expectedArray.values[index];
+            return { ok:true, value, access:{ ...access, resolvedIndex:index, mode:'read', value } };
+          };
+          const result = evaluateExpression(expectedArray.source, Object.create(null), resolver, Object.create(null));
+          const accesses = result.arrayAccesses || [];
+          if(!result.ok || result.type !== expectedArray.type || result.value !== expectedArray.value ||
+             accesses.length !== expectedArray.indexes.length || result.arrayAccess !== accesses[0] ||
+             accesses.some((access, index) => access.resolvedIndex !== expectedArray.indexes[index] || access.mode !== 'read')){
+            failures.push(`配列read式 ${expectedArray.source}: 期待${expectedArray.type} ${expectedArray.value}、access ${expectedArray.indexes.join(',')} / 実際${result.type || '型なし'} ${String(result.value)}、access ${accesses.map(access => access.resolvedIndex).join(',')}${result.error ? ` (${result.error})` : ''}`);
+          }
         }
       }
       const editorSource = testCase.resetAfterVisualize
