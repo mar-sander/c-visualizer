@@ -1380,6 +1380,8 @@ function visualizeCode(){
   const executedLines = new Set();
   const warningLines = new Set();
   const variables = Object.create(null);
+  // scalarの値tableは従来どおり保ち、型だけを別のtableに記録します。
+  const variableTypes = Object.create(null);
   const variableOrder = [];
   const arrays = Object.create(null);
   const arrayOrder = [];
@@ -1405,9 +1407,20 @@ function visualizeCode(){
     }
   }
 
-  function rememberVariable(name, value){
+  function declareScalar(name, value, type){
     if(!hasOwnSymbol(variables, name)) variableOrder.push(name);
     variables[name] = value;
+    variableTypes[name] = type;
+  }
+
+  function setScalarValue(name, value){
+    variables[name] = value;
+  }
+
+  function getScalarType(name){
+    return hasOwnSymbol(variables, name) && hasOwnSymbol(variableTypes, name)
+      ? variableTypes[name]
+      : undefined;
   }
 
   function getSymbolKind(name){
@@ -1614,7 +1627,7 @@ function visualizeCode(){
     }
 
     const before = variables[name];
-    rememberVariable(name, result.value);
+    setScalarValue(name, result.value);
     const resolutionExplanation = describeArrayIndexResolutions(result.arrayAccesses);
     if(result.comparison){
       const cValue = result.comparison.conditionMet ? '成立を1' : '不成立を0';
@@ -1667,7 +1680,7 @@ function visualizeCode(){
 
     const before = variables[name];
     const after = before + update.amount;
-    rememberVariable(name, after);
+    setScalarValue(name, after);
     const direction = update.amount >= 0 ? '増やし' : '減らし';
     addAnalysis(
       analysis,
@@ -1862,7 +1875,7 @@ function visualizeCode(){
 
       // 宣言文全体の評価が成功してから、変数・説明・STEPをまとめて確定します。
       for(const item of pending){
-        rememberVariable(item.name, item.value);
+        declareScalar(item.name, item.value, 'int');
         if(item.expr === undefined){
           addAnalysis(analysis, lineNo, `整数型の変数 <code>${item.name}</code> を作りました。まだ値は代入されていません。`);
           addStep(lineNo, `${item.name} という整数の箱を作りました。中身はまだ入っていません。`);
@@ -2028,7 +2041,7 @@ function visualizeCode(){
 
       const inputValue = Number(inputText);
       scanfValueIndex++;
-      rememberVariable(name, inputValue);
+      setScalarValue(name, inputValue);
       addAnalysis(analysis, lineNo, `入力値 <code>${escapeHtml(inputText)}</code> を整数として受け取り、変数 <code>${name}</code> に代入します。`);
       addStep(lineNo, `入力値 ${escapeHtml(inputText)} を整数として受け取り、変数 ${name} に代入しました。`);
       return;
@@ -2113,7 +2126,7 @@ function visualizeCode(){
         );
       }
       if(expr === undefined){
-        rememberVariable(name, UNINITIALIZED);
+        declareScalar(name, UNINITIALIZED, 'int');
         addAnalysis(analysis, lineNo, `整数型の変数 <code>${name}</code> を作りました。まだ値は代入されていません。`);
         addStep(lineNo, `${name} という整数の箱を作りました。中身はまだ入っていません。`);
         return;
@@ -2125,7 +2138,7 @@ function visualizeCode(){
         hasSupportedArrayRead ? resolveArrayRead : null
       );
       if(result.ok){
-        rememberVariable(name, result.value);
+        declareScalar(name, result.value, 'int');
         const explanation = makeInitialValueExplanation(name, expr, result);
         const resolutionExplanation = describeArrayIndexResolutions(result.arrayAccesses);
         addAnalysis(analysis, lineNo, `${escapeHtml(resolutionExplanation)}${explanation.analysis}`);
@@ -4357,7 +4370,7 @@ function visualizeCode(){
 
   const scalarVariableHtml = variableOrder.map(name => {
     const value = variables[name] === UNINITIALIZED ? '未初期化' : String(variables[name]);
-    return `<div class="variable-chip">${escapeHtml(name)} = ${escapeHtml(value)}</div>`;
+    return `<div class="variable-chip" data-variable-type="${escapeHtml(getScalarType(name))}">${escapeHtml(name)} = ${escapeHtml(value)}</div>`;
   }).join('');
 
   function renderArrayCard(name, array, accesses = []){
@@ -4446,6 +4459,9 @@ function visualizeCode(){
   document.getElementById('hintResult').innerHTML = hints.length
     ? hints.join('') + `<div class="hint"><b>見方のコツ</b><br>このツールは答えを出すためではなく、<span class="highlight">変数の中身がいつ・なぜ変わるか</span>を見るためのものです。まずはSTEPと変数チップを対応させて読んでみましょう。</div>`
     : `<div class="hint"><b>大きなミスは見つかっていません。</b><br>次は、各STEPを自分の言葉で説明できるか試してみましょう。</div>`;
+
+  // 非表示の内部状態を回帰テストから検査できるようにします。
+  return { variables, variableTypes };
 }
 
 initializeCodeEditor();

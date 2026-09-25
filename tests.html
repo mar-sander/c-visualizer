@@ -4082,6 +4082,38 @@
       name, code:makeMainCode(`    ${body}\n    return 0;`), expect
     })));
 
+    const stageT2ScalarMetadataTests = [
+      { name:'T2 単一未初期化int', body:'int a;', types:{ a:'int' }, expect:{ variables:['a = 未初期化'], warningMax:0 } },
+      { name:'T2 単一初期化int', body:'int a = 10;', types:{ a:'int' }, expect:{ variables:['a = 10'], warningMax:0 } },
+      { name:'T2 複数int全て未初期化', body:'int a, b, c;', types:{ a:'int', b:'int', c:'int' }, expect:{ warningMax:0 } },
+      { name:'T2 複数int初期化と未初期化', body:'int a = 1, b = 2, c;', types:{ a:'int', b:'int', c:'int' }, expect:{ variables:['c = 未初期化'], warningMax:0 } },
+      { name:'T2 同一宣言文で前方scalar参照', body:'int a = 1, b = a + 1;', types:{ a:'int', b:'int' }, expect:{ variables:['b = 2'], warningMax:0 } },
+      { name:'T2 assignment後も型保持', body:'int a = 10;\n    a = 20;', types:{ a:'int' }, expect:{ variables:['a = 20'], warningMax:0 } },
+      { name:'T2 後置++後も型保持', body:'int a = 1;\n    a++;', types:{ a:'int' }, expect:{ variables:['a = 2'], warningMax:0 } },
+      { name:'T2 前置++後も型保持', body:'int a = 1;\n    ++a;', types:{ a:'int' }, expect:{ variables:['a = 2'], warningMax:0 } },
+      { name:'T2 後置--後も型保持', body:'int a = 1;\n    a--;', types:{ a:'int' }, expect:{ variables:['a = 0'], warningMax:0 } },
+      { name:'T2 前置--後も型保持', body:'int a = 1;\n    --a;', types:{ a:'int' }, expect:{ variables:['a = 0'], warningMax:0 } },
+      { name:'T2 +=後も型保持', body:'int a = 1;\n    a += 2;', types:{ a:'int' }, expect:{ variables:['a = 3'], warningMax:0 } },
+      { name:'T2 -=後も型保持', body:'int a = 3;\n    a -= 2;', types:{ a:'int' }, expect:{ variables:['a = 1'], warningMax:0 } },
+      { name:'T2 scanf後も型保持', body:'int a;\n    scanf("%d", &a);', input:'42', types:{ a:'int' }, expect:{ variables:['a = 42'], warningMax:0 } },
+      { name:'T2 複数宣言途中失敗の型は残らない', body:'int a = 1, b = unknown + 1, c = 3;', types:{}, expect:{ variablesExclude:['a =', 'b =', 'c ='], warningMin:1 } },
+      { name:'T2 先に宣言した型と値は途中失敗後も維持', body:'int seed = 9;\n    int a = 1, b = unknown + 1;', types:{ seed:'int' }, expect:{ variables:['seed = 9'], variablesExclude:['a =', 'b ='], warningMin:1 } },
+      { name:'T2 複数宣言array read成功', body:'int a[2] = {10, 20};\n    int x = a[0], y = a[1];', types:{ x:'int', y:'int' }, expect:{ variables:['x = 10', 'y = 20'], arrayCount:1, stepArrayCount:2, warningMax:0 } },
+      { name:'T2 複数宣言array bounds失敗で型なし', body:'int a[2] = {10, 20};\n    int x = a[0], y = a[5];', types:{}, expect:{ variablesExclude:['x =', 'y ='], arrayCount:1, warningMin:1 } },
+      { name:'T2 単一array宣言はscalar型を作らない', body:'int a[2] = {10, 20};', types:{}, expect:{ arrayCount:1, arrays:[{ name:'a', type:'int[2]', values:['10', '20'] }], warningMax:0 } },
+      { name:'T2 複数access STEP保持', body:'int a[2] = {10, 20};\n    int x = a[0] + a[1];', types:{ x:'int' }, expect:{ variables:['x = 30'], stepArrays:[{ name:'a', activeIndexes:['[0]', '[1]'] }], warningMax:0 } },
+      { name:'T2 int除算は0方向切り捨て', body:'int a = 7 / 2, b = -7 / 2;', types:{ a:'int', b:'int' }, expect:{ variables:['a = 3', 'b = -3'], warningMax:0 } },
+      { name:'T2 for／while／if更新後の型', body:'int i = 0, x = 0;\n    for(i = 0; i < 2; i++){\n        x = x + 1;\n    }\n    while(i < 3){\n        i++;\n    }\n    if(x == 2){\n        x = x + i;\n    }', types:{ i:'int', x:'int' }, expect:{ variables:['i = 3', 'x = 5'], warningMax:0 } },
+      { name:'T2 prototype由来の名前も安全', body:'int __proto__ = 2, constructor = 3;', types:{ ['__proto__']:'int', constructor:'int' }, expect:{ variables:['__proto__ = 2', 'constructor = 3'], warningMax:0 } },
+      { name:'T2 別文の再宣言も型一致', body:'int a = 1;\n    int a = 2, b = a + 1;', types:{ a:'int', b:'int' }, expect:{ variables:['a = 2', 'b = 3'], warningMax:0 } }
+    ];
+    testCases.push(...stageT2ScalarMetadataTests.map(({ name, body, types, expect, input }) => ({
+      name,
+      code:makeMainCode(`    ${body}\n    return 0;`),
+      input,
+      expect:{ ...expect, scalarTypes:types }
+    })));
+
     function normalizeText(value){
       return String(value || '').replace(/\r\n/g, '\n').trim();
     }
@@ -4164,9 +4196,31 @@
       if(testCase.rerun) visualizeCode();
       if(testCase.resetAfterVisualize) resetCode();
 
+      // 型の検査対象だけ同じコードを再実行し、非表示の値tableと型tableも照合します。
+      const scalarState = testCase.expect.scalarTypes !== undefined ? visualizeCode() : null;
       const actual = snapshotResult();
       const expected = testCase.expect;
       const failures = [];
+      if(scalarState){
+        const expectedTypes = testCase.expect.scalarTypes;
+        const actualNames = Object.keys(scalarState.variables).sort();
+        const typeNames = Object.keys(scalarState.variableTypes).sort();
+        const expectedNames = Object.keys(expectedTypes).sort();
+        if(Object.getPrototypeOf(scalarState.variables) !== null || Object.getPrototypeOf(scalarState.variableTypes) !== null){
+          failures.push('scalarの値tableと型tableはprototypeを持たない');
+        }
+        if(JSON.stringify(actualNames) !== JSON.stringify(typeNames) || JSON.stringify(typeNames) !== JSON.stringify(expectedNames)){
+          failures.push(`値・型の名前が不一致: 値=${actualNames}, 型=${typeNames}, 期待=${expectedNames}`);
+        }
+        for(const name of expectedNames){
+          const chip = [...document.querySelectorAll('#variableState .variable-chip')]
+            .find(element => normalizeText(element.textContent).startsWith(`${name} = `));
+          if(scalarState.variableTypes[name] !== expectedTypes[name] || chip?.dataset.variableType !== expectedTypes[name]){
+            failures.push(`${name}の型metadata: 期待${expectedTypes[name]}`);
+          }
+          if(typeof scalarState.variables[name] === 'object') failures.push(`${name}の値tableにobjectが入った`);
+        }
+      }
       const editorSource = testCase.resetAfterVisualize
         ? ''
         : testCase.code.replace(/\r\n/g, '\n');
