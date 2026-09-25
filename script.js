@@ -52,20 +52,29 @@ function containsArrayElementSyntax(text){
   return /\b[A-Za-z_]\w*\s*\[/.test(String(text));
 }
 
-// 添字は、符号付き整数literalまたは単一のscalar identifierだけを許可します。
+// statementを実行する前にarray access数を確認するため、配列要素らしい部分を列挙します。
+function findArrayAccessSyntax(text){
+  return [...String(text).matchAll(
+    /\b[A-Za-z_]\w*\s*\[\s*[^\[\]]+?\s*\]/g
+  )].map(match => match[0]);
+}
+
+// 配列要素の形を読み取り、添字の実際の値はaccess時点のscalar stateで解決します。
 function parseSupportedArrayAccess(text){
   const match = String(text).trim().match(
-    /^([A-Za-z_]\w*)\s*\[\s*([+-]?\d+|[A-Za-z_]\w*)\s*\]$/
+    /^([A-Za-z_]\w*)\s*\[\s*([^\[\]]+?)\s*\]$/
   );
   if(!match) return null;
-  const sourceIndex = match[2];
+  const sourceIndex = match[2].trim();
   const isFixedIndex = /^[+-]?\d+$/.test(sourceIndex);
+  const isVariableIndex = /^[A-Za-z_]\w*$/.test(sourceIndex);
   return {
     source:match[0],
     name:match[1],
     sourceIndex,
-    indexKind:isFixedIndex ? 'fixed' : 'variable',
-    indexVariable:isFixedIndex ? null : sourceIndex,
+    indexKind:isFixedIndex ? 'fixed' : isVariableIndex ? 'variable' : 'expression',
+    indexVariable:isVariableIndex ? sourceIndex : null,
+    indexExpression:isFixedIndex || isVariableIndex ? null : sourceIndex,
     resolvedIndex:isFixedIndex ? Number(sourceIndex) : null
   };
 }
@@ -956,7 +965,7 @@ function splitArgs(text){
 
 function tokenizeExpression(expr){
   const tokens = [];
-  const regex = /\s*([A-Za-z_]\w*\s*\[\s*(?:[+-]?\d+|[A-Za-z_]\w*)\s*\]|[A-Za-z_]\w*|\d+|[()+\-*/%])\s*/g;
+  const regex = /\s*([A-Za-z_]\w*\s*\[\s*[^\[\]]+?\s*\]|[A-Za-z_]\w*|\d+|[()+\-*/%])\s*/g;
   let match;
   let consumed = '';
   while((match = regex.exec(expr)) !== null){
@@ -984,11 +993,14 @@ function evaluateArithmeticExpression(expr, variables, resolveArrayAccess = null
 
   // 配列要素のread後に式の別部分で失敗しても、read済みの情報を失わないようにします。
   // 配列要素そのものの解決失敗（access）は、既存のerror metadataを優先します。
-  function preserveResolvedArrayAccess(result){
-    if(result.ok || result.access || result.arrayAccess || arrayAccesses.length === 0){
-      return result;
-    }
-    return { ...result, arrayAccess:arrayAccesses[0] };
+  function preserveResolvedArrayAccesses(result){
+    if(result.ok) return result;
+    const preservedAccesses = result.arrayAccesses || [...arrayAccesses];
+    return {
+      ...result,
+      arrayAccesses:preservedAccesses,
+      arrayAccess:result.arrayAccess || preservedAccesses[0] || null
+    };
   }
 
   function peek(){ return tokens[pos]; }
@@ -1055,8 +1067,8 @@ function evaluateArithmeticExpression(expr, variables, resolveArrayAccess = null
       if(!resolveArrayAccess){
         return { ok:false, error:'この場所での配列要素の参照は現在未対応です。' };
       }
-      if(arrayAccesses.length >= 1){
-        return { ok:false, error:'1つの式で複数の配列要素を参照する形は現在未対応です。' };
+      if(arrayAccesses.length >= 2){
+        return { ok:false, error:'1つの式で参照できる配列要素は2つまでです。' };
       }
       const resolved = resolveArrayAccess(arrayAccess);
       if(!resolved.ok) return resolved;
@@ -1091,9 +1103,9 @@ function evaluateArithmeticExpression(expr, variables, resolveArrayAccess = null
   }
 
   const result = parseExpression();
-  if(!result.ok) return preserveResolvedArrayAccess(result);
+  if(!result.ok) return preserveResolvedArrayAccesses(result);
   if(pos < tokens.length){
-    return preserveResolvedArrayAccess({ ok:false, error:'式の途中に読み取れない部分があります。' });
+    return preserveResolvedArrayAccesses({ ok:false, error:'式の途中に読み取れない部分があります。' });
   }
 
   return {
@@ -1101,6 +1113,7 @@ function evaluateArithmeticExpression(expr, variables, resolveArrayAccess = null
     value:result.value,
     readable:result.readable,
     usedVars,
+    arrayAccesses:[...arrayAccesses],
     arrayAccess:arrayAccesses[0] || null
   };
 }
@@ -1161,6 +1174,14 @@ function stripWrappingParentheses(expr){
 function evaluateExpression(expr, variables, resolveArrayAccess = null){
   // 比較式全体を包む冗長な括弧だけを外し、内側の比較を見つけます。
   const normalizedExpr = stripWrappingParentheses(expr);
+  if(findArrayAccessSyntax(normalizedExpr).length > 2){
+    return {
+      ok:false,
+      error:'1つの式で参照できる配列要素は2つまでです。',
+      arrayAccesses:[],
+      arrayAccess:null
+    };
+  }
   const found = findComparison(normalizedExpr);
   if(!found.ok) return found;
   if(!found.comparison){
@@ -1179,14 +1200,21 @@ function evaluateExpression(expr, variables, resolveArrayAccess = null){
   if(!left.ok) return left;
   const right = evaluateArithmeticExpression(rightExpr, variables, resolveArrayAccess);
   if(!right.ok){
-    if(left.arrayAccess && !right.access && !right.arrayAccess){
-      return { ...right, arrayAccess:left.arrayAccess };
-    }
-    return right;
+    const arrayAccesses = [
+      ...(left.arrayAccesses || []),
+      ...(right.arrayAccesses || [])
+    ];
+    return {
+      ...right,
+      arrayAccesses,
+      arrayAccess:arrayAccesses[0] || null
+    };
   }
-  if(left.arrayAccess && right.arrayAccess){
-    return { ok:false, error:'1つの式で複数の配列要素を参照する形は現在未対応です。' };
-  }
+
+  const arrayAccesses = [
+    ...(left.arrayAccesses || []),
+    ...(right.arrayAccesses || [])
+  ];
 
   const conditions = {
     '<': left.value < right.value,
@@ -1203,7 +1231,8 @@ function evaluateExpression(expr, variables, resolveArrayAccess = null){
     value:conditionMet ? 1 : 0,
     readable:`${left.readable} ${operator} ${right.readable}`,
     usedVars:[...left.usedVars, ...right.usedVars],
-    arrayAccess:left.arrayAccess || right.arrayAccess || null,
+    arrayAccesses,
+    arrayAccess:arrayAccesses[0] || null,
     comparison:{
       operator,
       leftValue:left.value,
@@ -1348,16 +1377,29 @@ function visualizeCode(){
     arrays[name] = arrayState;
   }
 
+  function makeArrayViews(accesses){
+    const groupedAccesses = new Map();
+    for(const access of accesses || []){
+      if(!access || !arrays[access.name]) continue;
+      if(!groupedAccesses.has(access.name)) groupedAccesses.set(access.name, []);
+      groupedAccesses.get(access.name).push({ ...access });
+    }
+
+    return [...groupedAccesses.entries()].map(([name, grouped]) => {
+      const array = arrays[name];
+      return {
+        name,
+        type:array.type,
+        length:array.length,
+        values:[...array.values],
+        accesses:grouped
+      };
+    });
+  }
+
+  // writeなど既存の単一access consumerは、複数view生成の互換wrapperを使います。
   function makeArrayView(access){
-    const array = arrays[access.name];
-    if(!array) return null;
-    return {
-      name:access.name,
-      type:array.type,
-      length:array.length,
-      values:[...array.values],
-      accesses:[{ ...access }]
-    };
+    return makeArrayViews([access])[0] || null;
   }
 
   function resolveArrayLocation(access){
@@ -1371,6 +1413,7 @@ function visualizeCode(){
 
     const array = arrays[access.name];
     let resolvedIndex = access.resolvedIndex;
+    let indexReadable = null;
     if(access.indexKind === 'variable'){
       const indexKind = getSymbolKind(access.indexVariable);
       if(indexKind === null){
@@ -1398,17 +1441,39 @@ function visualizeCode(){
         };
       }
       resolvedIndex = variables[access.indexVariable];
+    }else if(access.indexKind === 'expression'){
+      // 添字式も通常のint式と同じ規則（0方向へ切り捨てる除算を含む）で評価します。
+      // resolveArrayAccessを渡さないことで、添字内部の配列参照は部分実行せず拒否します。
+      const indexResult = evaluateArithmeticExpression(access.indexExpression, variables);
+      if(!indexResult.ok){
+        return {
+          ok:false,
+          error:`配列 ${access.name} の添字 ${access.sourceIndex} を計算できません。${indexResult.error}`
+        };
+      }
+      resolvedIndex = indexResult.value;
+      indexReadable = indexResult.readable;
+    }
+
+    if(!Number.isSafeInteger(resolvedIndex)){
+      return {
+        ok:false,
+        error:`配列 ${access.name} の添字 ${access.sourceIndex} の計算結果は、安全な整数として扱えません。`
+      };
     }
 
     const resolvedAccess = {
       ...access,
       index:resolvedIndex,
-      resolvedIndex
+      resolvedIndex,
+      indexReadable
     };
     if(resolvedIndex < 0 || resolvedIndex >= array.length){
       const resolution = access.indexKind === 'variable'
         ? `${access.indexVariable}の値は${resolvedIndex}なので、${access.name}[${access.sourceIndex}]は${access.name}[${resolvedIndex}]を表します。`
-        : '';
+        : access.indexKind === 'expression'
+          ? `添字の式${access.sourceIndex}を計算すると${resolvedIndex}なので、${access.name}[${access.sourceIndex}]は${access.name}[${resolvedIndex}]を表します。`
+          : '';
       return {
         ok:false,
         access:resolvedAccess,
@@ -1431,7 +1496,9 @@ function visualizeCode(){
     if(resolvedAccess.value === UNINITIALIZED){
       const resolution = access.indexKind === 'variable'
         ? `${access.indexVariable}の値は${resolvedAccess.resolvedIndex}なので、${access.name}[${access.sourceIndex}]は${access.name}[${resolvedAccess.resolvedIndex}]を表します。`
-        : '';
+        : access.indexKind === 'expression'
+          ? `添字の式${access.sourceIndex}を計算すると${resolvedAccess.resolvedIndex}なので、${access.name}[${access.sourceIndex}]は${access.name}[${resolvedAccess.resolvedIndex}]を表します。`
+          : '';
       return {
         ok:false,
         access:resolvedAccess,
@@ -1442,8 +1509,21 @@ function visualizeCode(){
   }
 
   function describeVariableIndexResolution(access){
-    if(!access || access.indexKind !== 'variable') return '';
-    return `${access.indexVariable}の値は${access.resolvedIndex}です。そのため、${access.name}[${access.sourceIndex}]は${access.name}[${access.resolvedIndex}]を表します。`;
+    if(!access) return '';
+    if(access.indexKind === 'variable'){
+      return `${access.indexVariable}の値は${access.resolvedIndex}です。そのため、${access.name}[${access.sourceIndex}]は${access.name}[${access.resolvedIndex}]を表します。`;
+    }
+    if(access.indexKind === 'expression'){
+      return `添字の式 ${access.sourceIndex} を計算すると${access.resolvedIndex}です。そのため、${access.name}[${access.sourceIndex}]は${access.name}[${access.resolvedIndex}]を表します。`;
+    }
+    return '';
+  }
+
+  function describeArrayIndexResolutions(accesses){
+    return (accesses || [])
+      .map(describeVariableIndexResolution)
+      .filter(Boolean)
+      .join('');
   }
 
   function addStep(lineNo, text, markAsExecuted = true, arrayViews = []){
@@ -1480,13 +1560,14 @@ function visualizeCode(){
         ok:false,
         error:result.error,
         access:result.access || null,
+        arrayAccesses:result.arrayAccesses || [],
         arrayAccess:result.arrayAccess || null
       };
     }
 
     const before = variables[name];
     rememberVariable(name, result.value);
-    const resolutionExplanation = describeVariableIndexResolution(result.arrayAccess);
+    const resolutionExplanation = describeArrayIndexResolutions(result.arrayAccesses);
     if(result.comparison){
       const cValue = result.comparison.conditionMet ? '成立を1' : '不成立を0';
       addAnalysis(analysis, lineNo, `${analysisPrefix}${escapeHtml(resolutionExplanation)}${describeComparison(result)} C言語では条件の${cValue}として扱うため、<code>${name}</code> に <code>${result.value}</code> を代入しました。`);
@@ -1499,17 +1580,22 @@ function visualizeCode(){
         lineNo,
         `${stepPrefix}${escapeHtml(resolutionExplanation)}${name} の中身に ${result.value} を代入しました。計算：${escapeHtml(result.readable)} = ${result.value}`,
         true,
-        result.arrayAccess ? [makeArrayView(result.arrayAccess)] : []
+        makeArrayViews(result.arrayAccesses)
       );
     }else{
       addStep(
         lineNo,
         `${stepPrefix}${escapeHtml(resolutionExplanation)}${name} の中身を ${before} から ${result.value} に変えました。計算：${escapeHtml(result.readable)} = ${result.value}`,
         true,
-        result.arrayAccess ? [makeArrayView(result.arrayAccess)] : []
+        makeArrayViews(result.arrayAccesses)
       );
     }
-    return { ok:true, value:result.value, arrayAccess:result.arrayAccess || null };
+    return {
+      ok:true,
+      value:result.value,
+      arrayAccesses:result.arrayAccesses || [],
+      arrayAccess:result.arrayAccess || null
+    };
   }
 
   // 許可された場所の ++ / -- / += / -= は、すべてこの共通処理で更新します。
@@ -1583,13 +1669,22 @@ function visualizeCode(){
     }
 
     function getArrayExpressionErrorContext(result){
+      const arrayAccesses = result.arrayAccesses || (result.arrayAccess ? [result.arrayAccess] : []);
       if(result.access){
-        return { title:'配列要素を参照できません', access:result.access };
+        return {
+          title:'配列要素を参照できません',
+          access:result.access,
+          accesses:[...arrayAccesses, result.access]
+        };
       }
-      if(result.arrayAccess){
-        return { title:'配列要素を含む式を計算できません', access:result.arrayAccess };
+      if(arrayAccesses.length){
+        return {
+          title:'配列要素を含む式を計算できません',
+          access:arrayAccesses[0],
+          accesses:arrayAccesses
+        };
       }
-      return { title:'式を計算できません', access:null };
+      return { title:'式を計算できません', access:null, accesses:[] };
     }
 
     const arrayDeclaration = parseArrayDeclaration(structuralCode.trim());
@@ -1659,7 +1754,7 @@ function visualizeCode(){
       }
 
       const arrayWriteMatch = trimmed.match(
-        /^([A-Za-z_]\w*\s*\[\s*(?:[+-]?\d+|[A-Za-z_]\w*)\s*\])\s*=\s*(.+);$/
+        /^([A-Za-z_]\w*\s*\[\s*[^\[\]]+?\s*\])\s*=\s*(.+);$/
       );
       if(arrayWriteMatch){
         const access = parseSupportedArrayAccess(arrayWriteMatch[1]);
@@ -1712,18 +1807,28 @@ function visualizeCode(){
         return;
       }
 
-      const supportedAccessMatches = [...structuralCode.matchAll(
-        /\b[A-Za-z_]\w*\s*\[\s*(?:[+-]?\d+|[A-Za-z_]\w*)\s*\]/g
-      )];
+      const supportedAccessMatches = findArrayAccessSyntax(structuralCode);
+      const isPrintfRead = /^printf\s*\(/.test(trimmed);
       const isSimpleReadStatement =
         /^[A-Za-z_]\w*\s*=/.test(trimmed) ||
-        /^printf\s*\(/.test(trimmed) ||
+        isPrintfRead ||
         (!insideIf && !insideLoop && /^int\s+[A-Za-z_]\w*\s*=/.test(trimmed));
 
-      if(supportedAccessMatches.length !== 1 || !isSimpleReadStatement){
+      if(supportedAccessMatches.length > 2){
+        return stopArrayLine(
+          '配列要素の参照が多すぎます',
+          '現在のVisualizerでは、1つの式で参照できる配列要素は2つまでです。この文は配列要素を1つも参照せずに停止しました。'
+        );
+      }
+
+      if(
+        supportedAccessMatches.length === 0 ||
+        !isSimpleReadStatement ||
+        (isPrintfRead && supportedAccessMatches.length !== 1)
+      ){
         return stopArrayLine(
           'この配列要素の使い方は未対応',
-          '添字には、整数または宣言済みのint変数を1つだけ使用できます。<code>a[i + 1]</code>のような計算式、1つの文で複数要素を使う形、配列要素の更新演算はまだ実行しません。'
+          '添字には、整数または宣言済みのint変数を1つだけ使う形に加え、安全な整数算術式を使用できます。scalarの初期化・代入では配列要素を2つまで参照できます。printfで複数要素を使う形や、配列要素の更新演算はまだ実行しません。'
         );
       }
       hasSupportedArrayRead = true;
@@ -1885,13 +1990,13 @@ function visualizeCode(){
       if(result.ok){
         rememberVariable(name, result.value);
         const explanation = makeInitialValueExplanation(name, expr, result);
-        const resolutionExplanation = describeVariableIndexResolution(result.arrayAccess);
+        const resolutionExplanation = describeArrayIndexResolutions(result.arrayAccesses);
         addAnalysis(analysis, lineNo, `${escapeHtml(resolutionExplanation)}${explanation.analysis}`);
         addStep(
           lineNo,
           `${escapeHtml(resolutionExplanation)}${explanation.step}`,
           true,
-          result.arrayAccess ? [makeArrayView(result.arrayAccess)] : []
+          makeArrayViews(result.arrayAccesses)
         );
       }else{
         if(hasSupportedArrayRead){
@@ -1899,7 +2004,7 @@ function visualizeCode(){
           return stopArrayLine(
             errorContext.title,
             escapeHtml(result.error || '配列要素を含む式を計算できませんでした。'),
-            errorContext.access ? [makeArrayView(errorContext.access)] : []
+            makeArrayViews(errorContext.accesses)
           );
         }
         addAnalysis(analysis, lineNo, `変数 <code>${name}</code> の初期化を読み取ろうとしましたが、式を計算できませんでした。`);
@@ -1919,7 +2024,7 @@ function visualizeCode(){
         return stopArrayLine(
           errorContext.title,
           escapeHtml(result.error || '配列要素を含む式を計算できませんでした。'),
-          errorContext.access ? [makeArrayView(errorContext.access)] : []
+          makeArrayViews(errorContext.accesses)
         );
       }
       return !result.ok && insideLoop ? 'execution-error' : undefined;
@@ -3315,7 +3420,7 @@ function visualizeCode(){
       }
 
       const arrayWriteMatch = trimmed.match(
-        /^([A-Za-z_]\w*\s*\[\s*(?:[+-]?\d+|[A-Za-z_]\w*)\s*\])\s*=\s*(.+);$/
+        /^([A-Za-z_]\w*\s*\[\s*[^\[\]]+?\s*\])\s*=\s*(.+);$/
       );
       if(arrayWriteMatch){
         if(containsArrayElementSyntax(codeOutsideStringAndLineComment(arrayWriteMatch[2]))){
@@ -3328,17 +3433,27 @@ function visualizeCode(){
         return { ok:true, matched:true };
       }
 
-      const supportedAccessMatches = [...structuralBodyCode.matchAll(
-        /\b[A-Za-z_]\w*\s*\[\s*(?:[+-]?\d+|[A-Za-z_]\w*)\s*\]/g
-      )];
+      const supportedAccessMatches = findArrayAccessSyntax(structuralBodyCode);
+      const isPrintfRead = matchSimplePrintfStatement(trimmed) !== null;
       const isSupportedReadStatement =
         /^[A-Za-z_]\w*\s*=\s*.+;$/.test(structuralBodyCode) ||
-        matchSimplePrintfStatement(trimmed) !== null;
-      if(supportedAccessMatches.length !== 1 || !isSupportedReadStatement){
+        isPrintfRead;
+      if(supportedAccessMatches.length > 2){
+        return {
+          ok:false,
+          title:'配列要素の参照が多すぎます',
+          message:'現在のVisualizerでは、for文の1つの式で参照できる配列要素は2つまでです。for文全体を部分実行せず停止します。'
+        };
+      }
+      if(
+        supportedAccessMatches.length === 0 ||
+        !isSupportedReadStatement ||
+        (isPrintfRead && supportedAccessMatches.length !== 1)
+      ){
         return {
           ok:false,
           title:'for文本体の配列操作は未対応',
-          message:'for文の本体へ直接書いた文では、整数または宣言済みのint変数を添字にして、配列要素を1つ参照または代入できます。添字の計算式・複数要素の使用・要素更新は実行しません。'
+          message:'for文の本体へ直接書いたscalar代入では、安全な整数算術式を添字にして配列要素を2つまで参照できます。printfで複数要素を使う形や、要素更新は実行しません。'
         };
       }
       return { ok:true, matched:true };
@@ -4113,7 +4228,8 @@ function visualizeCode(){
     const cells = array.values.map((value, index) => {
       const displayValue = value === UNINITIALIZED ? '—' : String(value);
       const valueLabel = value === UNINITIALIZED ? 'まだ値が入っていません' : `値 ${value}`;
-      const access = accesses.find(item => item.index === index) || null;
+      const accessesAtIndex = accesses.filter(item => item.index === index);
+      const access = accessesAtIndex[0] || null;
       const accessLabel = access?.mode === 'read'
         ? '参照'
         : access?.mode === 'write'
@@ -4121,10 +4237,11 @@ function visualizeCode(){
           : '';
       const accessClass = access ? ` array-cell-active array-cell-${access.mode}` : '';
       const accessAttributes = access
-        ? ` data-source-index="${escapeHtml(access.sourceIndex)}" data-resolved-index="${access.resolvedIndex}"`
+        ? ` data-source-index="${escapeHtml(access.sourceIndex)}" data-resolved-index="${access.resolvedIndex}" data-access-count="${accessesAtIndex.length}"`
         : '';
+      const repeatedAccessLabel = accessesAtIndex.length > 1 ? `、${accessesAtIndex.length}回` : '';
       return `
-        <div class="array-cell${accessClass}"${accessAttributes} aria-label="${escapeHtml(name)}[${index}]：${escapeHtml(valueLabel)}${accessLabel ? `、${accessLabel}` : ''}">
+        <div class="array-cell${accessClass}"${accessAttributes} aria-label="${escapeHtml(name)}[${index}]：${escapeHtml(valueLabel)}${accessLabel ? `、${accessLabel}${repeatedAccessLabel}` : ''}">
           ${accessLabel ? `<div class="array-access-label">${accessLabel}</div>` : ''}
           <div class="array-value">${escapeHtml(displayValue)}</div>
           <div class="array-index">[${index}]</div>
@@ -4134,10 +4251,13 @@ function visualizeCode(){
     const legend = hasUninitialized
       ? `<div class="array-legend">—：まだ値を入れていない要素</div>`
       : '';
-    const variableAccess = accesses.find(access => access.indexKind === 'variable');
-    const resolution = variableAccess && Number.isInteger(variableAccess.resolvedIndex)
-      ? `<div class="array-access-resolution"><code>${escapeHtml(name)}[${escapeHtml(variableAccess.sourceIndex)}]</code><span aria-hidden="true">→</span><code>${escapeHtml(name)}[${variableAccess.resolvedIndex}]</code></div>`
-      : '';
+    const resolution = accesses
+      .filter(access =>
+        (access.indexKind === 'variable' || access.indexKind === 'expression') &&
+        Number.isInteger(access.resolvedIndex)
+      )
+      .map(access => `<div class="array-access-resolution"><code>${escapeHtml(name)}[${escapeHtml(access.sourceIndex)}]</code><span aria-hidden="true">→</span><code>${escapeHtml(name)}[${access.resolvedIndex}]</code></div>`)
+      .join('');
 
     return `
       <section class="array-card" aria-label="配列 ${escapeHtml(name)}">
