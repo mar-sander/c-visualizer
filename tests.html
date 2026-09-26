@@ -807,10 +807,10 @@
         expect:{ warningMin:1, hintsInclude:['変数 value が先に', '宣言'], executedExcludes:['printf("WRONG'], scanfInputValue:'10' }
       },
       {
-        name:'scanf・percent fは未対応で停止',
+        name:'scanf・percent fをintへ渡すと型不一致で停止',
         code:`#include <stdio.h>\n\nint main(void){\n    int value = 1;\n    scanf("%f", &value);\n    printf("WRONG\\n");\n    return 0;\n}`,
         input:'10',
-        expect:{ variables:['value = 1'], warningMin:1, hintsInclude:['このscanf形式は未対応'], executedExcludes:['printf("WRONG'], scanfInputValue:'10' }
+        expect:{ variables:['value = 1'], warningMin:1, hintsInclude:['%f で入力できるのはfloat型'], executedExcludes:['printf("WRONG'], scanfInputValue:'10' }
       },
       {
         name:'scanf・複数変数は未対応で停止',
@@ -4327,8 +4327,8 @@
       { name:'T3A最終 float配列未対応', body:'float x[2];', types:{}, warningMin:1, absent:['x ='], arrayCount:0 },
       { name:'T3A最終 double配列未対応', body:'double x[2];', types:{}, warningMin:1, absent:['x ='], arrayCount:0 },
       { name:'T3A最終 cast未対応', body:'int x = (float)1;', types:{}, warningMin:1, absent:['x ='] },
-      { name:'T3A最終 printf %f未対応', body:'float x = 1.5f;\n    printf("%f", x);', types:{ x:'float' }, values:{ x:1.5 }, output:'出力はまだありません。', warningMin:1 },
-      { name:'T3A最終 scanf %f未対応', body:'float x;\n    scanf("%f", &x);', types:{ x:'float' }, input:'42', warningMin:1, shown:['x = 未初期化'] }
+      { name:'T3B移行 printf %fをfloatで表示', body:'float x = 1.5f;\n    printf("%f", x);', types:{ x:'float' }, values:{ x:1.5 }, output:'1.500000' },
+      { name:'T3B移行 scanf %fをfloatへ入力', body:'float x;\n    scanf("%f", &x);', types:{ x:'float' }, values:{ x:42 }, input:'42', shown:['x = 42'] }
     ];
     testCases.push(...stageT3AFinalTests.map(test => ({
       name:test.name,
@@ -4341,6 +4341,103 @@
         warningMin:test.warningMin, warningMax:test.warningMin === undefined ? 0 : undefined,
         hintsInclude:test.hint ? [test.hint] : [], output:test.output,
         arrayCount:test.arrayCount
+      }
+    })));
+
+    // T3B：printfの指定子・型照合・precision・文単位の出力確定を確認します。
+    const stageT3BPrintfTests = [
+      { name:'T3B printf double %f', body:'double x = 1.5;\n    printf("%f", x);', output:'1.500000' },
+      { name:'T3B printf float %fへ昇格', body:'float x = 1.5f;\n    printf("%f", x);', output:'1.500000' },
+      { name:'T3B printf 負のdouble', body:'double x = -1.5;\n    printf("%f", x);', output:'-1.500000' },
+      { name:'T3B printf precision 2', body:'double x = 3.14159;\n    printf("%.2f", x);', output:'3.14' },
+      { name:'T3B printf precision 3', body:'double x = 3.14159;\n    printf("%.3f", x);', output:'3.142' },
+      { name:'T3B printf precision 0', body:'double x = 3.5;\n    printf("%.0f", x);', output:'4' },
+      { name:'T3B printf double %lf', body:'double x = 1.5;\n    printf("%lf", x);', output:'1.500000' },
+      { name:'T3B printf float %lfへ昇格', body:'float x = 1.5f;\n    printf("%lf", x);', output:'1.500000' },
+      { name:'T3B printf intとdoubleを混在', body:'int i = 3;\n    double x = 1.25;\n    printf("%d %.2f", i, x);', output:'3 1.25' },
+      { name:'T3B printf floatとdoubleを混在', body:'float a = 1.5f;\n    double b = 2.25;\n    printf("%.1f %.2f", a, b);', output:'1.5 2.25' },
+      { name:'T3B printf 改行と混在書式', body:'int i = 3;\n    double x = 1.25;\n    printf("%d %.2f\\n", i, x);', output:'3 1.25' },
+      { name:'T3B printf intを%fに拒否', body:'int x = 3;\n    printf("%f", x);', reject:true, hint:'float型またはdouble型' },
+      { name:'T3B printf doubleを%dに拒否', body:'double x = 3.5;\n    printf("%d", x);', reject:true, hint:'%dにはint型' },
+      { name:'T3B printf floatを%dに拒否', body:'float x = 3.5f;\n    printf("%d", x);', reject:true, hint:'%dにはint型' },
+      { name:'T3B printf int配列readのdouble式', body:'int a[2] = {1, 2};\n    printf("%f", a[0] / 2.0);', output:'0.500000', arrayStep:[{ name:'a', activeIndex:'[0]', accessLabel:'参照' }] },
+      { name:'T3B printf int配列readは%d', body:'int a[2] = {1, 2};\n    printf("%d", a[0]);', output:'1', arrayStep:[{ name:'a', activeIndex:'[0]', accessLabel:'参照' }] },
+      { name:'T3B printf int配列readを%fに拒否', body:'int a[2] = {1, 2};\n    printf("%f", a[0]);', reject:true, hint:'float型またはdouble型' },
+      { name:'T3B printf 後半の型不一致で部分出力なし', body:'int i = 3;\n    int j = 4;\n    printf("HEAD");\n    printf("%d %f", i, j);', output:'HEAD', warningMin:1, noPartial:'画面に「3 ' },
+      { name:'T3B printf 後半の式エラーで部分出力なし', body:'int i = 3;\n    printf("HEAD");\n    printf("%d %f", i, missing);', output:'HEAD', warningMin:1, noPartial:'画面に「3 ' },
+      { name:'T3B printf 後半の未初期化で部分出力なし', body:'int i = 3;\n    double x;\n    printf("%d %f", i, x);', reject:true, hint:'まだ値が代入されていません' },
+      { name:'T3B printf 精度上限20', body:'double x = 1.5;\n    printf("%.20f", x);', output:'1.50000000000000000000' },
+      { name:'T3B printf 精度21を安全拒否', body:'double x = 1.5;\n    printf("%.21f", x);', reject:true, hint:'Visualizerの安全上限' },
+      { name:'T3B printf %lf精度', body:'double x = 2.25;\n    printf("%.3lf", x);', output:'2.250' },
+      { name:'T3B printf float内部誤差を表示へ直結しない', body:'float x = 0.1f;\n    printf("%f", x);', output:'0.100000', types:{ x:'float' }, exact:{ x:Math.fround(0.1) } },
+      { name:'T3B printf int除算回帰', body:'printf("%d", 7 / 2);', output:'3' },
+      { name:'T3B printf 指定子数不一致を拒否', body:'printf("%d %f", 3);', reject:true, hint:'引数の数が一致しません' },
+      { name:'T3B printf %e未対応', body:'printf("%e", 1.5);', reject:true, hint:'このprintf書式は現在未対応' },
+      { name:'T3B printf %g未対応', body:'printf("%g", 1.5);', reject:true, hint:'このprintf書式は現在未対応' },
+      { name:'T3B printf %s未対応', body:'printf("%s", 1);', reject:true, hint:'このprintf書式は現在未対応' },
+      { name:'T3B printf %c未対応', body:'printf("%c", 65);', reject:true, hint:'このprintf書式は現在未対応' },
+      { name:'T3B printf %%未対応', body:'printf("%%");', reject:true, hint:'printfの%%は未対応' },
+      { name:'T3B printf width未対応', body:'printf("%8.2f", 1.5);', reject:true, hint:'このprintf書式は現在未対応' },
+      { name:'T3B printf flags未対応', body:'printf("%+f", 1.5);', reject:true, hint:'このprintf書式は現在未対応' },
+      { name:'T3B printf dynamic precision未対応', body:'printf("%.*f", 2, 1.5);', reject:true, hint:'このprintf書式は現在未対応' },
+      { name:'T3B printf 複数配列read境界維持', body:'int a[2] = {1, 2};\n    printf("%d %d", a[0], a[1]);', reject:true, hint:'printfで複数要素を使う形' }
+    ];
+    testCases.push(...stageT3BPrintfTests.map(test => ({
+      name:test.name,
+      code:makeMainCode(`    ${test.body}\n    return 0;`),
+      expect:{
+        output:test.reject ? '出力はまだありません。' : test.output,
+        warningMin:test.reject || test.warningMin ? 1 : undefined,
+        warningMax:test.reject || test.warningMin ? undefined : 0,
+        hintsInclude:test.hint ? [test.hint] : [],
+        stepsExclude:test.noPartial ? [test.noPartial] : [],
+        stepArrays:test.arrayStep,
+        scalarTypes:test.types,
+        scalarValuesExact:test.exact
+      }
+    })));
+
+    // T3B：scanfは指定子ごとに受け取るポインタ型を厳密に区別します。
+    const stageT3BScanfTests = [
+      { name:'T3B scanf float %f', body:'float x;\n    scanf("%f", &x);', input:'1.5', types:{ x:'float' }, values:{ x:1.5 }, step:'float型の値として' },
+      { name:'T3B scanf double %lf', body:'double x;\n    scanf("%lf", &x);', input:'1.5', types:{ x:'double' }, values:{ x:1.5 }, step:'double型の値として' },
+      { name:'T3B scanf floatへ整数入力', body:'float x;\n    scanf("%f", &x);', input:'3', types:{ x:'float' }, values:{ x:3 } },
+      { name:'T3B scanf doubleへ負数入力', body:'double x;\n    scanf("%lf", &x);', input:'-2.25', types:{ x:'double' }, values:{ x:-2.25 } },
+      { name:'T3B scanf floatへ先頭小数点', body:'float x;\n    scanf("%f", &x);', input:'.5', types:{ x:'float' }, values:{ x:0.5 } },
+      { name:'T3B scanf doubleへ末尾小数点', body:'double x;\n    scanf("%lf", &x);', input:'1.', types:{ x:'double' }, values:{ x:1 } },
+      { name:'T3B scanf 正符号の小数', body:'float x;\n    scanf("%f", &x);', input:'+1.5', types:{ x:'float' }, values:{ x:1.5 } },
+      { name:'T3B scanf floatの単精度内部値', body:'float x;\n    scanf("%f", &x);', input:'0.1', types:{ x:'float' }, exact:{ x:Math.fround(0.1) }, shown:['x = 0.1'] },
+      { name:'T3B scanf doubleに%fは型不一致', body:'double x;\n    scanf("%f", &x);', input:'1.5', types:{ x:'double' }, reject:true, hint:'%f で入力できるのはfloat型' },
+      { name:'T3B scanf floatに%lfは型不一致', body:'float x;\n    scanf("%lf", &x);', input:'1.5', types:{ x:'float' }, reject:true, hint:'%lf で入力できるのはdouble型' },
+      { name:'T3B scanf intに%fは型不一致', body:'int x;\n    scanf("%f", &x);', input:'1.5', types:{ x:'int' }, reject:true, hint:'%f で入力できるのはfloat型' },
+      { name:'T3B scanf intに%lfは型不一致', body:'int x;\n    scanf("%lf", &x);', input:'1.5', types:{ x:'int' }, reject:true, hint:'%lf で入力できるのはdouble型' },
+      { name:'T3B scanf floatに%dは型不一致', body:'float x;\n    scanf("%d", &x);', input:'42', types:{ x:'float' }, reject:true, hint:'%d で入力できるのはint型' },
+      { name:'T3B scanf doubleに%dは型不一致', body:'double x;\n    scanf("%d", &x);', input:'42', types:{ x:'double' }, reject:true, hint:'%d で入力できるのはint型' },
+      { name:'T3B scanf 不正文字列を拒否', body:'float x;\n    scanf("%f", &x);', input:'abc', types:{ x:'float' }, reject:true, hint:'数値として読み取れない' },
+      { name:'T3B scanf suffix入力を拒否', body:'float x;\n    scanf("%f", &x);', input:'1.5f', types:{ x:'float' }, reject:true, hint:'数値として読み取れない' },
+      { name:'T3B scanf 指数表記を拒否', body:'double x;\n    scanf("%lf", &x);', input:'1e3', types:{ x:'double' }, reject:true, hint:'数値として読み取れない' },
+      { name:'T3B scanf NaNを拒否', body:'double x;\n    scanf("%lf", &x);', input:'NaN', types:{ x:'double' }, reject:true, hint:'数値として読み取れない' },
+      { name:'T3B scanf Infinityを拒否', body:'float x;\n    scanf("%f", &x);', input:'Infinity', types:{ x:'float' }, reject:true, hint:'数値として読み取れない' },
+      { name:'T3B scanf double非有限入力を拒否', body:'double x;\n    scanf("%lf", &x);', input:'9'.repeat(310), types:{ x:'double' }, reject:true, hint:'有限の数値ではありません' },
+      { name:'T3B scanf float範囲外を拒否', body:'float x;\n    scanf("%f", &x);', input:'9'.repeat(40), types:{ x:'float' }, reject:true, hint:'floatで扱える範囲' },
+      { name:'T3B scanf int float double連続', body:'int a;\n    float b;\n    double c;\n    scanf("%d", &a);\n    scanf("%f", &b);\n    scanf("%lf", &c);', input:'10\n1.5\n2.25', types:{ a:'int', b:'float', c:'double' }, values:{ a:10, b:1.5, c:2.25 }, steps:['入力値 10', '入力値 1.5', '入力値 2.25'] },
+      { name:'T3B scanf 拒否時の既存値維持', body:'float x = 3.5f;\n    scanf("%lf", &x);', input:'9.25', types:{ x:'float' }, values:{ x:3.5 }, reject:true, shown:['x = 3.5'] },
+      { name:'T3B scanf int %d回帰', body:'int x;\n    scanf("%d", &x);', input:'42', types:{ x:'int' }, values:{ x:42 } },
+      { name:'T3B scanf 小数入力後printf', body:'float x;\n    scanf("%f", &x);\n    printf("%.1f", x);', input:'1.5', types:{ x:'float' }, values:{ x:1.5 }, output:'1.5' },
+      { name:'T3B scanf 複数target未対応', body:'int a;\n    int b;\n    scanf("%d %d", &a, &b);', input:'1\n2', types:{ a:'int', b:'int' }, reject:true, shown:['a = 未初期化','b = 未初期化'], hint:'このscanf形式は未対応' },
+      { name:'T3B scanf %e未対応', body:'double x;\n    scanf("%e", &x);', input:'1.5', types:{ x:'double' }, reject:true, hint:'このscanf形式は未対応' }
+    ];
+    testCases.push(...stageT3BScanfTests.map(test => ({
+      name:test.name,
+      code:makeMainCode(`    ${test.body}\n    return 0;`),
+      input:test.input,
+      expect:{
+        scalarTypes:test.types, scalarValues:test.values, scalarValuesExact:test.exact,
+        variables:test.shown || (test.reject && Object.keys(test.types).length === 1 && !test.values ? [`${Object.keys(test.types)[0]} = 未初期化`] : []),
+        output:test.output,
+        warningMin:test.reject ? 1 : undefined, warningMax:test.reject ? undefined : 0,
+        hintsInclude:test.hint ? [test.hint] : [],
+        stepsInclude:test.step ? [test.step] : [], stepsInOrder:test.steps
       }
     })));
 
