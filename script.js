@@ -1423,12 +1423,49 @@ function makeInitialValueExplanation(name, expr, result, type = 'int', assignedV
   };
 }
 
-function formatPrintfString(format, values){
+// 対応する指定子だけを左から読み、引数との対応を確定してから出力します。
+function parsePrintfFormat(format){
+  const parts = [];
+  const specifiers = [];
+  let literal = '';
+  for(let index = 0; index < format.length; index++){
+    const char = format[index];
+    if(char === '\\' && index + 1 < format.length){
+      literal += char + format[++index];
+      continue;
+    }
+    if(char !== '%'){
+      literal += char;
+      continue;
+    }
+    if(literal){
+      parts.push({ literal });
+      literal = '';
+    }
+    const match = format.slice(index).match(/^%(?:\.(\d+))?(l)?([df])/);
+    if(!match || (match[3] === 'd' && (match[1] !== undefined || match[2]))){
+      return { ok:false, error:'このprintf書式は現在未対応です。%d、%f、%lfと、小数点以下0～20桁の%.Nf／%.Nlfを使用してください。' };
+    }
+    const precision = match[1] === undefined ? 6 : Number(match[1]);
+    if(match[1] !== undefined && (!Number.isSafeInteger(precision) || precision > 20)){
+      return { ok:false, error:'小数点以下の表示桁数は、Visualizerの安全上限である0～20桁にしてください。これはC言語自体の制限ではありません。' };
+    }
+    const specifier = { type:match[3], precision };
+    specifiers.push(specifier);
+    parts.push({ specifier });
+    index += match[0].length - 1;
+  }
+  if(literal) parts.push({ literal });
+  return { ok:true, parts, specifiers };
+}
+
+function formatPrintfString(parsed, values){
   let index = 0;
-  let text = format.replace(/%d/g, () => {
+  let text = parsed.parts.map(part => {
+    if(part.literal !== undefined) return part.literal;
     const value = values[index++];
-    return value !== undefined ? String(value) : '%d';
-  });
+    return part.specifier.type === 'd' ? String(value) : value.toFixed(part.specifier.precision);
+  }).join('');
   text = text
     .replace(/\\n/g, '\n')
     .replace(/\\t/g, '\t')
@@ -2137,45 +2174,60 @@ function visualizeCode(){
         );
       }
 
-      const scanfMatch = trimmed.match(/^scanf\s*\(\s*"%d"\s*,\s*&\s*([A-Za-z_]\w*)\s*\)\s*;$/);
+      const scanfMatch = trimmed.match(/^scanf\s*\(\s*"(%d|%f|%lf)"\s*,\s*&\s*([A-Za-z_]\w*)\s*\)\s*;$/);
       if(!scanfMatch){
         return stopScanf(
           'このscanf形式は未対応',
-          '現在は <code>scanf("%d", &amp;変数);</code> の形で、宣言済みのint変数へ整数を1つ入力する場合に対応しています。'
+          '現在は <code>scanf("%d", &amp;int変数);</code>、<code>scanf("%f", &amp;float変数);</code>、<code>scanf("%lf", &amp;double変数);</code> に対応しています。'
         );
       }
 
-      const name = scanfMatch[1];
+      const specifier = scanfMatch[1];
+      const name = scanfMatch[2];
+      const targetType = { '%d':'int', '%f':'float', '%lf':'double' }[specifier];
       if(!hasOwnSymbol(variables, name)){
         return stopScanf(
           'scanfの変数が宣言されていません',
           `変数 <code>${name}</code> が先に <code>int ${name};</code> のように宣言されているか確認してください。`
         );
       }
-      if(getScalarType(name) !== 'int'){
-        return stopScanf('scanfの型が一致しません', '%d で入力できるのはint型の変数だけです。');
+      if(getScalarType(name) !== targetType){
+        const message = specifier === '%d'
+          ? '%d で入力できるのはint型の変数だけです。'
+          : `${specifier} で入力できるのは${targetType}型の変数だけです。`;
+        return stopScanf('scanfの型が一致しません', message);
       }
 
       if(scanfValueIndex >= scanfValues.length){
         return stopScanf(
           'scanfの入力値が足りません',
-          'scanfで使う入力値が足りません。「入力値（scanf用）」に整数を追加してください。'
+          'scanfで使う入力値が足りません。「入力値（scanf用）」に数値を追加してください。'
         );
       }
 
       const inputText = scanfValues[scanfValueIndex];
-      if(!/^[-+]?\d+$/.test(inputText)){
+      const validInput = specifier === '%d'
+        ? /^[-+]?\d+$/.test(inputText)
+        : /^[-+]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(inputText);
+      if(!validInput){
         return stopScanf(
-          'scanfで整数を読み取れません',
-          'scanfで整数として読み取れない入力値です。1行に1つ、整数を入力してください。'
+          specifier === '%d' ? 'scanfで整数を読み取れません' : 'scanfで小数を読み取れません',
+          specifier === '%d'
+            ? 'scanfで整数として読み取れない入力値です。1行に1つ、整数を入力してください。'
+            : 'scanfで数値として読み取れない入力値です。1行に1つ、整数または小数を入力してください。'
         );
       }
 
       const inputValue = Number(inputText);
+      const converted = convertScalarValue(inputValue, targetType);
+      if(!converted.ok){
+        return stopScanf('scanfの入力値を確認', escapeHtml(converted.error));
+      }
       scanfValueIndex++;
-      setScalarValue(name, inputValue);
-      addAnalysis(analysis, lineNo, `入力値 <code>${escapeHtml(inputText)}</code> を整数として受け取り、変数 <code>${name}</code> に代入します。`);
-      addStep(lineNo, `入力値 ${escapeHtml(inputText)} を整数として受け取り、変数 ${name} に代入しました。`);
+      setScalarValue(name, converted.value);
+      const kind = targetType === 'int' ? '整数' : `${targetType}型の値`;
+      addAnalysis(analysis, lineNo, `入力値 <code>${escapeHtml(inputText)}</code> を${kind}として受け取り、変数 <code>${name}</code> に代入します。`);
+      addStep(lineNo, `入力値 ${escapeHtml(inputText)} を${kind}として受け取り、変数 ${name} に代入しました。`);
       return;
     }
 
@@ -2333,16 +2385,29 @@ function visualizeCode(){
         return insideLoop ? 'execution-error' : undefined;
       }
 
+      const parsedFormat = parsePrintfFormat(format);
+      if(!parsedFormat.ok){
+        addAnalysis(analysis, lineNo, 'printfの書式を読み取れないため、この行は表示しません。');
+        addHint(hints, lineNo, 'printfの書式を確認', escapeHtml(parsedFormat.error));
+        warningLines.add(lineNo);
+        return insideLoop ? 'execution-error' : undefined;
+      }
+
       const argText = printfMatch[2] || '';
       const args = argText ? splitArgs(argText) : [];
       const values = [];
       const results = [];
-      const readableArgs = [];
       let ok = true;
       let error = '';
       let failedResult = null;
 
-      for(const arg of args){
+      if(args.length !== parsedFormat.specifiers.length){
+        ok = false;
+        error = 'printfの書式指定子と引数の数が一致しません。';
+      }
+
+      for(const [index, arg] of args.entries()){
+        if(!ok) break;
         const result = evaluateExpression(
           arg,
           variables,
@@ -2350,9 +2415,20 @@ function visualizeCode(){
           variableTypes
         );
         if(result.ok){
+          const specifier = parsedFormat.specifiers[index];
+          const typeMatches = specifier.type === 'd'
+            ? result.type === 'int'
+            : result.type === 'float' || result.type === 'double';
+          if(!typeMatches){
+            ok = false;
+            error = specifier.type === 'd'
+              ? '%dにはint型の値だけを渡してください。'
+              : '%f／%lfにはfloat型またはdouble型の値を渡してください。';
+            failedResult = result;
+            break;
+          }
           values.push(result.value);
           results.push(result);
-          readableArgs.push(`${escapeHtml(arg)} → ${result.value}`);
         }else{
           ok = false;
           error = result.error;
@@ -2361,17 +2437,13 @@ function visualizeCode(){
         }
       }
 
-      if(ok && (/%[-+0-9.]*l?[fFgGeE]/.test(format) || results.some(result => result.type !== 'int'))){
-        ok = false;
-        error = 'float／doubleのprintf表示は次のStageで対応します。%dにはint型の値だけを渡してください。';
-      }
       if(ok){
-        const formatted = formatPrintfString(format, values);
+        const formatted = formatPrintfString(parsedFormat, values);
         output += formatted.text;
         const visibleText = makeVisibleDisplayText(formatted.text);
         let explanation;
         if(args.length){
-          const argDescriptions = args.map((arg, i) => describePrintfArg(arg, values[i]));
+          const argDescriptions = args.map((arg, i) => describePrintfArg(arg, displayScalarValue(values[i], results[i].type)));
           if(args.length === 1 && results[0].comparison){
             explanation = `${describeComparison(results[0])} 比較結果の <code>${values[0]}</code> をprintfで画面に表示しました。`;
           }else if(args.length === 1){
@@ -2391,10 +2463,6 @@ function visualizeCode(){
           true,
           arrayAccess ? [makeArrayView(arrayAccess)] : []
         );
-        if((format.match(/%d/g) || []).length !== args.length){
-          addHint(hints, lineNo, 'printfの指定と値の数を確認', '書式指定子 <code>%d</code> の数と、後ろに並べる値の数が合っているか確認してみましょう。');
-          warningLines.add(lineNo);
-        }
       }else{
         if(hasSupportedArrayRead){
           const errorContext = getArrayExpressionErrorContext(failedResult || {});
