@@ -4320,7 +4320,7 @@
       { name:'T3A最終 先頭小数点literal', body:'double x = .5;', types:{ x:'double' }, values:{ x:0.5 } },
       { name:'T3A最終 末尾小数点literal', body:'double x = 1.;', types:{ x:'double' }, values:{ x:1 } },
       { name:'T3A最終 指数表記は未対応', body:'double x = 1.0e3;', types:{}, warningMin:1, absent:['x ='] },
-      { name:'T3A最終 char未対応', body:'char x = 1;', types:{}, warningMin:1, absent:['x ='] },
+      { name:'T4A移行 char宣言を確認', body:'char x = 1;', types:{ x:'char' }, values:{ x:1 } },
       { name:'T3A最終 long未対応', body:'long x = 1;', types:{}, warningMin:1, absent:['x ='] },
       { name:'T3A最終 short未対応', body:'short x = 1;', types:{}, warningMin:1, absent:['x ='] },
       { name:'T3A最終 unsigned未対応', body:'unsigned x = 1;', types:{}, warningMin:1, absent:['x ='] },
@@ -4438,6 +4438,184 @@
         warningMin:test.reject ? 1 : undefined, warningMax:test.reject ? undefined : 0,
         hintsInclude:test.hint ? [test.hint] : [],
         stepsInclude:test.step ? [test.step] : [], stepsInOrder:test.steps
+      }
+    })));
+
+    // T4A：char値はnumber＋型metadata。文字定数はint、算術はint昇格です。
+    const stageT4ATests = [
+      { name:'T4A 未初期化char', body:String.raw`char c;`, types:{ c:'char' }, shown:['c = 未初期化'] },
+      { name:'T4A 文字Aをcharへ初期化', body:String.raw`char c = 'A';`, types:{ c:'char' }, values:{ c:65 }, shown:["c = 'A' (65)"], expression:{ source:"'A'", type:'int', value:65 }, hintStep:'char型の箱' },
+      { name:'T4A 数値65をcharへ初期化', body:String.raw`char c = 65;`, types:{ c:'char' }, values:{ c:65 }, shown:["c = 'A' (65)"] },
+      { name:'T4A 数値0をcharへ初期化', body:String.raw`char c = 0;`, types:{ c:'char' }, values:{ c:0 }, shown:["c = '\\0' (0)"] },
+      { name:'T4A 改行escape', body:String.raw`char c = '\n';`, types:{ c:'char' }, values:{ c:10 }, shown:["c = '\\n' (10)"], expression:{ source:String.raw`'\n'`, type:'int', value:10 } },
+      { name:'T4A タブescape', body:String.raw`char c = '\t';`, types:{ c:'char' }, values:{ c:9 }, shown:["c = '\\t' (9)"], expression:{ source:String.raw`'\t'`, type:'int', value:9 } },
+      { name:'T4A NUL escape', body:String.raw`char c = '\0';`, types:{ c:'char' }, values:{ c:0 }, expression:{ source:String.raw`'\0'`, type:'int', value:0 } },
+      { name:'T4A backslash escape', body:String.raw`char c = '\\';`, types:{ c:'char' }, values:{ c:92 }, expression:{ source:String.raw`'\\'`, type:'int', value:92 } },
+      { name:'T4A single quote escape', body:String.raw`char c = '\'';`, types:{ c:'char' }, values:{ c:39 }, expression:{ source:String.raw`'\''`, type:'int', value:39 } },
+      { name:'T4A double quote escape', body:String.raw`char c = '\"';`, types:{ c:'char' }, values:{ c:34 }, expression:{ source:String.raw`'\"'`, type:'int', value:34 } },
+      { name:'T4A return escape', body:String.raw`char c = '\r';`, types:{ c:'char' }, values:{ c:13 }, expression:{ source:String.raw`'\r'`, type:'int', value:13 } },
+      { name:'T4A 文字0はint48', body:String.raw`char c = '0';`, types:{ c:'char' }, values:{ c:48 }, expression:{ source:"'0'", type:'int', value:48 } },
+      { name:'T4A 英字と数字の基本ASCII', body:String.raw`char a = 'Z', b = 'a', c = 'z', d = '9';`, types:{ a:'char',b:'char',c:'char',d:'char' }, values:{ a:90,b:97,c:122,d:57 } },
+      { name:'T4A spaceはint32', body:String.raw`char c = ' ';`, types:{ c:'char' }, values:{ c:32 }, expression:{ source:"' '", type:'int', value:32 } },
+      { name:'T4A 記号の文字定数', body:String.raw`char a = '!', b = '?';`, types:{ a:'char', b:'char' }, values:{ a:33, b:63 }, expression:{ source:"'?'", type:'int', value:63 } },
+      { name:'T4A 演算子plusを文字定数として認識', body:String.raw`char c = '+';`, types:{ c:'char' }, values:{ c:43 }, expression:{ source:"'+'", type:'int', value:43 } },
+      { name:'T4A 演算子starを文字定数として認識', body:String.raw`char c = '*';`, types:{ c:'char' }, values:{ c:42 }, expression:{ source:"'*'", type:'int', value:42 } },
+      { name:'T4A 左丸括弧を文字定数として認識', body:String.raw`char c = '(';`, types:{ c:'char' }, values:{ c:40 }, expression:{ source:"'('", type:'int', value:40 } },
+      { name:'T4A 比較記号を文字定数として認識', body:String.raw`char c = '<';`, types:{ c:'char' }, values:{ c:60 }, expression:{ source:"'<'", type:'int', value:60 } },
+      { name:'T4A セミコロン文字を文末と誤認しない', body:String.raw`char c = ';';`, types:{ c:'char' }, values:{ c:59 } },
+      { name:'T4A コメント記号はcharの内部', body:String.raw`char c = '/'; // 'comment'
+    char d = '*';`, types:{ c:'char', d:'char' }, values:{ c:47, d:42 } },
+      { name:'T4A 文字のカンマで複数宣言を分割しない', body:String.raw`char a = ',', b = 'B';`, types:{ a:'char', b:'char' }, values:{ a:44, b:66 } },
+      { name:'T4A 複数char宣言左から評価', body:String.raw`char a = 'A', b = a + 1, c = b + 1;`, types:{ a:'char', b:'char', c:'char' }, values:{ a:65, b:66, c:67 }, expression:{ source:'a + 1', variables:{ a:65 }, variableTypes:{ a:'char' }, type:'int', value:66 } },
+      { name:'T4A 複数char未初期化宣言', body:String.raw`char a, b, c;`, types:{ a:'char', b:'char', c:'char' }, shown:['a = 未初期化','b = 未初期化','c = 未初期化'] },
+      { name:'T4A 複数char宣言atomic rollback', body:String.raw`int keep = 99;
+    char a = 'A', b = unknown + 1, c = 'C';`, types:{ keep:'int' }, values:{ keep:99 }, warn:true, absent:['a =','b =','c ='] },
+      { name:'T4A 複数char宣言範囲外でatomic rollback', body:String.raw`int keep = 99;
+    char a = 'A', b = 128, c = 'C';`, types:{ keep:'int' }, values:{ keep:99 }, warn:true, hint:'Visualizerではchar', absent:['a =','b =','c ='] },
+      { name:'T4A 複数char内の重複拒否', body:String.raw`char a = 'A', a = 'B';`, types:{}, warn:true, absent:['a ='] },
+      { name:'T4A 別文再宣言は既存仕様に従う', body:String.raw`char c = 'A';
+    char c = 'B';`, types:{ c:'char' }, values:{ c:66 } },
+      { name:'T4A bare char参照type char', body:String.raw`char c = 'A';`, types:{ c:'char' }, values:{ c:65 }, expression:{ source:'c', variables:{ c:65 }, variableTypes:{ c:'char' }, type:'char', value:65 } },
+      { name:'T4A char同士足し算はint', body:String.raw`char a = 'A';
+    char b = 'B';
+    int x = a + b;`, types:{ a:'char', b:'char', x:'int' }, values:{ a:65, b:66, x:131 }, expression:{ source:'a+b', variables:{ a:65,b:66 }, variableTypes:{ a:'char',b:'char' }, type:'int', value:131 } },
+      { name:'T4A charとintはint', body:String.raw`char a = 'A';
+    int x = a + 1;`, types:{ a:'char', x:'int' }, values:{ a:65, x:66 }, expression:{ source:'a+1', variables:{ a:65 }, variableTypes:{ a:'char' }, type:'int', value:66 } },
+      { name:'T4A charとfloatはfloat', body:String.raw`char a = 'A';
+    float x = a + 1.5f;`, types:{ a:'char', x:'float' }, values:{ a:65, x:66.5 }, expression:{ source:'a+1.5f', variables:{ a:65 }, variableTypes:{ a:'char' }, type:'float', value:66.5 } },
+      { name:'T4A charとdoubleはdouble', body:String.raw`char a = 'A';
+    double x = a + 1.5;`, types:{ a:'char', x:'double' }, values:{ a:65, x:66.5 }, expression:{ source:'a+1.5', variables:{ a:65 }, variableTypes:{ a:'char' }, type:'double', value:66.5 } },
+      { name:'T4A char同士積はint', body:String.raw`char a = 'A';
+    int x = a * a;`, types:{ a:'char', x:'int' }, values:{ a:65, x:4225 }, expression:{ source:'a*a', variables:{ a:65 }, variableTypes:{ a:'char' }, type:'int', value:4225 } },
+      { name:'T4A char同士除算はint', body:String.raw`char a = 'A';
+    char b = 2;
+    int x = a / b;`, types:{ a:'char', b:'char', x:'int' }, values:{ a:65,b:2,x:32 }, expression:{ source:'a/b', variables:{ a:65,b:2 }, variableTypes:{ a:'char',b:'char' }, type:'int', value:32 } },
+      { name:'T4A char単項+はint', body:String.raw`char c = 'A';
+    int x = +c;`, types:{ c:'char', x:'int' }, values:{ c:65, x:65 }, expression:{ source:'+c', variables:{ c:65 }, variableTypes:{ c:'char' }, type:'int', value:65 } },
+      { name:'T4A char単項-はint', body:String.raw`char c = 'A';
+    int x = -c;`, types:{ c:'char', x:'int' }, values:{ c:65, x:-65 }, expression:{ source:'-c', variables:{ c:65 }, variableTypes:{ c:'char' }, type:'int', value:-65 } },
+      { name:'T4A char剰余はint', body:String.raw`char c = 65;
+    int x = c % 10;`, types:{ c:'char', x:'int' }, values:{ c:65, x:5 }, expression:{ source:'c%10', variables:{ c:65 }, variableTypes:{ c:'char' }, type:'int', value:5 } },
+      { name:'T4A char同士剰余はint', body:String.raw`char a = 65;
+    char b = 9;
+    int x = a % b;`, types:{ a:'char',b:'char',x:'int' }, values:{ a:65,b:9,x:2 }, expression:{ source:'a%b', variables:{ a:65,b:9 }, variableTypes:{ a:'char',b:'char' }, type:'int', value:2 } },
+      { name:'T4A floatを含む剰余は拒否継続', body:String.raw`char c = 65;
+    int x;
+    x = c % 2.0f;`, types:{ c:'char',x:'int' }, values:{ c:65 }, warn:true, shown:['x = 未初期化'], hint:'% はint同士' },
+      { name:'T4A charへのdouble代入は0方向', body:String.raw`char c;
+    c = 65.9;`, types:{ c:'char' }, values:{ c:65 } },
+      { name:'T4A charへのfloat代入は0方向', body:String.raw`char c;
+    c = 66.9f;`, types:{ c:'char' }, values:{ c:66 } },
+      { name:'T4A charをintへ代入', body:String.raw`char c = 'A';
+    int x = c;`, types:{ c:'char',x:'int' }, values:{ c:65,x:65 } },
+      { name:'T4A charをfloatへ代入', body:String.raw`char c = 'A';
+    float x = c;`, types:{ c:'char',x:'float' }, values:{ c:65,x:65 } },
+      { name:'T4A charをdoubleへ代入', body:String.raw`char c = 'A';
+    double x = c;`, types:{ c:'char',x:'double' }, values:{ c:65,x:65 } },
+      { name:'T4A 小数を切り捨ててからchar範囲確認', body:String.raw`char c = -0.5;`, types:{ c:'char' }, values:{ c:0 } },
+      { name:'T4A 未初期化charの算術は拒否', body:String.raw`char c;
+    int x;
+    x = c + 1;`, types:{ c:'char',x:'int' }, shown:['c = 未初期化','x = 未初期化'], warn:true, hint:'まだ値が代入されていません' },
+      { name:'T4A charへのunsafe int変換は拒否', body:String.raw`double d = 9007199254740992.0;
+    char c;
+    c = d;`, types:{ d:'double',c:'char' }, values:{ d:9007199254740992 }, shown:['c = 未初期化'], warn:true, hint:'Visualizerではchar' },
+      { name:'T4A charと文字定数の等値比較', body:String.raw`char c = 'A';
+    int x = c == 'A';`, types:{ c:'char',x:'int' }, values:{ c:65,x:1 }, expression:{ source:"c == 'A'", variables:{ c:65 }, variableTypes:{ c:'char' }, type:'int', value:1 } },
+      { name:'T4A charと文字定数の大小比較', body:String.raw`char c = 'A';
+    int x = c < 'Z';`, types:{ c:'char',x:'int' }, values:{ c:65,x:1 }, expression:{ source:"c < 'Z'", variables:{ c:65 }, variableTypes:{ c:'char' }, type:'int', value:1 } },
+      { name:'T4A charとfloatの比較はint', body:String.raw`char c = 'A';
+    int x = c < 65.5f;`, types:{ c:'char',x:'int' }, values:{ c:65,x:1 }, expression:{ source:'c < 65.5f', variables:{ c:65 }, variableTypes:{ c:'char' }, type:'int', value:1 } },
+      { name:'T4A charとdoubleの比較はint', body:String.raw`char c = 'A';
+    int x = c > 65.5;`, types:{ c:'char',x:'int' }, values:{ c:65,x:0 }, expression:{ source:'c > 65.5', variables:{ c:65 }, variableTypes:{ c:'char' }, type:'int', value:0 } },
+      { name:'T4A char同士比較はint', body:String.raw`char a = 'A', b = 'B';
+    int x = a != b;`, types:{ a:'char',b:'char',x:'int' }, values:{ a:65,b:66,x:1 }, expression:{ source:'a != b', variables:{ a:65,b:66 }, variableTypes:{ a:'char',b:'char' }, type:'int', value:1 } },
+      { name:'T4A char条件でif分岐', body:String.raw`char c = 'A';
+    int x = 0;
+    if(c == 'A'){
+        x = 7;
+    }`, types:{ c:'char',x:'int' }, values:{ c:65,x:7 } },
+      { name:'T4A char後置++', body:String.raw`char c = 'A';
+    c++;`, types:{ c:'char' }, values:{ c:66 } },
+      { name:'T4A char後置--', body:String.raw`char c = 'B';
+    c--;`, types:{ c:'char' }, values:{ c:65 } },
+      { name:'T4A char += 1', body:String.raw`char c = 'B';
+    c += 1;`, types:{ c:'char' }, values:{ c:67 } },
+      { name:'T4A char -= 1', body:String.raw`char c = 'B';
+    c -= 1;`, types:{ c:'char' }, values:{ c:65 } },
+      { name:'T4A char更新127超過を拒否', body:String.raw`char c = 127;
+    c++;`, types:{ c:'char' }, values:{ c:127 }, warn:true, hint:'Visualizerではchar' },
+      { name:'T4A char更新0未満を拒否', body:String.raw`char c = 0;
+    c--;`, types:{ c:'char' }, values:{ c:0 }, warn:true, hint:'Visualizerではchar' },
+      { name:'T4A char宣言-1拒否', body:String.raw`char c = -1;`, types:{}, warn:true, hint:'Visualizerではchar', absent:['c ='] },
+      { name:'T4A char宣言128拒否', body:String.raw`char c = 128;`, types:{}, warn:true, hint:'Visualizerではchar', absent:['c ='] },
+      { name:'T4A char宣言1000拒否', body:String.raw`char c = 1000;`, types:{}, warn:true, hint:'Visualizerではchar', absent:['c ='] },
+      { name:'T4A char保存127許可', body:String.raw`char c = 127;`, types:{ c:'char' }, values:{ c:127 } },
+      { name:'T4A char既存値を範囲外代入から保護', body:String.raw`char c = 'A';
+    c = 128;`, types:{ c:'char' }, values:{ c:65 }, warn:true, hint:'Visualizerではchar' },
+      { name:'T4A 空文字定数を拒否', body:String.raw`char c = '';`, types:{}, warn:true, absent:['c ='], badExpression:{ source:"''", includes:'文字定数' } },
+      { name:'T4A 複数文字定数を拒否', body:String.raw`char c = 'AB';`, types:{}, warn:true, absent:['c ='], badExpression:{ source:"'AB'", includes:'文字定数' } },
+      { name:'T4A Unicode文字定数を拒否', body:String.raw`char c = 'あ';`, types:{}, warn:true, absent:['c ='] },
+      { name:'T4A 未対応escapeを拒否', body:String.raw`char c = '\q';`, types:{}, warn:true, absent:['c ='], badExpression:{ source:String.raw`'\q'`, includes:'文字定数' } },
+      { name:'T4A hex escapeを拒否', body:String.raw`char c = '\x41';`, types:{}, warn:true, absent:['c ='], badExpression:{ source:String.raw`'\x41'`, includes:'文字定数' } },
+      { name:'T4A octal escapeを拒否', body:String.raw`char c = '\101';`, types:{}, warn:true, absent:['c ='] },
+      { name:'T4A wide文字定数を拒否', body:String.raw`char c = L'A';`, types:{}, warn:true, absent:['c ='] },
+      { name:'T4A 閉じquoteのない文字定数を拒否', body:String.raw`char c = 'A;`, types:{}, warn:true, absent:['c ='] },
+      { name:'T4A 余分なquoteを拒否', body:String.raw`char c = 'A'';`, types:{}, warn:true, absent:['c ='] },
+      { name:'T4A char添字は既存境界で拒否', body:String.raw`char i = 1;
+    int a[2] = {10, 20};
+    int x;
+    x = a[i];`, types:{ i:'char',x:'int' }, values:{ i:1 }, shown:['x = 未初期化'], arrays:[{ name:'a',values:['10','20'] }], finalActiveCount:0, warn:true, hint:'int型' },
+      { name:'T4A char配列は未対応', body:String.raw`char a[2];`, types:{}, warn:true, hint:'この型の配列は未対応', arrayCount:0 },
+      { name:'T4A printf %cは未対応', body:String.raw`char c = 'A';
+    printf("%c", c);`, types:{ c:'char' }, values:{ c:65 }, warn:true, output:'出力はまだありません。', hint:'このprintf書式は現在未対応' },
+      { name:'T4A scanf %cは未対応', body:String.raw`char c;
+    scanf("%c", &c);`, types:{ c:'char' }, shown:['c = 未初期化'], warn:true, hint:'このscanf形式は未対応' },
+      { name:'T4A charを%dへは今回未対応', body:String.raw`char c = 'A';
+    printf("%d", c);`, types:{ c:'char' }, values:{ c:65 }, warn:true, output:'出力はまだありません。', hint:'%dにはint型' },
+      { name:'T4A int型の文字定数を%dで表示', body:String.raw`printf("%d", 'A');`, types:{}, output:'65' },
+      { name:'T4A charへscanf %d型不一致', body:String.raw`char c;
+    scanf("%d", &c);`, input:'65', types:{ c:'char' }, shown:['c = 未初期化'], warn:true, hint:'%d で入力できるのはint型' },
+      { name:'T4A printfのsingle quote文字列回帰', body:String.raw`int x = 3;
+    printf("'%d'", x);`, types:{ x:'int' }, values:{ x:3 }, output:"'3'" },
+      { name:'T4A printf通常文字列回帰', body:String.raw`printf("A");`, types:{}, output:'A' },
+      { name:'T4A 左波括弧は文字定数', body:String.raw`char c = '{';`, types:{ c:'char' }, values:{ c:123 } },
+      { name:'T4A 右波括弧は文字定数', body:String.raw`char c = '}';`, types:{ c:'char' }, values:{ c:125 } },
+      { name:'T4A 括弧付き文字定数をintで比較', body:String.raw`char c = '(';
+    int x = (c == '(');`, types:{ c:'char',x:'int' }, values:{ c:40,x:1 }, expression:{ source:"(c == '(')", variables:{ c:40 }, variableTypes:{ c:'char' }, type:'int', value:1 } },
+      { name:'T4A 右括弧文字でif条件', body:String.raw`char c = ')';
+    int x = 0;
+    if(c == ')'){
+        x = 1;
+    }`, types:{ c:'char',x:'int' }, values:{ c:41,x:1 } },
+      { name:'T4A intカウンタとchar条件のwhile', body:String.raw`char limit = 2;
+    int x = 0;
+    while(x < limit){
+        x++;
+    }`, types:{ limit:'char',x:'int' }, values:{ limit:2,x:2 } },
+      { name:'T4A intカウンタとchar条件のfor', body:String.raw`char limit = 2;
+    int i = 0;
+    int x = 0;
+    for(i = 0; i < limit; i++){
+        x += 1;
+    }`, types:{ limit:'char',i:'int',x:'int' }, values:{ limit:2,i:2,x:2 } },
+      { name:'T4A int添字は維持', body:String.raw`int a[2] = {10, 20};
+    int i = 1;
+    int x = a[i];`, types:{ i:'int',x:'int' }, values:{ i:1,x:20 }, arrays:[{ name:'a',values:['10','20'] }] }
+    ];
+    testCases.push(...stageT4ATests.map(test => ({
+      name:test.name,
+      code:makeMainCode(`    ${test.body}\n    return 0;`),
+      input:test.input,
+      expect:{
+        scalarTypes:test.types, scalarValues:test.values,
+        scalarUpdateExpression:test.expression ? { ...test.expression, variables:test.expression.variables || {}, variableTypes:test.expression.variableTypes || {} } : undefined,
+        scalarExpressionError:test.badExpression,
+        variables:test.shown, variablesExclude:test.absent,
+        warningMin:test.warn ? 1 : undefined, warningMax:test.warn ? undefined : 0,
+        hintsInclude:test.hint ? [test.hint] : [], stepsInclude:test.hintStep ? [test.hintStep] : [],
+        output:test.output, arrays:test.arrays, arrayCount:test.arrayCount,
+        finalActiveCount:test.finalActiveCount, syntaxClasses:test.body.includes("'") || test.body.includes('"')
+          ? ['syntax-type','syntax-string'] : ['syntax-type']
       }
     })));
 
@@ -4877,4 +5055,3 @@
   </script>
 </body>
 </html>
-
