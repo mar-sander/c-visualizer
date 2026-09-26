@@ -38,13 +38,13 @@ int main(void){
       </div>
       <div class="scanf-input-group">
         <label class="scanf-input-label" for="scanfInput">入力値（scanf用）</label>
-        <p class="scanf-input-help">scanfが複数ある場合は、上から順に1行ずつ使います。</p>
+        <p class="scanf-input-help">scanfごとに上から1行ずつ使います。%cは1行に1文字です。実際のCでは%cが空白や直前の改行を読む場合があります。</p>
         <textarea
           id="scanfInput"
           class="scanf-input"
           rows="3"
-          placeholder="例：&#10;75&#10;1.5&#10;-2.25"
-          aria-label="scanf用の数値入力"
+          placeholder="例：&#10;75&#10;A&#10;1.5"
+          aria-label="scanf用の入力"
           spellcheck="false"
         ></textarea>
       </div>

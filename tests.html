@@ -4375,7 +4375,7 @@
       { name:'T3B printf %e未対応', body:'printf("%e", 1.5);', reject:true, hint:'このprintf書式は現在未対応' },
       { name:'T3B printf %g未対応', body:'printf("%g", 1.5);', reject:true, hint:'このprintf書式は現在未対応' },
       { name:'T3B printf %s未対応', body:'printf("%s", 1);', reject:true, hint:'このprintf書式は現在未対応' },
-      { name:'T3B printf %c未対応', body:'printf("%c", 65);', reject:true, hint:'このprintf書式は現在未対応' },
+      { name:'T3BからT4B printf %c対応', body:'printf("%c", 65);', output:'A' },
       { name:'T3B printf %%未対応', body:'printf("%%");', reject:true, hint:'printfの%%は未対応' },
       { name:'T3B printf width未対応', body:'printf("%8.2f", 1.5);', reject:true, hint:'このprintf書式は現在未対応' },
       { name:'T3B printf flags未対応', body:'printf("%+f", 1.5);', reject:true, hint:'このprintf書式は現在未対応' },
@@ -4566,12 +4566,12 @@
     int x;
     x = a[i];`, types:{ i:'char',x:'int' }, values:{ i:1 }, shown:['x = 未初期化'], arrays:[{ name:'a',values:['10','20'] }], finalActiveCount:0, warn:true, hint:'int型' },
       { name:'T4A char配列は未対応', body:String.raw`char a[2];`, types:{}, warn:true, hint:'この型の配列は未対応', arrayCount:0 },
-      { name:'T4A printf %cは未対応', body:String.raw`char c = 'A';
-    printf("%c", c);`, types:{ c:'char' }, values:{ c:65 }, warn:true, output:'出力はまだありません。', hint:'このprintf書式は現在未対応' },
-      { name:'T4A scanf %cは未対応', body:String.raw`char c;
-    scanf("%c", &c);`, types:{ c:'char' }, shown:['c = 未初期化'], warn:true, hint:'このscanf形式は未対応' },
-      { name:'T4A charを%dへは今回未対応', body:String.raw`char c = 'A';
-    printf("%d", c);`, types:{ c:'char' }, values:{ c:65 }, warn:true, output:'出力はまだありません。', hint:'%dにはint型' },
+      { name:'T4AからT4B charを%cで出力', body:String.raw`char c = 'A';
+    printf("%c", c);`, types:{ c:'char' }, values:{ c:65 }, output:'A' },
+      { name:'T4AからT4B scanf char入力', body:String.raw`char c;
+    scanf("%c", &c);`, input:'A', types:{ c:'char' }, values:{ c:65 }, shown:["c = 'A' (65)"] },
+      { name:'T4AからT4B charを%dへ整数昇格', body:String.raw`char c = 'A';
+    printf("%d", c);`, types:{ c:'char' }, values:{ c:65 }, output:'65' },
       { name:'T4A int型の文字定数を%dで表示', body:String.raw`printf("%d", 'A');`, types:{}, output:'65' },
       { name:'T4A charへscanf %d型不一致', body:String.raw`char c;
     scanf("%d", &c);`, input:'65', types:{ c:'char' }, shown:['c = 未初期化'], warn:true, hint:'%d で入力できるのはint型' },
@@ -4616,6 +4616,67 @@
         output:test.output, arrays:test.arrays, arrayCount:test.arrayCount,
         finalActiveCount:test.finalActiveCount, syntaxClasses:test.body.includes("'") || test.body.includes('"')
           ? ['syntax-type','syntax-string'] : ['syntax-type']
+      }
+    })));
+
+    // T4B：printfの整数昇格とscanfのchar*型照合、入力行の保持を確認します。
+    const stageT4BTests = [
+      { name:'T4B printf charを%c', body:String.raw`char c = 'A'; printf("%c", c);`, types:{ c:'char' }, values:{ c:65 }, output:'A', step:"'A' (65)" },
+      { name:'T4B printf 文字定数はint', body:String.raw`printf("%c", 'A');`, output:'A', expr:{ source:"'A'", type:'int', value:65 } },
+      { name:'T4B printf comma文字定数は単一引数', body:String.raw`printf("%c", ',');`, output:',' },
+      { name:'T4B printf 括弧文字定数は単一引数', body:String.raw`printf("%c", ')');`, output:')' },
+      { name:'T4B printf int 65を%c', body:'printf("%c", 65);', output:'A' },
+      { name:'T4B printf charを%dへ昇格', body:String.raw`char c = 'A'; printf("%d", c);`, types:{ c:'char' }, values:{ c:65 }, output:'65', step:'65' },
+      { name:'T4B printf 文字定数を%d', body:String.raw`printf("%d", 'A');`, output:'65' },
+      { name:'T4B printf char算術結果はint', body:String.raw`char c = 'A'; printf("%c", c + 1);`, types:{ c:'char' }, values:{ c:65 }, output:'B', expr:{ source:'c + 1', variables:{ c:65 }, variableTypes:{ c:'char' }, type:'int', value:66 } },
+      { name:'T4B printf charとintを混在', body:String.raw`char c = 'A'; printf("%c %d", c, c);`, types:{ c:'char' }, values:{ c:65 }, output:'A 65' },
+      { name:'T4B printf charとdoubleを混在', body:String.raw`char c = 'A'; double x = 1.25; printf("%c %.2f", c, x);`, types:{ c:'char',x:'double' }, values:{ c:65,x:1.25 }, output:'A 1.25' },
+      { name:'T4B printf floatを%cで拒否', body:'float x = 65.0f; printf("%c", x);', types:{ x:'float' }, values:{ x:65 }, reject:true, hint:'%cにはint型またはchar型' },
+      { name:'T4B printf doubleを%cで拒否', body:'double x = 65.0; printf("%c", x);', types:{ x:'double' }, values:{ x:65 }, reject:true, hint:'%cにはint型またはchar型' },
+      { name:'T4B printf charを%fで拒否', body:String.raw`char c = 'A'; printf("%f", c);`, types:{ c:'char' }, values:{ c:65 }, reject:true, hint:'float型またはdouble型' },
+      { name:'T4B printf charを%lfで拒否', body:String.raw`char c = 'A'; printf("%lf", c);`, types:{ c:'char' }, values:{ c:65 }, reject:true, hint:'float型またはdouble型' },
+      { name:'T4B printf %cで128を拒否', body:'printf("%c", 128);', reject:true, hint:'Visualizerの安全な対応範囲0～127' },
+      { name:'T4B printf %cで負数を拒否', body:'printf("%c", -1);', reject:true, hint:'Visualizerの安全な対応範囲0～127' },
+      { name:'T4B printf newline文字', body:String.raw`printf("%c", '\n');`, raw:'\n', step:String.raw`'\n' (10)` },
+      { name:'T4B printf tab文字', body:String.raw`printf("%c", '\t');`, raw:'\t', step:String.raw`'\t' (9)` },
+      { name:'T4B printf backslashの後のnは変換しない', body:String.raw`printf("%c%c", '\\', 'n');`, raw:String.raw`\n` },
+      { name:'T4B printf int配列から%c', body:'int a[2] = {65, 66}; printf("%c", a[0]);', output:'A', arrayStep:[{ name:'a', activeIndex:'[0]', accessLabel:'参照' }] },
+      { name:'T4B printf 後半型不一致で部分出力なし', body:String.raw`char c = 'A'; double x = 2.5; printf("HEAD"); printf("%c %d", c, x);`, types:{ c:'char',x:'double' }, values:{ c:65,x:2.5 }, output:'HEAD', reject:true, hint:'%dにはint型', exclude:'画面に「A ' },
+      { name:'T4B printf 後半%c範囲外で部分出力なし', body:'printf("HEAD"); printf("%c %c", 65, 128);', output:'HEAD', reject:true, hint:'Visualizerの安全な対応範囲0～127' },
+      { name:'T4B printf %.2cは未対応', body:'printf("%.2c", 65);', reject:true, hint:'このprintf書式は現在未対応' },
+      { name:'T4B printf %lcは未対応', body:'printf("%lc", 65);', reject:true, hint:'このprintf書式は現在未対応' },
+      { name:'T4B printf %3cは未対応', body:'printf("%3c", 65);', reject:true, hint:'このprintf書式は現在未対応' },
+      { name:'T4B scanf Aは65', body:'char c; scanf("%c", &c);', input:'A', types:{ c:'char' }, values:{ c:65 }, shown:["c = 'A' (65)"], step:"'A' (65)" },
+      { name:'T4B scanf 0は文字48', body:'char c; scanf("%c", &c);', input:'0', types:{ c:'char' }, values:{ c:48 } },
+      { name:'T4B scanf !は33', body:'char c; scanf("%c", &c);', input:'!', types:{ c:'char' }, values:{ c:33 } },
+      { name:'T4B scanf single spaceは32', body:'char c; scanf("%c", &c);', input:' ', types:{ c:'char' }, values:{ c:32 }, shown:["c = ' ' (32)"] },
+      { name:'T4B scanf 65は2文字で拒否', body:'char c; scanf("%c", &c);', input:'65', types:{ c:'char' }, shown:['c = 未初期化'], reject:true, hint:'1行に基本ASCIIの1文字' },
+      { name:'T4B scanf 引用符付きAは拒否', body:'char c; scanf("%c", &c);', input:"'A'", types:{ c:'char' }, shown:['c = 未初期化'], reject:true, hint:'引用符や複数文字' },
+      { name:'T4B scanf 日本語は拒否', body:'char c; scanf("%c", &c);', input:'あ', types:{ c:'char' }, shown:['c = 未初期化'], reject:true, hint:'基本ASCII' },
+      { name:'T4B scanf emojiは拒否', body:'char c; scanf("%c", &c);', input:'😀', types:{ c:'char' }, shown:['c = 未初期化'], reject:true, hint:'基本ASCII' },
+      { name:'T4B scanf int*へ%cを拒否', body:'int x; scanf("%c", &x);', input:'A', types:{ x:'int' }, shown:['x = 未初期化'], reject:true, hint:'%c で入力できるのはchar型' },
+      { name:'T4B scanf float*へ%cを拒否', body:'float x; scanf("%c", &x);', input:'A', types:{ x:'float' }, shown:['x = 未初期化'], reject:true, hint:'%c で入力できるのはchar型' },
+      { name:'T4B scanf double*へ%cを拒否', body:'double x; scanf("%c", &x);', input:'A', types:{ x:'double' }, shown:['x = 未初期化'], reject:true, hint:'%c で入力できるのはchar型' },
+      { name:'T4B scanf char*へ%dを拒否', body:'char c; scanf("%d", &c);', input:'65', types:{ c:'char' }, shown:['c = 未初期化'], reject:true, hint:'%d で入力できるのはint型' },
+      { name:'T4B scanf 失敗時に旧値維持', body:String.raw`char c = 'A'; scanf("%c", &c);`, input:'65', types:{ c:'char' }, values:{ c:65 }, reject:true, hint:'基本ASCII' },
+      { name:'T4B scanf int char float double連続', body:'int n; char c; float f; double d; scanf("%d", &n); scanf("%c", &c); scanf("%f", &f); scanf("%lf", &d);', input:'10\nA\n1.5\n2.25', types:{ n:'int',c:'char',f:'float',d:'double' }, values:{ n:10,c:65,f:1.5,d:2.25 } },
+      { name:'T4B scanf 入力不足', body:'char c; scanf("%c", &c);', input:'', types:{ c:'char' }, shown:['c = 未初期化'], reject:true, hint:'入力値が足りません' },
+      { name:'T4B scanf 失敗後の入力値は保持', body:'char c; scanf("%c", &c);', input:'AB\nC', types:{ c:'char' }, shown:['c = 未初期化'], reject:true, hint:'基本ASCII' },
+      { name:'T4B scanf format空白%c未対応', body:'char c; scanf(" %c", &c);', input:'A', types:{ c:'char' }, shown:['c = 未初期化'], reject:true, hint:'このscanf形式は未対応' },
+      { name:'T4B scanf %1c未対応', body:'char c; scanf("%1c", &c);', input:'A', types:{ c:'char' }, shown:['c = 未初期化'], reject:true, hint:'このscanf形式は未対応' },
+      { name:'T4B scanf 数値入力の空行skip維持', body:'int n; scanf("%d", &n);', input:'\n 42 \n', types:{ n:'int' }, values:{ n:42 } }
+    ];
+    testCases.push(...stageT4BTests.map(test => ({
+      name:test.name,
+      code:makeMainCode(`    ${test.body.replaceAll('; ', ';\n    ')}\n    return 0;`),
+      input:test.input,
+      expect:{
+        scalarTypes:test.types, scalarValues:test.values,
+        scalarUpdateExpression:test.expr,
+        variables:test.shown, output:test.output === undefined && test.reject ? '出力はまだありません。' : test.output,
+        rawOutput:test.raw, warningMin:test.reject ? 1 : undefined, warningMax:test.reject ? undefined : 0,
+        hintsInclude:test.hint ? [test.hint] : [], stepsInclude:test.step ? [test.step] : [],
+        stepsExclude:test.exclude ? [test.exclude] : [], stepArrays:test.arrayStep
       }
     })));
 
@@ -4664,6 +4725,7 @@
         codeInputValue:document.getElementById('codeInput').value,
         scanfInputValue:document.getElementById('scanfInput').value,
         output:normalizeText(document.getElementById('outputResult').textContent),
+        rawOutput:document.getElementById('outputResult').textContent,
         variables:[...document.querySelectorAll('#variableState .variable-chip')].map(element => normalizeText(element.textContent)),
         arrays,
         stepArrays,
@@ -4828,6 +4890,9 @@
 
       if(expected.output !== undefined && actual.output !== expected.output){
         failures.push(`出力: 期待「${expected.output}」/ 実際「${actual.output}」`);
+      }
+      if(expected.rawOutput !== undefined && actual.rawOutput !== expected.rawOutput){
+        failures.push(`生の出力: 期待${JSON.stringify(expected.rawOutput)} / 実際${JSON.stringify(actual.rawOutput)}`);
       }
 
       for(const text of expected.outputExcludes || []){
